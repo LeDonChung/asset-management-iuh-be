@@ -1,0 +1,15 @@
+services:
+  asset-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: asset
+    ports:
+      - "5432:5432"
+    volumes:
+      - db__asset_data:/var/lib/postgresql/asset/data
+
+volumes:
+  db__asset_data:

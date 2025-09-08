@@ -1,0 +1,38 @@
+import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBody, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { UserResponseDto } from './dto/user-response.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { PermissionConstants } from 'src/common/utils/permission.constant';
+
+@ApiTags('Users')
+@Controller('api/v1/users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: 201, type: UserResponseDto })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_CREATE_USER)
+  @ApiBearerAuth()
+  async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @ApiResponse({ status: 200, type: [UserResponseDto] })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_USER)
+  @ApiBearerAuth()
+  async findAll(): Promise<UserResponseDto[]> {
+    return this.usersService.findAll();
+  }
+}

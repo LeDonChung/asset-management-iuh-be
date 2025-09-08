@@ -1,0 +1,3 @@
+export const ERR_EXISTS = 'ERR_EXISTS';
+export const NOT_FOUND = 'NOT_FOUND';
+export const INVALID_CREDENTIALS = 'INVALID_CREDENTIALS';
