@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chào mừng đến với {{eventName}}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #f4f4f4;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px;
+        }
+        .content {
+            padding: 20px 0;
+        }
+        .footer {
+            background-color: #f4f4f4;
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            border-radius: 5px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Chào mừng {{attendeeName}}!</h1>
+    </div>
+    
+    <div class="content">
+        <p>Xin chào <strong>{{attendeeName}}</strong>,</p>
+        
+        <p>Chúc mừng bạn đã đăng ký thành công sự kiện <strong>{{eventName}}</strong>!</p>
+        
+        <p>Thông tin chi tiết:</p>
+        <ul>
+            <li><strong>Tên sự kiện:</strong> {{eventName}}</li>
+            <li><strong>Mã vé:</strong> {{ticketCode}}</li>
+            <li><strong>Email:</strong> {{email}}</li>
+        </ul>
+        
+        {{#if qrUrl}}
+        <p>Vui lòng sử dụng mã QR dưới đây để check-in tại sự kiện:</p>
+        <div style="text-align: center;">
+            <img src="{{qrUrl}}" alt="QR Code" style="max-width: 200px;">
+        </div>
+        {{/if}}
+        
+        <p>Chúng tôi rất mong được gặp bạn tại sự kiện!</p>
+    </div>
+    
+    <div class="footer">
+        <p>Đây là email tự động, vui lòng không trả lời email này.</p>
+        <p>&copy; {{currentYear}} Asset Management System - IUH</p>
+    </div>
+</body>
+</html>

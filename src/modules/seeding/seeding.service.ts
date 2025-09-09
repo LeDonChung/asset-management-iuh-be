@@ -20,7 +20,7 @@ export class SeedingService implements OnModuleInit {
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
     @InjectRepository(ManagerPermission)
-    private readonly managerPermissionRepository: Repository<ManagerPermission>
+    private readonly managerPermissionRepository: Repository<ManagerPermission>,
   ) {}
 
   async onModuleInit() {
@@ -30,12 +30,11 @@ export class SeedingService implements OnModuleInit {
 
   async seedDatabase() {
     try {
-      this.logger.log("Starting database seeding...");
+      this.logger.log('Starting database seeding...');
 
       await this.seedPermissions();
       await this.seedRoles();
       await this.seedAdminUser();
-
       this.logger.log("Database seeding completed successfully");
     } catch (error) {
       this.logger.error("Error during database seeding:", error);
@@ -133,7 +132,7 @@ export class SeedingService implements OnModuleInit {
       const permissions = await this.permissionRepository.find();
       adminRole.permissions = permissions;
       await this.roleRepository.save(adminRole);
-      this.logger.log("Created ADMIN role");
+      this.logger.log('Created ADMIN role');
     }
   }
 
@@ -162,3 +161,4 @@ export class SeedingService implements OnModuleInit {
     }
   }
 }
+
