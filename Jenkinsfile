@@ -71,51 +71,56 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'ssh-asset', usernameVariable: 'SERVER_USER', passwordVariable: 'SERVER_PASSWORD')]) {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'production-server-ssh-key', keyFileVariable: 'KEY', usernameVariable: 'USER'),
+                    usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')
+                ]) {
                     script {
-                        def deployDir = "/home/${SERVER_USER}/asset-management"
-                        
-                        // Alternative: Use SSH with key-based authentication (recommended)
-                        // withCredentials([sshUserPrivateKey(credentialsId: 'production-server-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SERVER_USER')]) {
-                        
-                        // Sử dụng sshpass để kết nối với username/password
+                        def remoteHost = "${PRODUCTION_HOST}"
+                        def deployDir = "/home/$USER/asset-management"
+        
+                        // Gửi file .env từ Jenkins sang server
                         sh """
-                            # Cài đặt sshpass nếu chưa có (với sudo)
-                            if ! which sshpass > /dev/null 2>&1; then
-                                sudo apt-get update && sudo apt-get install -y sshpass
-                            fi
-                            
-                            # Copy file .env lên server
-                            sshpass -p '${SERVER_PASSWORD}' scp -o StrictHostKeyChecking=no .env ${SERVER_USER}@${PRODUCTION_HOST}:${deployDir}/.env || true
-                            
-                            # Copy docker-compose.prod.yml lên server
-                            sshpass -p '${SERVER_PASSWORD}' scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${SERVER_USER}@${PRODUCTION_HOST}:${deployDir}/docker-compose.yml || true
+                            scp -i $KEY -o StrictHostKeyChecking=no .env $USER@$remoteHost:${deployDir}/.env || true
                         """
-
+                        
+                        // Gửi file docker-compose.prod.yml từ Jenkins sang server
+                        sh """
+                            scp -i $KEY -o StrictHostKeyChecking=no docker-compose.prod.yml $USER@$remoteHost:${deployDir}/docker-compose.yml || true
+                        """
+        
                         // SSH vào server để deploy
                         sh """
-                            sshpass -p '${SERVER_PASSWORD}' ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${PRODUCTION_HOST} << 'EOF'
+                            ssh -i $KEY -o StrictHostKeyChecking=no $USER@$remoteHost << 'EOF'
                             set -e
-
-                            # Tạo thư mục deploy nếu chưa có
-                            mkdir -p ${deployDir}
+        
+                            # Tạo thư mục deploy nếu chưa có và clone repository nếu chưa tồn tại
+                            if [ ! -d "${deployDir}" ]; then
+                                git clone -b ${BRANCH_DEPLOY} https://github.com/LeDonChung/asset-management-iuh-be.git ${deployDir}
+                            else
+                                cd ${deployDir}
+                                git fetch origin
+                                git checkout ${BRANCH_DEPLOY}
+                                git pull origin ${BRANCH_DEPLOY}
+                            fi
+        
                             cd ${deployDir}
-
+        
                             # Login Docker Hub
-                            echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
-
+                            echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
+        
                             # Stop và remove containers cũ
-                            docker-compose down || true
-
+                            docker-compose -f docker-compose.yml --env-file .env down || true
+        
                             # Pull image mới
                             docker pull ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}
-
+                            
                             # Update docker-compose để sử dụng image mới
                             sed -i "s|image: ${DOCKER_HUB_REPO}/${APP_NAME}:.*|image: ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}|g" docker-compose.yml
-
+        
                             # Start services
-                            docker-compose up -d
-
+                            docker-compose -f docker-compose.yml --env-file .env up -d
+                            
                             # Wait for application to be ready
                             echo "Waiting for application to start..."
                             for i in \$(seq 1 30); do
@@ -126,10 +131,10 @@ pipeline {
                                 echo "Waiting... (\$i/30)"
                                 sleep 10
                             done
-
+        
                             # Show running containers
                             docker-compose ps
-
+        
                             # Cleanup old images
                             docker image prune -f
 EOF
