@@ -71,7 +71,7 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'production-server-credentials', usernameVariable: 'SERVER_USER', passwordVariable: 'SERVER_PASSWORD')]) {
+                withCredentials([usernamePassword(credentialsId: 'ssh-asset', usernameVariable: 'SERVER_USER', passwordVariable: 'SERVER_PASSWORD')]) {
                     script {
                         def deployDir = "/home/${SERVER_USER}/asset-management"
                         
