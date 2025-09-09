@@ -25,7 +25,7 @@ async function bootstrap() {
       if (
         !origin ||
         origin.includes("laztar.com") ||
-        origin === "*" ||
+        origin === "*"
       ) {
         callback(null, true);
       } else {
