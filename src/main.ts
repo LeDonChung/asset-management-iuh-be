@@ -82,13 +82,6 @@ async function bootstrap() {
     },
     customSiteTitle: "Asset Management API Docs",
     customfavIcon: "/favicon.ico",
-    customJs: [
-      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.min.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.min.js",
-    ],
-    customCssUrl: [
-      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css",
-    ],
   });
 
   const port = process.env.PORT || 3000;
