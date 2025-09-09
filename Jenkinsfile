@@ -75,10 +75,15 @@ pipeline {
                     script {
                         def deployDir = "/home/${SERVER_USER}/asset-management"
                         
+                        // Alternative: Use SSH with key-based authentication (recommended)
+                        // withCredentials([sshUserPrivateKey(credentialsId: 'production-server-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SERVER_USER')]) {
+                        
                         // Sử dụng sshpass để kết nối với username/password
                         sh """
-                            # Cài đặt sshpass nếu chưa có
-                            which sshpass || (apt-get update && apt-get install -y sshpass)
+                            # Cài đặt sshpass nếu chưa có (với sudo)
+                            if ! which sshpass > /dev/null 2>&1; then
+                                sudo apt-get update && sudo apt-get install -y sshpass
+                            fi
                             
                             # Copy file .env lên server
                             sshpass -p '${SERVER_PASSWORD}' scp -o StrictHostKeyChecking=no .env ${SERVER_USER}@${PRODUCTION_HOST}:${deployDir}/.env || true
@@ -113,7 +118,7 @@ pipeline {
 
                             # Wait for application to be ready
                             echo "Waiting for application to start..."
-                            for i in {1..30}; do
+                            for i in \$(seq 1 30); do
                                 if curl -f http://localhost:3000/health 2>/dev/null; then
                                     echo "Application is ready!"
                                     break
@@ -141,9 +146,11 @@ EOF
             sh """
             for image in \$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^${DOCKER_HUB_REPO}/${APP_NAME}'); do
                 tag=\$(echo \$image | cut -d':' -f2)
-                if [[ "\$tag" =~ ^[0-9]+\$ ]] && [ "\$tag" -lt ${BUILD_NUMBER} ]; then
-                    echo "🧹 Removing old image \$image"
-                    docker rmi "\$image" || true
+                if [ "\$tag" != "latest" ] && echo "\$tag" | grep -E '^[0-9]+\$' > /dev/null; then
+                    if [ "\$tag" -lt ${BUILD_NUMBER} ]; then
+                        echo "🧹 Removing old image \$image"
+                        docker rmi "\$image" || true
+                    fi
                 fi
             done
             """
