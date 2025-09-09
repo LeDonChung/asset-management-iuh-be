@@ -8,6 +8,7 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { SeedingModule } from './modules/seeding/seeding.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AuthModule } from './modules/auth/auth.module';
     RolesModule,
     UsersModule,
     AuthModule,
+    SeedingModule,
   ],
   controllers: [],
   providers: [
