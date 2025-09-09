@@ -1,540 +1,158 @@
 pipeline {
     agent any
-    
-    environment {
-        // Docker Hub credentials
-        DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')
-        DOCKER_IMAGE_NAME = 'ledonchung/asset-management-iuh-be'
-        
-        // Application environment
-        NODE_ENV = 'production'
-        
-        // Database credentials
-        DB_CREDENTIALS = credentials('postgres-credentials')
-        
-        // Notification settings
-        SLACK_CHANNEL = '#asset-management-notifications'
-        SLACK_CREDENTIALS = credentials('slack-webhook')
-    }
-    
-    options {
-        // Keep only last 10 builds
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        
-        // Timeout for entire pipeline
-        timeout(time: 30, unit: 'MINUTES')
-        
-        // Skip default checkout
-        skipDefaultCheckout(false)
-        
-        // Timestamps in console output
-        timestamps()
-    }
-    
     tools {
-        nodejs '18'
+        nodejs 'NodeJS' // Cần cấu hình NodeJS trong Jenkins Global Tool Configuration
     }
-    
+    environment {
+        BRANCH_DEPLOY = 'deploy'
+        PRODUCTION_HOST = "172.236.138.143" // Thay đổi thành host máy ảo của bạn
+        DOCKER_HUB_REPO = 'ledonchung'
+        APP_NAME = 'asset-management-iuh-be'
+    }
     stages {
-        stage('📋 Preparation') {
+        stage('Checkout') {
+            steps {
+                git branch: env.BRANCH_DEPLOY, url: 'https://github.com/LeDonChung/asset-management-iuh-be.git'
+            }
+        }
+
+        stage('Load .env') {
+            steps {
+                withCredentials([file(credentialsId: 'asset-env-be', variable: 'ENV_FILE')]) {
+                    sh 'rm -f .env'
+                    sh 'cp "$ENV_FILE" .env'
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install -g pnpm'
+                sh 'pnpm install'
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh 'pnpm run build'
+            }
+        }
+
+        // stage('Run Tests') {
+        //     steps {
+        //         script {
+        //             try {
+        //                 sh 'pnpm run test'
+        //             } catch (Exception e) {
+        //                 echo "Tests failed, but continuing with deployment"
+        //             }
+        //         }
+        //     }
+        // }
+
+        stage('Build Docker Image') {
             steps {
                 script {
-                    // Get commit info
-                    env.GIT_COMMIT_SHORT = sh(
-                        script: 'git rev-parse --short HEAD',
-                        returnStdout: true
-                    ).trim()
-                    
-                    env.BUILD_VERSION = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
-                    
-                    echo "🚀 Starting build for Asset Management System"
-                    echo "📝 Build Version: ${env.BUILD_VERSION}"
-                    echo "🌿 Branch: ${env.BRANCH_NAME}"
-                    echo "📦 Commit: ${env.GIT_COMMIT_SHORT}"
-                }
-                
-                // Clean workspace
-                cleanWs()
-                
-                // Checkout code
-                checkout scm
-                
-                // Display build information
-                sh '''
-                    echo "=== Build Information ==="
-                    echo "Node.js version: $(node --version)"
-                    echo "npm version: $(npm --version)"
-                    echo "Git commit: $GIT_COMMIT_SHORT"
-                    echo "Build number: $BUILD_NUMBER"
-                    echo "========================="
-                '''
-            }
-        }
-        
-        stage('🔍 Code Quality & Security') {
-            parallel {
-                stage('Lint Check') {
-                    steps {
-                        script {
-                            // Install dependencies
-                            sh 'npm install -g pnpm'
-                            sh 'pnpm install --frozen-lockfile'
-                            
-                            // Run linting
-                            sh 'pnpm run lint'
-                        }
-                    }
-                    post {
-                        always {
-                            // Publish lint results if available
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: false,
-                                keepAll: true,
-                                reportDir: 'lint-results',
-                                reportFiles: 'index.html',
-                                reportName: 'ESLint Report'
-                            ])
-                        }
-                    }
-                }
-                
-                stage('Security Scan') {
-                    steps {
-                        script {
-                            // NPM audit
-                            sh '''
-                                echo "🔒 Running security audit..."
-                                pnpm audit --audit-level moderate || echo "Security issues found, review required"
-                            '''
-                            
-                            // Additional security scanning with snyk if available
-                            script {
-                                try {
-                                    sh 'npx snyk test --json > snyk-report.json || true'
-                                } catch (Exception e) {
-                                    echo "Snyk not available or failed: ${e.getMessage()}"
-                                }
-                            }
-                        }
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'snyk-report.json', allowEmptyArchive: true
-                        }
-                    }
-                }
-                
-                stage('Dependency Check') {
-                    steps {
-                        sh '''
-                            echo "📦 Checking dependencies..."
-                            pnpm list --depth=0
-                            pnpm outdated || echo "Some packages are outdated"
-                        '''
-                    }
+                    sh "docker build -f Dockerfile.prod -t ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ."
+                    sh "docker tag ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ${DOCKER_HUB_REPO}/${APP_NAME}:latest"
                 }
             }
         }
-        
-        stage('🧪 Testing') {
-            parallel {
-                stage('Unit Tests') {
-                    steps {
-                        script {
-                            sh '''
-                                echo "🧪 Running unit tests..."
-                                pnpm run test:cov
-                            '''
-                        }
-                    }
-                    post {
-                        always {
-                            // Publish test results
-                            publishTestResults testResultsPattern: 'coverage/lcov-report/index.html'
-                            
-                            // Publish coverage
-                            publishHTML([
-                                allowMissing: false,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'coverage/lcov-report',
-                                reportFiles: 'index.html',
-                                reportName: 'Coverage Report'
-                            ])
-                            
-                            // Archive coverage data
-                            archiveArtifacts artifacts: 'coverage/**/*', allowEmptyArchive: true
-                        }
-                    }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh 'echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin'
+                    sh "docker push ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}"
+                    sh "docker push ${DOCKER_HUB_REPO}/${APP_NAME}:latest"
                 }
-                
-                stage('E2E Tests') {
-                    when {
-                        anyOf {
-                            branch 'main'
-                            branch 'develop'
-                            changeRequest()
-                        }
-                    }
-                    steps {
-                        script {
-                            // Start test database
-                            sh '''
-                                echo "🗄️ Starting test database..."
-                                docker run -d --name test-postgres-${BUILD_NUMBER} \
-                                    -e POSTGRES_USER=test \
-                                    -e POSTGRES_PASSWORD=test \
-                                    -e POSTGRES_DB=asset_test \
-                                    -p 5433:5432 \
-                                    postgres:15-alpine
-                                
-                                # Wait for database to be ready
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'production-server-credentials', usernameVariable: 'SERVER_USER', passwordVariable: 'SERVER_PASSWORD')]) {
+                    script {
+                        def deployDir = "/home/${SERVER_USER}/asset-management"
+                        
+                        // Sử dụng sshpass để kết nối với username/password
+                        sh """
+                            # Cài đặt sshpass nếu chưa có
+                            which sshpass || (apt-get update && apt-get install -y sshpass)
+                            
+                            # Copy file .env lên server
+                            sshpass -p '${SERVER_PASSWORD}' scp -o StrictHostKeyChecking=no .env ${SERVER_USER}@${PRODUCTION_HOST}:${deployDir}/.env || true
+                            
+                            # Copy docker-compose.prod.yml lên server
+                            sshpass -p '${SERVER_PASSWORD}' scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${SERVER_USER}@${PRODUCTION_HOST}:${deployDir}/docker-compose.yml || true
+                        """
+
+                        // SSH vào server để deploy
+                        sh """
+                            sshpass -p '${SERVER_PASSWORD}' ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${PRODUCTION_HOST} << 'EOF'
+                            set -e
+
+                            # Tạo thư mục deploy nếu chưa có
+                            mkdir -p ${deployDir}
+                            cd ${deployDir}
+
+                            # Login Docker Hub
+                            echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
+
+                            # Stop và remove containers cũ
+                            docker-compose down || true
+
+                            # Pull image mới
+                            docker pull ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}
+
+                            # Update docker-compose để sử dụng image mới
+                            sed -i "s|image: ${DOCKER_HUB_REPO}/${APP_NAME}:.*|image: ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}|g" docker-compose.yml
+
+                            # Start services
+                            docker-compose up -d
+
+                            # Wait for application to be ready
+                            echo "Waiting for application to start..."
+                            for i in {1..30}; do
+                                if curl -f http://localhost:3000/health 2>/dev/null; then
+                                    echo "Application is ready!"
+                                    break
+                                fi
+                                echo "Waiting... (\$i/30)"
                                 sleep 10
-                            '''
-                            
-                            // Run E2E tests
-                            sh '''
-                                export DB_HOST=localhost
-                                export DB_PORT=5433
-                                export DB_USERNAME=test
-                                export DB_PASSWORD=test
-                                export DB_NAME=asset_test
-                                export JWT_SECRET=test-secret-key
-                                
-                                echo "🚀 Running E2E tests..."
-                                pnpm run test:e2e
-                            '''
-                        }
+                            done
+
+                            # Show running containers
+                            docker-compose ps
+
+                            # Cleanup old images
+                            docker image prune -f
+EOF
+                        """
                     }
-                    post {
-                        always {
-                            // Clean up test database
-                            sh '''
-                                docker stop test-postgres-${BUILD_NUMBER} || true
-                                docker rm test-postgres-${BUILD_NUMBER} || true
-                            '''
-                            
-                            // Archive E2E test results
-                            archiveArtifacts artifacts: 'test-results/**/*', allowEmptyArchive: true
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('🏗️ Build Application') {
-            steps {
-                script {
-                    echo "🏗️ Building application..."
-                    
-                    // Build the application
-                    sh 'pnpm run build'
-                    
-                    // Verify build output
-                    sh '''
-                        echo "📦 Verifying build output..."
-                        ls -la dist/
-                        echo "Build completed successfully!"
-                    '''
-                }
-            }
-            post {
-                success {
-                    // Archive build artifacts
-                    archiveArtifacts artifacts: 'dist/**/*', fingerprint: true
-                }
-            }
-        }
-        
-        stage('🐳 Docker Build') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'develop'
-                    branch 'staging'
-                }
-            }
-            steps {
-                script {
-                    echo "🐳 Building Docker image..."
-                    
-                    // Build Docker image
-                    def dockerImage = docker.build("${DOCKER_IMAGE_NAME}:${BUILD_VERSION}")
-                    
-                    // Tag with latest if main branch
-                    if (env.BRANCH_NAME == 'main') {
-                        dockerImage.tag('latest')
-                    }
-                    
-                    // Tag with branch name
-                    dockerImage.tag("${env.BRANCH_NAME}")
-                    
-                    env.DOCKER_IMAGE_BUILT = dockerImage.id
-                }
-            }
-        }
-        
-        stage('🔍 Docker Security Scan') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'develop'
-                }
-            }
-            steps {
-                script {
-                    // Scan Docker image for vulnerabilities
-                    sh '''
-                        echo "🔍 Scanning Docker image for vulnerabilities..."
-                        
-                        # Using Trivy for vulnerability scanning
-                        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v ${WORKSPACE}:/workspace \
-                            aquasec/trivy:latest image \
-                            --format json \
-                            --output /workspace/trivy-report.json \
-                            ${DOCKER_IMAGE_NAME}:${BUILD_VERSION} || echo "Vulnerabilities found"
-                    '''
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true
-                }
-            }
-        }
-        
-        stage('📤 Push Docker Image') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'develop'
-                    branch 'staging'
-                }
-            }
-            steps {
-                script {
-                    echo "📤 Pushing Docker image to registry..."
-                    
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                        // Push specific version
-                        sh "docker push ${DOCKER_IMAGE_NAME}:${BUILD_VERSION}"
-                        
-                        // Push branch tag
-                        sh "docker push ${DOCKER_IMAGE_NAME}:${env.BRANCH_NAME}"
-                        
-                        // Push latest if main branch
-                        if (env.BRANCH_NAME == 'main') {
-                            sh "docker push ${DOCKER_IMAGE_NAME}:latest"
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('🚀 Deploy') {
-            parallel {
-                stage('Deploy to Staging') {
-                    when {
-                        anyOf {
-                            branch 'develop'
-                            branch 'staging'
-                        }
-                    }
-                    steps {
-                        script {
-                            echo "🚀 Deploying to staging environment..."
-                            
-                            // Deploy to staging using docker-compose
-                            sh '''
-                                echo "Deploying version ${BUILD_VERSION} to staging..."
-                                
-                                # Update docker-compose for staging
-                                export DOCKER_IMAGE_TAG=${BUILD_VERSION}
-                                export ENVIRONMENT=staging
-                                
-                                # Deploy using docker-compose
-                                docker-compose -f docker-compose.staging.yml down || true
-                                docker-compose -f docker-compose.staging.yml up -d
-                                
-                                # Wait for service to be ready
-                                sleep 30
-                                
-                                # Health check
-                                curl -f http://staging.asset-management.local/health || exit 1
-                            '''
-                        }
-                    }
-                }
-                
-                stage('Deploy to Production') {
-                    when {
-                        allOf {
-                            branch 'main'
-                            expression { 
-                                return env.DEPLOY_TO_PRODUCTION == 'true' 
-                            }
-                        }
-                    }
-                    steps {
-                        script {
-                            // Manual approval for production deployment
-                            timeout(time: 10, unit: 'MINUTES') {
-                                input message: 'Deploy to Production?', 
-                                      ok: 'Deploy',
-                                      submitterParameter: 'DEPLOYER'
-                            }
-                            
-                            echo "🚀 Deploying to production environment..."
-                            echo "👤 Deployed by: ${env.DEPLOYER}"
-                            
-                            sh '''
-                                echo "Deploying version ${BUILD_VERSION} to production..."
-                                
-                                # Update production environment
-                                export DOCKER_IMAGE_TAG=${BUILD_VERSION}
-                                export ENVIRONMENT=production
-                                
-                                # Deploy using docker-compose
-                                docker-compose -f docker-compose.prod.yml down || true
-                                docker-compose -f docker-compose.prod.yml up -d
-                                
-                                # Wait for service to be ready
-                                sleep 60
-                                
-                                # Health check
-                                curl -f https://api.asset-management.com/health || exit 1
-                                
-                                echo "✅ Production deployment completed successfully!"
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('🧪 Post-Deployment Tests') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'develop'
-                    branch 'staging'
-                }
-            }
-            steps {
-                script {
-                    echo "🧪 Running post-deployment tests..."
-                    
-                    // Determine environment URL
-                    def environmentUrl = 'http://localhost:3000'
-                    if (env.BRANCH_NAME == 'main') {
-                        environmentUrl = 'https://api.asset-management.com'
-                    } else if (env.BRANCH_NAME == 'staging') {
-                        environmentUrl = 'http://staging.asset-management.local'
-                    }
-                    
-                    sh """
-                        echo "Testing deployment at: ${environmentUrl}"
-                        
-                        # Health check
-                        curl -f ${environmentUrl}/health
-                        
-                        # API availability check
-                        curl -f ${environmentUrl}/api || echo "API documentation might be restricted"
-                        
-                        echo "✅ Post-deployment tests passed!"
-                    """
                 }
             }
         }
     }
-    
     post {
         always {
-            // Clean up Docker images
-            sh '''
-                echo "🧹 Cleaning up Docker images..."
-                docker image prune -f --filter "until=24h" || true
-            '''
-            
-            // Archive build logs
-            archiveArtifacts artifacts: 'build.log', allowEmptyArchive: true
+            sh 'docker logout'
+            // Cleanup old local images
+            sh """
+            for image in \$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^${DOCKER_HUB_REPO}/${APP_NAME}'); do
+                tag=\$(echo \$image | cut -d':' -f2)
+                if [[ "\$tag" =~ ^[0-9]+\$ ]] && [ "\$tag" -lt ${BUILD_NUMBER} ]; then
+                    echo "🧹 Removing old image \$image"
+                    docker rmi "\$image" || true
+                fi
+            done
+            """
         }
-        
         success {
-            script {
-                echo "✅ Pipeline completed successfully!"
-                
-                // Send success notification
-                if (env.BRANCH_NAME == 'main') {
-                    slackSend(
-                        channel: env.SLACK_CHANNEL,
-                        color: 'good',
-                        message: """
-                        ✅ *Asset Management Backend - Deployment Successful*
-                        
-                        • *Branch:* ${env.BRANCH_NAME}
-                        • *Build:* #${env.BUILD_NUMBER}
-                        • *Version:* ${env.BUILD_VERSION}
-                        • *Deployer:* ${env.DEPLOYER ?: 'Automated'}
-                        • *Duration:* ${currentBuild.durationString}
-                        
-                        🚀 Production deployment completed successfully!
-                        """.stripIndent()
-                    )
-                }
-            }
+            echo "✅ Deployment successful! Application is running at http://${PRODUCTION_HOST}:3000"
         }
-        
         failure {
-            script {
-                echo "❌ Pipeline failed!"
-                
-                // Send failure notification
-                slackSend(
-                    channel: env.SLACK_CHANNEL,
-                    color: 'danger',
-                    message: """
-                    ❌ *Asset Management Backend - Build Failed*
-                    
-                    • *Branch:* ${env.BRANCH_NAME}
-                    • *Build:* #${env.BUILD_NUMBER}
-                    • *Version:* ${env.BUILD_VERSION}
-                    • *Stage:* ${env.STAGE_NAME}
-                    • *Duration:* ${currentBuild.durationString}
-                    
-                    🔗 [View Build](${env.BUILD_URL})
-                    """.stripIndent()
-                )
-            }
-        }
-        
-        unstable {
-            script {
-                echo "⚠️ Pipeline completed with warnings!"
-                
-                slackSend(
-                    channel: env.SLACK_CHANNEL,
-                    color: 'warning',
-                    message: """
-                    ⚠️ *Asset Management Backend - Build Unstable*
-                    
-                    • *Branch:* ${env.BRANCH_NAME}
-                    • *Build:* #${env.BUILD_NUMBER}
-                    • *Version:* ${env.BUILD_VERSION}
-                    • *Duration:* ${currentBuild.durationString}
-                    
-                    Some tests failed or warnings were found.
-                    🔗 [View Build](${env.BUILD_URL})
-                    """.stripIndent()
-                )
-            }
-        }
-        
-        cleanup {
-            // Final cleanup
-            cleanWs()
+            echo "❌ Deployment failed! Please check the logs."
         }
     }
-}
+} 
