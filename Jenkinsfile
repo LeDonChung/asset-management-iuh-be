@@ -120,17 +120,6 @@ pipeline {
         
                             # Start services
                             docker-compose -f docker-compose.yml --env-file .env up -d
-                            
-                            # Wait for application to be ready
-                            echo "Waiting for application to start..."
-                            for i in \$(seq 1 30); do
-                                if curl -f http://localhost:3000/health 2>/dev/null; then
-                                    echo "Application is ready!"
-                                    break
-                                fi
-                                echo "Waiting... (\$i/30)"
-                                sleep 10
-                            done
         
                             # Show running containers
                             docker-compose ps
