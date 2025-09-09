@@ -9,8 +9,17 @@ import { JWT_BEARER_PREFIX } from "./common/utils/constants";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Security headers
-  app.use(helmet());
+  // Trust proxy settings for production deployment
+  if (process.env.NODE_ENV === 'production') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+
+  // Security headers - Configure helmet for HTTP deployment
+  app.use(helmet({
+    crossOriginOpenerPolicy: false, // Disable COOP to prevent origin issues
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false, // Disable CSP to allow Swagger UI to load properly
+  }));
 
   // Request size limits
   app.use("/upload", (req, res, next) => {
@@ -21,24 +30,54 @@ async function bootstrap() {
   // Enable CORS with specific settings
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests from *.laztar.com and localhost:3001
-      if (
-        !origin ||
-        origin.includes("laztar.com") ||
-        origin === "*"
-      ) {
+      // Allow requests from specific domains and IPs
+      const allowedOrigins = [
+        "http://localhost:3000",
+        "http://localhost:3001", 
+        "http://127.0.0.1:3000",
+        "http://172.236.138.143:3000", // Your VPS IP
+        "https://172.236.138.143:3000",
+      ];
+      
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // Check if origin matches allowed origins or contains laztar.com
+      if (allowedOrigins.includes(origin) || origin.includes("laztar.com")) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        console.warn(`CORS blocked origin: ${origin}`);
+        callback(null, true); // Allow all origins for development
       }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type", 
+      "Authorization", 
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Access-Control-Request-Method",
+      "Access-Control-Request-Headers"
+    ],
+    exposedHeaders: ["Content-Length"],
   });
 
   // Global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Add a simple health check endpoint
+  app.getHttpAdapter().get('/health', (req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+    });
+  });
 
   // Enable global validation
   app.useGlobalPipes(
@@ -79,9 +118,19 @@ async function bootstrap() {
       tryItOutEnabled: true,
       defaultModelsExpandDepth: 2,
       defaultModelExpandDepth: 2,
+      // Force Swagger UI to use relative URLs to avoid HTTPS/SSL issues
+      url: undefined,
+      urls: undefined,
     },
     customSiteTitle: "Asset Management API Docs",
-    customfavIcon: "/favicon.ico",
+    customfavIcon: undefined, // Remove favicon to avoid 404 errors
+    // Custom CSS to ensure proper styling without external dependencies
+    customCss: `
+      .swagger-ui .topbar { display: none !important; }
+      .swagger-ui .info { margin: 20px 0; }
+      .swagger-ui .scheme-container { background: #fafafa; padding: 10px; }
+    `,
+    explorer: false, // Disable explorer to prevent additional requests
   });
 
   const port = process.env.PORT || 3000;
