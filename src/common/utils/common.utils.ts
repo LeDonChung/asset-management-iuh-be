@@ -1,7 +1,7 @@
 export class CommonUtils {
-  public static generateCode(prefix: string, name: string): string {
+  public static generateCode(name: string, prefix?: string): string {
     const normalizedName = this.removeVietnameseTones(name);
-    return `${prefix}_${normalizedName.replace(/\s+/g, "_").toUpperCase()}`;
+    return `${prefix ? prefix + '_' : ''}${normalizedName.replace(/\s+/g, "_").toUpperCase()}`;
   }
 
   private static removeVietnameseTones(str: string): string {

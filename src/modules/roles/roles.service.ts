@@ -41,7 +41,7 @@ export class RolesService {
 
     const role = this.roleRepository.create({
       name: createRoleDto.name,
-      code: CommonUtils.generateCode(ROLE_CODE_PREFIX, createRoleDto.name),
+      code: CommonUtils.generateCode(createRoleDto.name, ROLE_CODE_PREFIX),
     });
 
     if (createRoleDto.permissionIds && createRoleDto.permissionIds.length > 0) {
@@ -113,7 +113,7 @@ export class RolesService {
       }
 
       role.name = updateRoleDto.name;
-      role.code = CommonUtils.generateCode(ROLE_CODE_PREFIX, updateRoleDto.name);
+      role.code = CommonUtils.generateCode(updateRoleDto.name, ROLE_CODE_PREFIX);
     }
 
     // Cập nhật permissions nếu có

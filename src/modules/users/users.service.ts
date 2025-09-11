@@ -101,8 +101,6 @@ export class UsersService {
       phoneNumber: user.phoneNumber,
       birthDate: user.birthDate,
       status: user.status,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
       roles: user.roles?.map(role => ({
         id: role.id,
         name: role.name,

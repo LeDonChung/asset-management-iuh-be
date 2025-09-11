@@ -9,6 +9,10 @@ import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SeedingModule } from './modules/seeding/seeding.module';
+import { UnitsModule } from './modules/units/units.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { RoomsModule } from './modules/rooms/rooms.module';
 
 @Module({
   imports: [
@@ -39,6 +43,10 @@ import { SeedingModule } from './modules/seeding/seeding.module';
     UsersModule,
     AuthModule,
     SeedingModule,
+    UnitsModule,
+    AssetsModule,
+    CategoriesModule,
+    RoomsModule,
   ],
   controllers: [],
   providers: [

@@ -20,7 +20,7 @@ export class SeedingService implements OnModuleInit {
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
     @InjectRepository(ManagerPermission)
-    private readonly managerPermissionRepository: Repository<ManagerPermission>,
+    private readonly managerPermissionRepository: Repository<ManagerPermission>
   ) {}
 
   async onModuleInit() {
@@ -30,7 +30,7 @@ export class SeedingService implements OnModuleInit {
 
   async seedDatabase() {
     try {
-      this.logger.log('Starting database seeding...');
+      this.logger.log("Starting database seeding...");
 
       await this.seedPermissions();
       await this.seedRoles();
@@ -85,6 +85,98 @@ export class SeedingService implements OnModuleInit {
           },
         ],
       },
+      {
+        name: "Quản lý thể loại",
+        permissions: [
+          {
+            name: "Tạo thể loại",
+            code: PermissionConstants.PERM_CREATE_CATEGORY,
+          },
+          {
+            name: "Chỉnh sửa thể loại",
+            code: PermissionConstants.PERM_UPDATE_CATEGORY,
+          },
+          {
+            name: "Xóa thể loại",
+            code: PermissionConstants.PERM_REMOVE_CATEGORY,
+          },
+          {
+            name: "Xem thể loại",
+            code: PermissionConstants.PERM_VIEW_CATEGORY,
+          },
+        ],
+      },
+      {
+        name: "Quản lý đơn vị",
+        permissions: [
+          {
+            name: "Tạo đơn vị",
+            code: PermissionConstants.PERM_CREATE_UNIT,
+          },
+          {
+            name: "Chỉnh sửa đơn vị",
+            code: PermissionConstants.PERM_UPDATE_UNIT,
+          },
+          {
+            name: "Xóa đơn vị",
+            code: PermissionConstants.PERM_REMOVE_UNIT,
+          },
+          {
+            name: "Xem đơn vị",
+            code: PermissionConstants.PERM_VIEW_UNIT,
+          },
+        ],
+      },
+      {
+        name: "Quản lý phòng",
+        permissions: [
+          {
+            name: "Tạo phòng",
+            code: PermissionConstants.PERM_CREATE_ROOM,
+          },
+          {
+            name: "Chỉnh sửa phòng",
+            code: PermissionConstants.PERM_UPDATE_ROOM,
+          },
+          {
+            name: "Xóa phòng",
+            code: PermissionConstants.PERM_REMOVE_ROOM,
+          },
+          {
+            name: "Xem phòng",
+            code: PermissionConstants.PERM_VIEW_ROOM,
+          },
+        ],
+      },
+      {
+        name: "Quản lý tài sản",
+        permissions: [
+          {
+            name: "Chỉnh sửa tài sản",
+            code: PermissionConstants.PERM_UPDATE_ASSET,
+          },
+          {
+            name: "Xóa tài sản",
+            code: PermissionConstants.PERM_REMOVE_ASSET,
+          },
+          {
+            name: "Xem tài sản",
+            code: PermissionConstants.PERM_VIEW_ASSET,
+          },
+          {
+            name: "Định danh tài sản",
+            code: PermissionConstants.PERM_IDENTIFY_ASSET,
+          },
+          {
+            name: "Cập nhật RFID",
+            code: PermissionConstants.PERM_UPDATE_RFID,
+          },
+          {
+            name: "Xóa RFID",
+            code: PermissionConstants.PERM_REMOVE_RFID,
+          },
+        ],
+      },
     ];
     for (const managerPermissionData of managerPermissions) {
       let managerPermission = await this.managerPermissionRepository.findOne({
@@ -132,7 +224,13 @@ export class SeedingService implements OnModuleInit {
       const permissions = await this.permissionRepository.find();
       adminRole.permissions = permissions;
       await this.roleRepository.save(adminRole);
-      this.logger.log('Created ADMIN role');
+      this.logger.log("Created ADMIN role");
+    } else {
+      // Ensure ADMIN role has all permissions
+      const permissions = await this.permissionRepository.find();
+      adminRole.permissions = permissions;
+      await this.roleRepository.save(adminRole);
+      this.logger.log("Updated ADMIN role with all permissions");
     }
   }
 
@@ -161,4 +259,3 @@ export class SeedingService implements OnModuleInit {
     }
   }
 }
-
