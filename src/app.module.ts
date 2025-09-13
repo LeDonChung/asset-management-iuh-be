@@ -13,6 +13,8 @@ import { UnitsModule } from './modules/units/units.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
+import { InventoriesModule } from './modules/inventories/inventories.module';
+import { FilesModule } from './modules/files/files.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { RoomsModule } from './modules/rooms/rooms.module';
     AssetsModule,
     CategoriesModule,
     RoomsModule,
+    InventoriesModule,
+    FilesModule,
   ],
   controllers: [],
   providers: [
