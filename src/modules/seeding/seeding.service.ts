@@ -175,6 +175,31 @@ export class SeedingService implements OnModuleInit {
             name: "Xóa RFID",
             code: PermissionConstants.PERM_REMOVE_RFID,
           },
+          {
+            name: "Nhập khẩu tài sản",
+            code: PermissionConstants.PERM_IMPORT_ASSET,
+          },
+        ],
+      },
+      {
+        name: "Quản lý kiểm kê",
+        permissions: [
+          {
+            name: "Tạo kỳ kiểm kê",
+            code: PermissionConstants.PERM_CREATE_INVENTORY,
+          },
+          {
+            name: "Chỉnh sửa kỳ kiểm kê",
+            code: PermissionConstants.PERM_UPDATE_INVENTORY,
+          },
+          {
+            name: "Xóa kỳ kiểm kê",
+            code: PermissionConstants.PERM_REMOVE_INVENTORY,
+          },
+          {
+            name: "Xem kỳ kiểm kê",
+            code: PermissionConstants.PERM_VIEW_INVENTORY,
+          },
         ],
       },
     ];
