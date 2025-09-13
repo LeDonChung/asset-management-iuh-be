@@ -14,6 +14,7 @@ import { UnitType } from "src/common/shared/UnitType";
 import { UnitStatus } from "src/common/shared/UnitStatus";
 import { Room } from "./room.entity";
 import { InventorySessionUnit } from "./inventory-session-unit.entity";
+import { InventoryGroupAssignment } from "./inventory-group-assignment";
 import { Expose } from "class-transformer";
 
 @Entity("units")
@@ -48,6 +49,9 @@ export class Unit {
   @Column({ nullable: true })
   representativeId?: string;
 
+  @Column({ nullable: true, comment: "ID của đơn vị cha (null nếu là cơ sở root)" })
+  parentUnitId?: string;
+
   @Column({
     type: "enum",
     enum: UnitStatus,
@@ -75,6 +79,16 @@ export class Unit {
   @Expose()
   representative?: User;
 
+  // Self-referencing relationship for hierarchy
+  @ManyToOne(() => Unit, (unit) => unit.childUnits, { nullable: true })
+  @JoinColumn({ name: "parentUnitId" })
+  @Expose()
+  parentUnit?: Unit;
+
+  @OneToMany(() => Unit, (unit) => unit.parentUnit)
+  @Expose()
+  childUnits?: Unit[];
+
   @OneToMany(() => User, (user) => user.unit)
   @Expose()
   users?: User[];
@@ -86,4 +100,8 @@ export class Unit {
   @OneToMany(() => InventorySessionUnit, (inventorySessionUnit) => inventorySessionUnit.unit)
   @Expose()
   inventorySessionUnits?: InventorySessionUnit[];
+
+  @OneToMany(() => InventoryGroupAssignment, (assignment) => assignment.unit)
+  @Expose()
+  inventoryGroupAssignments?: InventoryGroupAssignment[];
 }

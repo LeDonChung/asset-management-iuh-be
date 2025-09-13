@@ -5,7 +5,9 @@ import { InventoriesController } from './inventories.controller';
 import { InventorySession } from 'src/entities/inventory-session.entity';
 import { FileUrl } from 'src/entities/file-url.entity';
 import { InventorySessionUnit } from 'src/entities/inventory-session-unit.entity';
+import { InventorySessionMember } from 'src/entities/inventory-session-member.entity';
 import { Unit } from 'src/entities/unit.entity';
+import { User } from 'src/entities/user.entity';
 
 @Module({
   imports: [
@@ -13,7 +15,9 @@ import { Unit } from 'src/entities/unit.entity';
       InventorySession,
       FileUrl,
       InventorySessionUnit,
+      InventorySessionMember,
       Unit,
+      User,
     ]),
   ],
   controllers: [InventoriesController],

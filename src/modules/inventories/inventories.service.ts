@@ -1,14 +1,19 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { InventorySessionResponseDto } from './dto/inventory-response.dto';
+import { AddMemberDto } from './dto/add-member.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
+import { InventorySessionMemberResponseDto } from './dto/member-response.dto';
 import { InventorySession } from 'src/entities/inventory-session.entity';
 import { FileUrl } from 'src/entities/file-url.entity';
 import { InventorySessionUnit } from 'src/entities/inventory-session-unit.entity';
+import { InventorySessionMember } from 'src/entities/inventory-session-member.entity';
 import { Unit } from 'src/entities/unit.entity';
 import { User } from 'src/entities/user.entity';
+import { CommitteeRole } from 'src/common/shared/CommitteeRole';
 import { plainToInstance } from 'class-transformer';
 
 @Injectable()
@@ -20,8 +25,12 @@ export class InventoriesService {
     private fileUrlRepository: Repository<FileUrl>,
     @InjectRepository(InventorySessionUnit)
     private inventorySessionUnitRepository: Repository<InventorySessionUnit>,
+    @InjectRepository(InventorySessionMember)
+    private inventorySessionMemberRepository: Repository<InventorySessionMember>,
     @InjectRepository(Unit)
     private unitRepository: Repository<Unit>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
   ) {}
 
   async create(createInventoryDto: CreateInventoryDto, currentUser?: User): Promise<InventorySessionResponseDto> {
@@ -61,12 +70,6 @@ export class InventoriesService {
       const units = await this.unitRepository.findBy({ id: In(unitIds) });
       if (units.length !== unitIds.length) {
         throw new BadRequestException('Một hoặc nhiều đơn vị không tồn tại');
-      }
-
-      // Kiểm tra tất cả units phải là CAMPUS
-      const nonCampusUnits = units.filter(unit => unit.type !== 'Campus');
-      if (nonCampusUnits.length > 0) {
-        throw new BadRequestException('Chỉ được chọn các đơn vị loại CAMPUS');
       }
     }
 
@@ -118,7 +121,20 @@ export class InventoriesService {
 
   async findAll(): Promise<InventorySessionResponseDto[]> {
     const sessions = await this.inventorySessionRepository.find({
-      relations: ['creator', 'fileUrls', 'inventorySessionUnits', 'inventorySessionUnits.unit'],
+      relations: [
+        'creator', 
+        'fileUrls', 
+        'inventorySessionUnits', 
+        'inventorySessionUnits.unit',
+        'inventorySessionUnits.subInventory',
+        'inventorySessionUnits.subInventory.members',
+        'inventorySessionUnits.subInventory.members.user',
+        'inventorySessionUnits.subInventory.groups',
+        'inventorySessionUnits.subInventory.groups.members',
+        'inventorySessionUnits.subInventory.groups.members.user',
+        'inventorySessionUnits.subInventory.groups.assignments',
+        'inventorySessionUnits.subInventory.groups.assignments.unit'
+      ],
       order: { createdAt: 'DESC' },
     });
 
@@ -130,7 +146,20 @@ export class InventoriesService {
   async findOne(id: string): Promise<InventorySessionResponseDto> {
     const inventorySession = await this.inventorySessionRepository.findOne({
       where: { id },
-      relations: ['creator', 'fileUrls', 'inventorySessionUnits', 'inventorySessionUnits.unit'],
+      relations: [
+        'creator', 
+        'fileUrls', 
+        'inventorySessionUnits', 
+        'inventorySessionUnits.unit',
+        'inventorySessionUnits.subInventory',
+        'inventorySessionUnits.subInventory.members',
+        'inventorySessionUnits.subInventory.members.user',
+        'inventorySessionUnits.subInventory.groups',
+        'inventorySessionUnits.subInventory.groups.members',
+        'inventorySessionUnits.subInventory.groups.members.user',
+        'inventorySessionUnits.subInventory.groups.assignments',
+        'inventorySessionUnits.subInventory.groups.assignments.unit'
+      ],
     });
 
     if (!inventorySession) {
@@ -190,12 +219,6 @@ export class InventoriesService {
         const units = await this.unitRepository.findBy({ id: In(unitIds) });
         if (units.length !== unitIds.length) {
           throw new BadRequestException('Một hoặc nhiều đơn vị không tồn tại');
-        }
-
-        // Kiểm tra tất cả units phải là CAMPUS
-        const nonCampusUnits = units.filter(unit => unit.type !== 'Campus');
-        if (nonCampusUnits.length > 0) {
-          throw new BadRequestException('Chỉ được chọn các đơn vị loại CAMPUS');
         }
       }
     }
@@ -290,5 +313,169 @@ export class InventoriesService {
 
     // Xóa inventory session (soft delete)
     await this.inventorySessionRepository.softDelete(id);
+  }
+
+  // === MEMBER MANAGEMENT METHODS ===
+
+  async addMember(
+    inventorySessionId: string,
+    addMemberDto: AddMemberDto,
+    currentUser: User
+  ): Promise<InventorySessionMemberResponseDto> {
+    // Kiểm tra kỳ kiểm kê có tồn tại không
+    const inventorySession = await this.inventorySessionRepository.findOne({
+      where: { id: inventorySessionId }
+    });
+
+    if (!inventorySession) {
+      throw new NotFoundException(`Kỳ kiểm kê với ID ${inventorySessionId} không tồn tại`);
+    }
+
+    // Kiểm tra user có tồn tại không
+    const user = await this.userRepository.findOne({
+      where: { id: addMemberDto.userId }
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User với ID ${addMemberDto.userId} không tồn tại`);
+    }
+
+    // Kiểm tra user đã là thành viên chưa
+    const existingMember = await this.inventorySessionMemberRepository.findOne({
+      where: {
+        inventorySessionId,
+        userId: addMemberDto.userId
+      }
+    });
+
+    if (existingMember) {
+      throw new ConflictException('User đã là thành viên của ban kiểm kê này');
+    }
+
+    // Tạo thành viên mới
+    const newMember = this.inventorySessionMemberRepository.create({
+      inventorySessionId,
+      userId: addMemberDto.userId,
+      role: addMemberDto.role,
+      notes: addMemberDto.notes,
+      createdBy: currentUser.id
+    });
+
+    const savedMember = await this.inventorySessionMemberRepository.save(newMember);
+
+    // Lấy thông tin chi tiết để trả về
+    const memberWithUser = await this.inventorySessionMemberRepository.findOne({
+      where: { id: savedMember.id },
+      relations: ['user']
+    });
+
+    return plainToInstance(InventorySessionMemberResponseDto, memberWithUser, {
+      excludeExtraneousValues: true
+    });
+  }
+
+  async getMembers(inventorySessionId: string): Promise<InventorySessionMemberResponseDto[]> {
+    // Kiểm tra kỳ kiểm kê có tồn tại không
+    const inventorySession = await this.inventorySessionRepository.findOne({
+      where: { id: inventorySessionId }
+    });
+
+    if (!inventorySession) {
+      throw new NotFoundException(`Kỳ kiểm kê với ID ${inventorySessionId} không tồn tại`);
+    }
+
+    const members = await this.inventorySessionMemberRepository.find({
+      where: { inventorySessionId },
+      relations: ['user'],
+      order: { createdAt: 'DESC' }
+    });
+
+    return plainToInstance(InventorySessionMemberResponseDto, members, {
+      excludeExtraneousValues: true
+    });
+  }
+
+  async updateMember(
+    inventorySessionId: string,
+    memberId: string,
+    updateMemberDto: UpdateMemberDto,
+    currentUser: User
+  ): Promise<InventorySessionMemberResponseDto> {
+    // Tìm thành viên
+    const member = await this.inventorySessionMemberRepository.findOne({
+      where: {
+        id: memberId,
+        inventorySessionId
+      },
+      relations: ['user']
+    });
+
+    if (!member) {
+      throw new NotFoundException('Không tìm thấy thành viên trong ban kiểm kê này');
+    }
+
+    // Cập nhật thông tin
+    if (updateMemberDto.role !== undefined) {
+      member.role = updateMemberDto.role;
+    }
+    
+    if (updateMemberDto.notes !== undefined) {
+      member.notes = updateMemberDto.notes;
+    }
+
+    const updatedMember = await this.inventorySessionMemberRepository.save(member);
+
+    return plainToInstance(InventorySessionMemberResponseDto, updatedMember, {
+      excludeExtraneousValues: true
+    });
+  }
+
+  async removeMember(inventorySessionId: string, memberId: string): Promise<void> {
+    // Tìm thành viên
+    const member = await this.inventorySessionMemberRepository.findOne({
+      where: {
+        id: memberId,
+        inventorySessionId
+      }
+    });
+
+    if (!member) {
+      throw new NotFoundException('Không tìm thấy thành viên trong ban kiểm kê này');
+    }
+
+    // Xóa thành viên (soft delete)
+    await this.inventorySessionMemberRepository.softDelete(memberId);
+  }
+
+  async getMembersByRole(
+    inventorySessionId: string,
+    role: string
+  ): Promise<InventorySessionMemberResponseDto[]> {
+    // Kiểm tra kỳ kiểm kê có tồn tại không
+    const inventorySession = await this.inventorySessionRepository.findOne({
+      where: { id: inventorySessionId }
+    });
+
+    if (!inventorySession) {
+      throw new NotFoundException(`Kỳ kiểm kê với ID ${inventorySessionId} không tồn tại`);
+    }
+
+    // Validate role
+    if (!Object.values(CommitteeRole).includes(role as CommitteeRole)) {
+      throw new BadRequestException(`Vai trò '${role}' không hợp lệ`);
+    }
+
+    const members = await this.inventorySessionMemberRepository.find({
+      where: {
+        inventorySessionId,
+        role: role as CommitteeRole
+      },
+      relations: ['user'],
+      order: { createdAt: 'DESC' }
+    });
+
+    return plainToInstance(InventorySessionMemberResponseDto, members, {
+      excludeExtraneousValues: true
+    });
   }
 }

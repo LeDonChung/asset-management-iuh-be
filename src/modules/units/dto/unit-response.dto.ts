@@ -34,6 +34,10 @@ export class UnitResponseDto {
   @Expose()
   representativeId?: string;
 
+  @ApiPropertyOptional({ description: "ID của đơn vị cha (null nếu là cơ sở root)" })
+  @Expose()
+  parentUnitId?: string;
+
   @ApiProperty({ enum: UnitStatus })
   @Expose()
   status: UnitStatus;
@@ -42,6 +46,16 @@ export class UnitResponseDto {
   @Expose()
   @Type(() => UserResponseDto)
   representative?: UserResponseDto;
+
+  @ApiPropertyOptional({ description: "Thông tin đơn vị cha" })
+  @Expose()
+  @Type(() => UnitResponseDto)
+  parentUnit?: UnitResponseDto;
+
+  @ApiPropertyOptional({ description: "Danh sách đơn vị con", type: [UnitResponseDto] })
+  @Expose()
+  @Type(() => UnitResponseDto)
+  childUnits?: UnitResponseDto[];
 
   @ApiProperty({ type: [UserResponseDto] })
   @Expose()
