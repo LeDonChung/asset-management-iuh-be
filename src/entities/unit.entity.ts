@@ -13,6 +13,7 @@ import { User } from "./user.entity";
 import { UnitType } from "src/common/shared/UnitType";
 import { UnitStatus } from "src/common/shared/UnitStatus";
 import { Room } from "./room.entity";
+import { InventorySessionUnit } from "./inventory-session-unit.entity";
 import { Expose } from "class-transformer";
 
 @Entity("units")
@@ -81,4 +82,8 @@ export class Unit {
   @OneToMany(() => Room, (room) => room.unit)
   @Expose()
   rooms?: Room[];
+
+  @OneToMany(() => InventorySessionUnit, (inventorySessionUnit) => inventorySessionUnit.unit)
+  @Expose()
+  inventorySessionUnits?: InventorySessionUnit[];
 }
