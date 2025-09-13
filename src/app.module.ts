@@ -15,6 +15,8 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { InventoriesModule } from './modules/inventories/inventories.module';
 import { FilesModule } from './modules/files/files.module';
+import { InventorySubModule } from './modules/inventory-sub/inventory-sub.module';
+import { InventoryGroupModule } from './modules/inventory-group/inventory-group.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { FilesModule } from './modules/files/files.module';
     RoomsModule,
     InventoriesModule,
     FilesModule,
+    InventorySubModule,
+    InventoryGroupModule,
   ],
   controllers: [],
   providers: [

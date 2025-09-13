@@ -25,6 +25,7 @@ import { UpdateUnitDto } from './dto/update-unit.dto';
 import { UnitResponseDto } from './dto/unit-response.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from 'src/entities/user.entity';
+import { UnitType } from 'src/common/shared/UnitType';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { PermissionConstants } from 'src/common/utils/permission.constant';
@@ -61,6 +62,37 @@ export class UnitsController {
   @ApiBearerAuth()
   async findAll(): Promise<UnitResponseDto[]> {
     return this.unitsService.findAll();
+  }
+
+  @Get('root')
+  @ApiOperation({ summary: "Get root units (campuses) with hierarchy" })
+  @ApiResponse({
+    status: 200,
+    description: "List of root units retrieved successfully",
+    type: [UnitResponseDto],
+  })
+  @ApiResponse({ status: 500, description: "Internal server error" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
+  @ApiBearerAuth()
+  async findRootUnits(): Promise<UnitResponseDto[]> {
+    return this.unitsService.findRootUnits();
+  }
+
+  @Get('type/:type')
+  @ApiOperation({ summary: "Get units by type" })
+  @ApiParam({ name: 'type', enum: UnitType, description: 'Unit type' })
+  @ApiResponse({
+    status: 200,
+    description: "List of units by type retrieved successfully",
+    type: [UnitResponseDto],
+  })
+  @ApiResponse({ status: 500, description: "Internal server error" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
+  @ApiBearerAuth()
+  async findByType(@Param('type') type: UnitType): Promise<UnitResponseDto[]> {
+    return this.unitsService.findByType(type);
   }
 
   @Get(':id')

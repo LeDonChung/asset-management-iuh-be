@@ -15,6 +15,12 @@ import { RfidTag } from "src/entities/rfid-tag.entity";
 import { FileUrl } from "src/entities/file-url.entity";
 import { InventorySession } from "src/entities/inventory-session.entity";
 import { InventorySessionUnit } from "src/entities/inventory-session-unit.entity";
+import { InventorySessionMember } from "src/entities/inventory-session-member.entity";
+import { InventorySub } from "src/entities/inventory-sub.entity";
+import { SubInventoryMember } from "src/entities/sub-inventory-member.entity";
+import { InventoryGroup } from "src/entities/inventory-group";
+import { InventoryGroupMember } from "src/entities/inventory-group-member.entity";
+import { InventoryGroupAssignment } from "src/entities/inventory-group-assignment";
 
 export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
   imports: [],
@@ -37,7 +43,28 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
         maxReconnects: 3,
         reconnectDelay: 2000,
       },
-      entities: [Permission, Permission, Role, Unit, User, ManagerPermission, Category, Unit, Room, Asset, RfidTag, FixedAsset, ToolsEquipment, FileUrl, InventorySession, InventorySessionUnit],
+      entities: [
+        Permission, 
+        Role, 
+        Unit, 
+        User, 
+        ManagerPermission, 
+        Category, 
+        Room, 
+        Asset, 
+        RfidTag, 
+        FixedAsset, 
+        ToolsEquipment, 
+        FileUrl, 
+        InventorySession, 
+        InventorySessionUnit,
+        InventorySessionMember,
+        InventorySub,
+        SubInventoryMember,
+        InventoryGroup,
+        InventoryGroupMember,
+        InventoryGroupAssignment
+      ],
       synchronize: false,
       logging: false,
       migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
@@ -59,7 +86,28 @@ const dataSource = new DataSource({
     acquireTimeout: 20000,
     timeout: 20000,
   },
-  entities: [Permission, Role, Unit, User, ManagerPermission, Category, Unit, Room, Asset, FixedAsset, ToolsEquipment, RfidTag, FileUrl, InventorySession, InventorySessionUnit],
+  entities: [
+    Permission, 
+    Role, 
+    Unit, 
+    User, 
+    ManagerPermission, 
+    Category, 
+    Room, 
+    Asset, 
+    FixedAsset, 
+    ToolsEquipment, 
+    RfidTag, 
+    FileUrl, 
+    InventorySession, 
+    InventorySessionUnit,
+    InventorySessionMember,
+    InventorySub,
+    SubInventoryMember,
+    InventoryGroup,
+    InventoryGroupMember,
+    InventoryGroupAssignment
+  ],
   migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
   migrationsTableName: "typeorm_migrations",
 });

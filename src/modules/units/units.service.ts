@@ -12,6 +12,7 @@ import { UnitResponseDto } from "./dto/unit-response.dto";
 import { Unit } from "src/entities/unit.entity";
 import { User } from "src/entities/user.entity";
 import { UnitStatus } from "src/common/shared/UnitStatus";
+import { UnitType } from "src/common/shared/UnitType";
 import { plainToInstance } from "class-transformer";
 
 @Injectable()
@@ -45,6 +46,30 @@ export class UnitsService {
         }
       }
 
+      // Validate parent unit if provided
+      if (createUnitDto.parentUnitId) {
+        const parentUnit = await this.unitRepository.findOne({
+          where: { id: createUnitDto.parentUnitId },
+        });
+        if (!parentUnit) {
+          throw new BadRequestException({
+            code: "PARENT_UNIT_NOT_FOUND",
+            message: "Parent unit not found",
+          });
+        }
+
+        // Validate hierarchy rules
+        await this.validateUnitHierarchy(createUnitDto.type, parentUnit.type);
+      } else {
+        // Only CAMPUS can be root level
+        if (createUnitDto.type !== UnitType.CAMPUS) {
+          throw new BadRequestException({
+            code: "INVALID_ROOT_UNIT",
+            message: "Only CAMPUS units can be root level",
+          });
+        }
+      }
+
       // Generate unit code (count + 1)
       const unitCode = await this.generateUnitCode();
 
@@ -68,18 +93,57 @@ export class UnitsService {
       });
 
       const savedUnit = await this.unitRepository.save(unit);
-      return plainToInstance(UnitResponseDto, savedUnit, {
-        excludeExtraneousValues: true,
-      });
+      return this.findOne(savedUnit.id);
     } catch (error) {
       console.error("Error creating unit:", error);
       throw error;
     }
   }
 
+  private async validateUnitHierarchy(childType: UnitType, parentType: UnitType): Promise<void> {
+    // CAMPUS can have ADMIN_DEPT or USER_DEPT as children
+    if (parentType === UnitType.CAMPUS) {
+      if (childType !== UnitType.ADMIN_DEPT && childType !== UnitType.USER_DEPT) {
+        throw new BadRequestException({
+          code: "INVALID_HIERARCHY",
+          message: "CAMPUS can only have ADMIN_DEPT or USER_DEPT as children",
+        });
+      }
+    }
+    // ADMIN_DEPT and USER_DEPT cannot have children
+    else if (parentType === UnitType.ADMIN_DEPT || parentType === UnitType.USER_DEPT) {
+      throw new BadRequestException({
+        code: "INVALID_HIERARCHY",
+        message: "ADMIN_DEPT and USER_DEPT cannot have children",
+      });
+    }
+  }
+
   async findAll(): Promise<UnitResponseDto[]> {
     const units = await this.unitRepository.find({
-      relations: ["representative", "rooms"],
+      relations: ["representative", "parentUnit", "childUnits", "rooms"],
+      order: { createdAt: "DESC" },
+    });
+    return plainToInstance(UnitResponseDto, units, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  async findRootUnits(): Promise<UnitResponseDto[]> {
+    const units = await this.unitRepository.find({
+      where: { parentUnitId: null },
+      relations: ["representative", "childUnits", "childUnits.childUnits", "rooms"],
+      order: { createdAt: "DESC" },
+    });
+    return plainToInstance(UnitResponseDto, units, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  async findByType(type: UnitType): Promise<UnitResponseDto[]> {
+    const units = await this.unitRepository.find({
+      where: { type },
+      relations: ["representative", "parentUnit", "childUnits", "rooms"],
       order: { createdAt: "DESC" },
     });
     return plainToInstance(UnitResponseDto, units, {
@@ -90,7 +154,7 @@ export class UnitsService {
   async findOne(id: string): Promise<UnitResponseDto> {
     const unit = await this.unitRepository.findOne({
       where: { id },
-      relations: ["representative", "rooms"],
+      relations: ["representative", "parentUnit", "childUnits", "childUnits.childUnits", "rooms"],
     });
 
     if (!unit) {
@@ -111,6 +175,7 @@ export class UnitsService {
   ): Promise<UnitResponseDto> {
     const unit = await this.unitRepository.findOne({
       where: { id },
+      relations: ["parentUnit"],
     });
 
     if (!unit) {
@@ -133,15 +198,46 @@ export class UnitsService {
       }
     }
 
-    Object.assign(unit, updateUnitDto);
-    const unitCode = await this.generateUnitCode();
-    unit.unitCode = unitCode;
+    // Validate parent unit change if provided
+    if (updateUnitDto.parentUnitId !== undefined) {
+      if (updateUnitDto.parentUnitId) {
+        const parentUnit = await this.unitRepository.findOne({
+          where: { id: updateUnitDto.parentUnitId },
+        });
+        if (!parentUnit) {
+          throw new BadRequestException({
+            code: "PARENT_UNIT_NOT_FOUND",
+            message: "Parent unit not found",
+          });
+        }
 
+        // Prevent circular reference
+        if (parentUnit.id === id) {
+          throw new BadRequestException({
+            code: "CIRCULAR_REFERENCE",
+            message: "Unit cannot be parent of itself",
+          });
+        }
+
+        // Validate hierarchy if type is also being updated
+        const newType = updateUnitDto.type || unit.type;
+        await this.validateUnitHierarchy(newType, parentUnit.type);
+      } else {
+        // Setting parent to null - only CAMPUS can be root
+        const newType = updateUnitDto.type || unit.type;
+        if (newType !== UnitType.CAMPUS) {
+          throw new BadRequestException({
+            code: "INVALID_ROOT_UNIT",
+            message: "Only CAMPUS units can be root level",
+          });
+        }
+      }
+    }
+
+    Object.assign(unit, updateUnitDto);
     const updatedUnit = await this.unitRepository.save(unit);
 
-    return plainToInstance(UnitResponseDto, updatedUnit, {
-      excludeExtraneousValues: true,
-    });
+    return this.findOne(updatedUnit.id);
   }
 
   async remove(id: string): Promise<void> {
