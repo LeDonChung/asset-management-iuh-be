@@ -6,22 +6,22 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
   HttpCode,
   HttpStatus,
-  Request,
   UseGuards,
 } from "@nestjs/common";
 import { InventoriesService } from "./inventories.service";
 import { CreateInventoryDto } from "./dto/create-inventory.dto";
 import { UpdateInventoryDto } from "./dto/update-inventory.dto";
 import { InventorySessionResponseDto } from "./dto/inventory-response.dto";
+import { AddMemberDto } from "./dto/add-member.dto";
+import { UpdateMemberDto } from "./dto/update-member.dto";
+import { InventorySessionMemberResponseDto } from "./dto/member-response.dto";
 import {
   ApiOperation,
   ApiResponse,
   ApiTags,
   ApiParam,
-  ApiQuery,
   ApiBearerAuth,
 } from "@nestjs/swagger";
 import { User } from "src/entities/user.entity";
@@ -121,5 +121,112 @@ export class InventoriesController {
   @ApiBearerAuth()
   async remove(@Param("id") id: string): Promise<void> {
     return this.inventoriesService.remove(id);
+  }
+
+  // === MEMBER MANAGEMENT ENDPOINTS ===
+
+  @Post(":id/members")
+  @ApiOperation({ summary: "Thêm thành viên vào ban kiểm kê chính" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê", type: "string" })
+  @ApiResponse({
+    status: 201,
+    description: "Thành viên được thêm thành công",
+    type: InventorySessionMemberResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
+  @ApiResponse({ status: 409, description: "Thành viên đã tồn tại trong ban kiểm kê" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY)
+  @ApiBearerAuth()
+  async addMember(
+    @Param("id") inventorySessionId: string,
+    @Body() addMemberDto: AddMemberDto,
+    @CurrentUser() currentUser: User
+  ): Promise<InventorySessionMemberResponseDto> {
+    return this.inventoriesService.addMember(inventorySessionId, addMemberDto, currentUser);
+  }
+
+  @Get(":id/members")
+  @ApiOperation({ summary: "Lấy danh sách thành viên ban kiểm kê chính" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê", type: "string" })
+  @ApiResponse({
+    status: 200,
+    description: "Danh sách thành viên ban kiểm kê",
+    type: [InventorySessionMemberResponseDto],
+  })
+  @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
+  @ApiBearerAuth()
+  async getMembers(
+    @Param("id") inventorySessionId: string
+  ): Promise<InventorySessionMemberResponseDto[]> {
+    return this.inventoriesService.getMembers(inventorySessionId);
+  }
+
+  @Patch(":id/members/:memberId")
+  @ApiOperation({ summary: "Cập nhật thông tin thành viên ban kiểm kê" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê", type: "string" })
+  @ApiParam({ name: "memberId", description: "ID của thành viên", type: "string" })
+  @ApiResponse({
+    status: 200,
+    description: "Thông tin thành viên được cập nhật thành công",
+    type: InventorySessionMemberResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy thành viên" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY)
+  @ApiBearerAuth()
+  async updateMember(
+    @Param("id") inventorySessionId: string,
+    @Param("memberId") memberId: string,
+    @Body() updateMemberDto: UpdateMemberDto,
+    @CurrentUser() currentUser: User
+  ): Promise<InventorySessionMemberResponseDto> {
+    return this.inventoriesService.updateMember(inventorySessionId, memberId, updateMemberDto, currentUser);
+  }
+
+  @Delete(":id/members/:memberId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Xóa thành viên khỏi ban kiểm kê chính" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê", type: "string" })
+  @ApiParam({ name: "memberId", description: "ID của thành viên", type: "string" })
+  @ApiResponse({ status: 204, description: "Thành viên được xóa thành công" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy thành viên" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY)
+  @ApiBearerAuth()
+  async removeMember(
+    @Param("id") inventorySessionId: string,
+    @Param("memberId") memberId: string
+  ): Promise<void> {
+    return this.inventoriesService.removeMember(inventorySessionId, memberId);
+  }
+
+  @Get(":id/members/by-role/:role")
+  @ApiOperation({ summary: "Lấy danh sách thành viên theo vai trò" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê", type: "string" })
+  @ApiParam({ name: "role", description: "Vai trò (LEADER, SECRETARY, MEMBER)", enum: ["LEADER", "SECRETARY", "MEMBER"] })
+  @ApiResponse({
+    status: 200,
+    description: "Danh sách thành viên theo vai trò",
+    type: [InventorySessionMemberResponseDto],
+  })
+  @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
+  @ApiBearerAuth()
+  async getMembersByRole(
+    @Param("id") inventorySessionId: string,
+    @Param("role") role: string
+  ): Promise<InventorySessionMemberResponseDto[]> {
+    return this.inventoriesService.getMembersByRole(inventorySessionId, role);
   }
 }
