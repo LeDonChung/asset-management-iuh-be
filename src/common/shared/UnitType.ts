@@ -1,6 +1,5 @@
 export enum UnitType {
-  CAMPUS = "Campus",
-  PLANNING_INVESTMENT_DEPT = "Planning and Investment Department",
-  ADMINISTRATION_DEPT = "Administration Department",
-  USER_DEPT = "User Department",
+  CAMPUS = "CAMPUS",                    // Cơ sở (root level)
+  ADMIN_DEPT = "ADMIN_DEPT",           // Phòng quản trị
+  USER_DEPT = "USER_DEPT",             // Đơn vị sử dụng
 }

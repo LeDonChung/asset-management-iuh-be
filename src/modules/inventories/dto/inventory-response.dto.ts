@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Expose, Type } from "class-transformer";
 import { InventorySessionStatus } from "src/common/shared/InventorySessionStatus";
+import { InventorySubResponseDto } from "src/modules/inventory-sub/dto/inventory-sub-response.dto";
 import { UnitResponseDto } from "src/modules/units/dto/unit-response.dto";
 
 export class FileUrlResponseDto {
@@ -49,6 +50,14 @@ export class InventorySessionUnitResponseDto {
   @Type(() => UnitResponseDto)
   @Expose()
   unit?: UnitResponseDto;
+
+  @ApiPropertyOptional({
+    description: "Thông tin tiểu ban với nhóm",
+    type: InventorySubResponseDto,
+  })
+  @Expose()
+  @Type(() => InventorySubResponseDto)
+  subInventory?: InventorySubResponseDto;
 }
 
 export class InventorySessionResponseDto {

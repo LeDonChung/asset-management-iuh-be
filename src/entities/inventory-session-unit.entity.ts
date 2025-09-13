@@ -7,9 +7,11 @@ import {
   DeleteDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToOne,
 } from 'typeorm';
 import { InventorySession } from './inventory-session.entity';
 import { Unit } from './unit.entity';
+import { InventorySub } from './inventory-sub.entity';
 
 @Entity('inventory_session_units')
 export class InventorySessionUnit {
@@ -39,4 +41,7 @@ export class InventorySessionUnit {
   @ManyToOne(() => Unit, (unit) => unit.inventorySessionUnits)
   @JoinColumn({ name: 'unitId' })
   unit: Unit;
+
+  @OneToOne(() => InventorySub, (sub) => sub.inventorySessionUnit)
+  subInventory: InventorySub;
 }

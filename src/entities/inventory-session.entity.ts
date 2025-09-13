@@ -15,6 +15,8 @@ import { User } from "./user.entity";
 import { InventorySessionUnit } from "./inventory-session-unit.entity";
 import { InventorySessionStatus } from "src/common/shared/InventorySessionStatus";
 import { FileUrl } from "./file-url.entity";
+import { InventorySessionMember } from "./inventory-session-member.entity";
+import { InventorySub } from "./inventory-sub.entity";
 
 @Entity("inventory_sessions")
 export class InventorySession {
@@ -90,4 +92,7 @@ export class InventorySession {
     inverseJoinColumn: { name: "fileUrlId", referencedColumnName: "id" },
   })
   fileUrls?: FileUrl[];
+
+  @OneToMany(() => InventorySessionMember, (member) => member.inventorySession)
+  members?: InventorySessionMember[];
 }

@@ -36,6 +36,11 @@ export class CreateUnitDto {
   @IsUUID()
   representativeId?: string;
 
+  @ApiPropertyOptional({ description: 'Parent unit ID (null for root campus)' })
+  @IsOptional()
+  @IsUUID()
+  parentUnitId?: string;
+
   @ApiPropertyOptional({ enum: UnitStatus, description: 'Unit status', default: UnitStatus.ACTIVE })
   @IsOptional()
   @IsEnum(UnitStatus)
