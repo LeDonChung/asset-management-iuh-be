@@ -3,7 +3,6 @@ import { ApiTags, ApiBody, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -36,6 +35,12 @@ export class UsersController {
         return this.usersService.findAll();
     }
 
+    /**
+     * Update user information
+     * @description Update user details based on the provided UpdateUserDto.
+     * @param updateUserDto Data to update user information
+     * @returns Updated user information
+     */
     @Patch()
     @HttpCode(HttpStatus.OK)
     @ApiBody({ type: UpdateUserDto })

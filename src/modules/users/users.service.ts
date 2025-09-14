@@ -83,6 +83,12 @@ export class UsersService {
         }
     }
 
+    /**
+     * Update user information
+     * @description Update user details based on the provided UpdateUserDto.
+     * @param updateUserDto Data to update user information
+     * @returns Updated user information
+     */
     async update(updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
         const user = await this.userRepository.findOne({
             where: { id: updateUserDto.id },
