@@ -13,26 +13,37 @@ import { PermissionConstants } from 'src/common/utils/permission.constant';
 @ApiTags('Users')
 @Controller('api/v1/users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+    constructor(private readonly usersService: UsersService) { }
 
-  @Post()
-  @HttpCode(HttpStatus.CREATED)
-  @ApiBody({ type: CreateUserDto })
-  @ApiResponse({ status: 201, type: UserResponseDto })
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_CREATE_USER)
-  @ApiBearerAuth()
-  async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    return this.usersService.create(createUserDto);
-  }
+    @Post()
+    @HttpCode(HttpStatus.CREATED)
+    @ApiBody({ type: CreateUserDto })
+    @ApiResponse({ status: 201, type: UserResponseDto })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_CREATE_USER)
+    @ApiBearerAuth()
+    async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
+        return this.usersService.create(createUserDto);
+    }
 
-  @Get()
-  @HttpCode(HttpStatus.OK)
-  @ApiResponse({ status: 200, type: [UserResponseDto] })
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_USER)
-  @ApiBearerAuth()
-  async findAll(): Promise<UserResponseDto[]> {
-    return this.usersService.findAll();
-  }
+    @Get()
+    @HttpCode(HttpStatus.OK)
+    @ApiResponse({ status: 200, type: [UserResponseDto] })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_VIEW_USER)
+    @ApiBearerAuth()
+    async findAll(): Promise<UserResponseDto[]> {
+        return this.usersService.findAll();
+    }
+
+    @Patch()
+    @HttpCode(HttpStatus.OK)
+    @ApiBody({ type: UpdateUserDto })
+    @ApiResponse({ status: 200, type: UserResponseDto })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_UPDATE_USER)
+    @ApiBearerAuth()
+    async updateUser(@Body() updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+        return this.usersService.update(updateUserDto);
+    }
 }
