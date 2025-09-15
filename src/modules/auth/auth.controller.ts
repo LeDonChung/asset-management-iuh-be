@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { LoginAuthGuard } from './guards/local-auth.guard';
@@ -10,6 +10,8 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { Permissions } from './decorators/permissions.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from 'src/entities/user.entity';
+import { UpdateProfileDto } from './dtos/user-profile.dto';
+import { UserProfileResponseDto } from './dtos/user-profile-response.dto';
 
 @ApiTags('Authentication')
 @Controller('api/auth')
@@ -60,9 +62,20 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Bad Request' })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_UPDATE_USER)
     @ApiBearerAuth()
     async changePassword(@Body() changePasswordDto: ChangePasswordDto, @CurrentUser() user: User): Promise<{ message: string }> {
         return this.authService.changePassword(changePasswordDto, user);
+    }
+
+    @Patch('update-profile')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Update user profile' })
+    @ApiResponse({ status: 200, description: 'Profile updated successfully' })
+    @ApiResponse({ status: 400, description: 'Bad Request' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    async updateProfile(@Body() updateProfileDto: UpdateProfileDto, @CurrentUser() user: User): Promise<UserProfileResponseDto> {
+        return this.authService.updateProfile(updateProfileDto, user);
     }
 }

@@ -8,6 +8,8 @@ import * as bcrypt from "bcryptjs";
 import { JwtPayload } from "./interfaces/jwt-payload.interface";
 import { LoginDto } from "./dtos/login.dto";
 import { ChangePasswordDto } from "./dtos/change-password.dto";
+import { UserProfileResponseDto } from "./dtos/user-profile-response.dto";
+import { UpdateProfileDto } from "./dtos/user-profile.dto";
 
 @Injectable()
 export class AuthService {
@@ -75,6 +77,13 @@ export class AuthService {
         return user;
     }
 
+    /**
+     * Change user password
+     * @description Change user password based on the provided ChangePasswordDto.
+     * @param changePasswordDto Data Transfer Object containing username, current password, new password, and confirm password
+     * @param currentUser 
+     * @returns A message indicating the result of the password change operation
+     */
     async changePassword(
         changePasswordDto: ChangePasswordDto,
         currentUser?: User
@@ -92,7 +101,7 @@ export class AuthService {
             );
         }
 
-        const user = await this.userRepository.findOne({
+        let user = await this.userRepository.findOne({
             where: { id: currentUser.id, status: UserStatus.ACTIVE },
         });
 
@@ -113,5 +122,45 @@ export class AuthService {
         await this.userRepository.save(user);
 
         return { message: 'Password changed successfully' };
+    }
+
+    /**
+     * Update user profile
+     * @description Update user profile based on the provided UpdateProfileDto.
+     * @param updateProfileDto Data to update user profile
+     * @param currentUser 
+     * @returns 
+     */
+    async updateProfile(
+        updateProfileDto: UpdateProfileDto,
+        currentUser?: User
+    ): Promise<UserProfileResponseDto> {
+        if(!currentUser?.id) {
+            throw new UnauthorizedException(
+                errorResponse("UNAUTHORIZED", "User not authenticated")
+            );
+        }
+
+        let user = await this.userRepository.findOneById(currentUser.id);
+
+        if (!user) {
+            throw new UnauthorizedException(
+                errorResponse("NOT_FOUND", "User not found or inactive")
+            );
+        }
+
+        user.fullName = updateProfileDto.fullName;
+        user.email = updateProfileDto.email;
+        user.phoneNumber = updateProfileDto.phoneNumber;
+        user.birthDate = updateProfileDto.birthDate;
+
+        user = await this.userRepository.save(user);
+
+        return {
+            fullName: user.fullName,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            birthDate: user.birthDate,
+        };
     }
 }
