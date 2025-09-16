@@ -7,6 +7,7 @@ import { errorResponse } from "src/common/helpers/error-response";
 import * as bcrypt from "bcryptjs";
 import { JwtPayload } from "./interfaces/jwt-payload.interface";
 import { LoginDto } from "./dtos/login.dto";
+import { UserLoginResponse } from "./dtos/user-login-response.dto";
 
 @Injectable()
 export class AuthService {
@@ -18,7 +19,7 @@ export class AuthService {
   ) {}
   async login(
     loginDto: LoginDto,
-  ): Promise<{ user: Omit<User, 'password'>; token: string }> {
+  ): Promise<{ user: Omit<UserLoginResponse, 'password'>; token: string }> {
     try {
       const { username, password } = loginDto;
 
@@ -41,9 +42,18 @@ export class AuthService {
 
     const token = this.jwtService.sign(payload);
 
-    const { password: _, ...userWithoutPassword } = user;
-
-    return { user: userWithoutPassword, token };
+    const { password: _ } = user;
+    const userResponse: UserLoginResponse = { 
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      birthDate: user.birthDate,
+      fullName: user.fullName,
+      roles,
+      permissions,
+    };
+    return { user: userResponse, token };
     } catch(e) {
       this.logger.error(e, 'Login error:');
       throw e;

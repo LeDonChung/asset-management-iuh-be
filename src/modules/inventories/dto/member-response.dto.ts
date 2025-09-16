@@ -13,7 +13,7 @@ export class MemberUserDto {
 
   @ApiProperty({ description: "Email user" })
   @Expose()
-  email: string;
+  email?: string;
 
   @ApiProperty({ description: "Số điện thoại" })
   @Expose()
@@ -34,11 +34,11 @@ export class InventorySessionMemberResponseDto {
   inventorySessionId: string;
 
   @ApiProperty({ 
-    description: "Vai trò trong ban kiểm kê",
-    enum: CommitteeRole
+    description: "Chức vụ",
+    example: "Phó hiệu trưởng"
   })
   @Expose()
-  role: CommitteeRole;
+  role: string;
 
   @ApiProperty({ description: "Ghi chú thêm" })
   @Expose()
@@ -48,12 +48,4 @@ export class InventorySessionMemberResponseDto {
   @Expose()
   @Type(() => MemberUserDto)
   user?: MemberUserDto;
-
-  @ApiProperty({ description: "Ngày tạo" })
-  @Expose()
-  createdAt: Date;
-
-  @ApiProperty({ description: "Ngày cập nhật" })
-  @Expose()
-  updatedAt: Date;
 }

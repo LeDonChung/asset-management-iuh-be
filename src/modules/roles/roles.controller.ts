@@ -57,6 +57,15 @@ export class RolesController {
     return this.rolesService.findAll();
   }
 
+  @Get("inventory")
+  @HttpCode(HttpStatus.OK)
+  @ApiResponse({ status: 200, type: [RoleResponseDto] })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async findAllInventoryRoles(): Promise<RoleResponseDto[]> {
+    return this.rolesService.findAllInventoryRoles();
+  }
+
   @Get(":id")
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({ description: "Not Found" })
