@@ -141,14 +141,19 @@ export class UnitsService {
   }
 
   async findByType(type: UnitType): Promise<UnitResponseDto[]> {
-    const units = await this.unitRepository.find({
+    try {
+      const units = await this.unitRepository.find({
       where: { type },
-      relations: ["representative", "parentUnit", "childUnits", "rooms"],
+      relations: ["representative", "rooms"],
       order: { createdAt: "DESC" },
     });
     return plainToInstance(UnitResponseDto, units, {
       excludeExtraneousValues: true,
     });
+    } catch (error) {
+      console.error("Error fetching units by type:", error);
+      throw error;
+    }
   }
 
   async findOne(id: string): Promise<UnitResponseDto> {

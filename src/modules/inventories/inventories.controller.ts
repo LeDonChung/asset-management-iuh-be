@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Query,
 } from "@nestjs/common";
 import { InventoriesService } from "./inventories.service";
 import { CreateInventoryDto } from "./dto/create-inventory.dto";
@@ -17,12 +18,15 @@ import { InventorySessionResponseDto } from "./dto/inventory-response.dto";
 import { AddMemberDto } from "./dto/add-member.dto";
 import { UpdateMemberDto } from "./dto/update-member.dto";
 import { InventorySessionMemberResponseDto } from "./dto/member-response.dto";
+import { InventoryFilterDto } from "./dto/inventory-filter.dto";
+import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import {
   ApiOperation,
   ApiResponse,
   ApiTags,
   ApiParam,
   ApiBearerAuth,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { User } from "src/entities/user.entity";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -30,6 +34,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
+import { PaginationDto } from "src/common/dto/pagination.dto";
+import { InventorySessionStatus } from "src/common/shared/InventorySessionStatus";
 
 @ApiTags("Inventories")
 @Controller("api/v1/inventories")
@@ -56,8 +62,23 @@ export class InventoriesController {
     return this.inventoriesService.create(createInventoryDto, currentUser);
   }
 
-  @Get()
-  @ApiOperation({ summary: "Lấy danh sách tất cả kỳ kiểm kê" })
+  @Post('filter')
+  @ApiOperation({ summary: "Lấy danh sách tất cả kỳ kiểm kê với bộ lọc và phân trang" })
+  @ApiResponse({
+    status: 200,
+    description: "Danh sách kỳ kiểm kê với phân trang",
+    type: PaginatedResponseDto,
+  })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
+  @ApiBearerAuth()
+  async findAll(@Body() filterDto: InventoryFilterDto): Promise<PaginatedResponseDto<InventorySessionResponseDto>> {
+    return this.inventoriesService.findAllWithFilter(filterDto);
+  }
+
+  @Get('/simple')
+  @ApiOperation({ summary: "Lấy danh sách đơn giản kỳ kiểm kê (không có filter)" })
   @ApiResponse({
     status: 200,
     description: "Danh sách kỳ kiểm kê",
@@ -67,7 +88,7 @@ export class InventoriesController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
-  async findAll(): Promise<InventorySessionResponseDto[]> {
+  async findAllSimple(): Promise<InventorySessionResponseDto[]> {
     return this.inventoriesService.findAll();
   }
 
@@ -121,6 +142,20 @@ export class InventoriesController {
   @ApiBearerAuth()
   async remove(@Param("id") id: string): Promise<void> {
     return this.inventoriesService.remove(id);
+  }
+
+  @Patch(":id/status")
+  @ApiOperation({ summary: "Cập nhật trạng thái kỳ kiểm kê" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê", type: "string" })
+  @ApiResponse({ status: 200, description: "Trạng thái kỳ kiểm kê được cập nhật thành công" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY)
+  @ApiBearerAuth()
+  @ApiQuery({ name: "status", description: "Trạng thái kỳ kiểm kê", type: "string", enum: InventorySessionStatus })
+  async updateStatus(@Param("id") id: string, @Query("status") status: InventorySessionStatus): Promise<boolean> {
+    return this.inventoriesService.updateStatus(id, status);
   }
 
   // === MEMBER MANAGEMENT ENDPOINTS ===

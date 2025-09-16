@@ -95,6 +95,24 @@ export class UnitsController {
     return this.unitsService.findByType(type);
   }
 
+  @Get('campuses')
+  @ApiOperation({ summary: "Get all campuses" })
+  @ApiResponse({
+    status: 200,
+    description: "List of campuses retrieved successfully",
+    type: [UnitResponseDto],
+  })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async findCampus(): Promise<UnitResponseDto[]> {
+    try{
+      return await this.unitsService.findByType(UnitType.CAMPUS);
+    } catch (error) {
+      console.error("Error in findCampus:", error);
+      throw error;
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get unit by ID' })
   @ApiParam({ name: 'id', description: 'Unit UUID' })

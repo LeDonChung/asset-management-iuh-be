@@ -361,6 +361,15 @@ export class SeedingService implements OnModuleInit {
         ],
       },
       {
+        name: "Phó trưởng ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_VICE_HEAD",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
         name: "Thư ký ban kiểm kê",
         code: "INVENTORY_COMMITTEE_SECRETARY",
         permissions: [
@@ -373,6 +382,24 @@ export class SeedingService implements OnModuleInit {
           PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
           PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
           PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+        ],
+      },
+      {
+        name: "Ủy viên ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_MEMBER",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
+        name: "Thư ký tổng hợp ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
         ],
       },
       {

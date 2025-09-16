@@ -1,6 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsNotEmpty, IsUUID, IsEnum, IsOptional, IsString } from "class-validator";
-import { CommitteeRole } from "src/common/shared/CommitteeRole";
 
 export class AddMemberDto {
   @ApiProperty({
@@ -12,19 +11,11 @@ export class AddMemberDto {
   userId: string;
 
   @ApiProperty({
-    description: "Vai trò trong ban kiểm kê",
-    enum: CommitteeRole,
-    example: CommitteeRole.MEMBER
-  })
-  @IsEnum(CommitteeRole)
-  role: CommitteeRole;
-
-  @ApiProperty({
-    description: "Ghi chú thêm",
+    description: "Chức vụ",
     required: false,
-    example: "Chuyên gia về tài sản công nghệ thông tin"
+    example: "Phó hiệu trưởng"
   })
   @IsOptional()
   @IsString()
-  notes?: string;
+  role?: string;
 }
