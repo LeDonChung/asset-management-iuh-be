@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Expose, Type } from "class-transformer";
 import { CommitteeRole } from "src/common/shared/CommitteeRole";
+import { RoleResponseDto } from "src/modules/roles/dto/role-response.dto";
 
 export class MemberUserDto {
   @ApiProperty({ description: "ID của user" })
@@ -9,7 +10,7 @@ export class MemberUserDto {
 
   @ApiProperty({ description: "Tên user" })
   @Expose()
-  name: string;
+  fullName: string;
 
   @ApiProperty({ description: "Email user" })
   @Expose()
@@ -18,6 +19,11 @@ export class MemberUserDto {
   @ApiProperty({ description: "Số điện thoại" })
   @Expose()
   phoneNumber?: string;
+
+  @ApiProperty({ description: "Vai trò" })
+  @Expose()
+  @Type(() => RoleResponseDto)
+  roles?: RoleResponseDto[];
 }
 
 export class InventorySessionMemberResponseDto {

@@ -156,6 +156,36 @@ export class UnitsService {
     }
   }
 
+  async findChildren(parentId: string): Promise<UnitResponseDto[]> {
+    try {
+      // First check if parent unit exists
+      const parentUnit = await this.unitRepository.findOne({
+        where: { id: parentId },
+      });
+
+      if (!parentUnit) {
+        throw new NotFoundException({
+          code: "PARENT_UNIT_NOT_FOUND",
+          message: "Parent unit not found",
+        });
+      }
+
+      // Find all child units
+      const childUnits = await this.unitRepository.find({
+        where: { parentUnitId: parentId },
+        relations: ["representative", "rooms"],
+        order: { createdAt: "DESC" },
+      });
+
+      return plainToInstance(UnitResponseDto, childUnits, {
+        excludeExtraneousValues: true,
+      });
+    } catch (error) {
+      console.error("Error fetching child units:", error);
+      throw error;
+    }
+  }
+
   async findOne(id: string): Promise<UnitResponseDto> {
     const unit = await this.unitRepository.findOne({
       where: { id },

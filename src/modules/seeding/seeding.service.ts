@@ -436,6 +436,15 @@ export class SeedingService implements OnModuleInit {
         ],
       },
       {
+        name: "Thành viên tiểu ban kiểm kê",
+        code: "INVENTORY_SUB_MEMBER",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
         name: "Trưởng nhóm kiểm kê",
         code: "INVENTORY_GROUP_HEAD",
         permissions: [
@@ -464,6 +473,15 @@ export class SeedingService implements OnModuleInit {
           PermissionConstants.PERM_UPDATE_RFID,
         ],
       },
+      {
+        name: "Thành viên nhóm kiểm kê",
+        code: "INVENTORY_GROUP_MEMBER",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      }
     ];
 
     for (const roleData of inventoryRoles) {
