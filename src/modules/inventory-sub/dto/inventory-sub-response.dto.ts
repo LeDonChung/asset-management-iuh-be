@@ -8,9 +8,9 @@ export class SubMemberUserDto {
   @Expose()
   id: string;
 
-  @ApiProperty({ description: "Tên user" })
+  @ApiProperty({ description: "Tên đầy đủ của user" })
   @Expose()
-  name: string;
+  fullName: string;
 
   @ApiProperty({ description: "Email user" })
   @Expose()
@@ -66,9 +66,9 @@ export class GroupMemberUserDto {
   @Expose()
   id: string;
 
-  @ApiProperty({ description: "Tên user" })
+  @ApiProperty({ description: "Tên đầy đủ của user" })
   @Expose()
-  name: string;
+  fullName: string;
 
   @ApiProperty({ description: "Email user" })
   @Expose()

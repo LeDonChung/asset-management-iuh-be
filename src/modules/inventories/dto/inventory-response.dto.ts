@@ -3,6 +3,7 @@ import { Expose, Type } from "class-transformer";
 import { InventorySessionStatus } from "src/common/shared/InventorySessionStatus";
 import { InventorySubResponseDto } from "src/modules/inventory-sub/dto/inventory-sub-response.dto";
 import { UnitResponseDto } from "src/modules/units/dto/unit-response.dto";
+import { InventorySessionMemberResponseDto } from "./member-response.dto";
 
 export class FileUrlResponseDto {
   @ApiProperty({
@@ -125,4 +126,12 @@ export class InventorySessionResponseDto {
   @Expose()
   @Type(() => InventorySessionUnitResponseDto)
   inventorySessionUnits?: InventorySessionUnitResponseDto[];
+
+  @ApiPropertyOptional({
+    description: "Danh sách thành viên ban kiểm kê",
+    type: [InventorySessionMemberResponseDto],
+  })
+  @Expose()
+  @Type(() => InventorySessionMemberResponseDto)
+  members?: InventorySessionMemberResponseDto[];
 }

@@ -242,7 +242,7 @@ export class InventorySubService {
     await this.subInventoryMemberRepository.delete({ subInventoryId: id });
 
     // Xóa tiểu ban (soft delete)
-    await this.inventorySubRepository.softDelete(id);
+    await this.inventorySubRepository.delete(id);
   }
 
   async findBySessionUnit(sessionUnitId: string): Promise<InventorySubResponseDto> {

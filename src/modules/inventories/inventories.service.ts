@@ -184,6 +184,9 @@ export class InventoriesService {
       relations: [
         'creator',
         'fileUrls',
+        'members',
+        'members.user',
+        'members.user.roles',
         'inventorySessionUnits',
         'inventorySessionUnits.unit',
         'inventorySessionUnits.subInventory',
@@ -512,8 +515,7 @@ export class InventoriesService {
       throw new NotFoundException('Không tìm thấy thành viên trong ban kiểm kê này');
     }
 
-    // Xóa thành viên (soft delete)
-    await this.inventorySessionMemberRepository.softDelete(memberId);
+    await this.inventorySessionMemberRepository.delete(memberId);
   }
 
   async getMembersByRole(

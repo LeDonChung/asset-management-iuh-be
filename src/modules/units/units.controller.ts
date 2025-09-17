@@ -35,7 +35,22 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 @Controller('api/v1/units')
 export class UnitsController {
   constructor(private readonly unitsService: UnitsService) {}
-
+  @Get(':parentId/children')
+  @ApiOperation({ summary: "Get child units of a parent unit" })
+  @ApiParam({ name: 'parentId', description: 'Parent unit UUID' })
+  @ApiResponse({
+    status: 200,
+    description: "List of child units retrieved successfully",
+    type: [UnitResponseDto],
+  })
+  @ApiResponse({ status: 404, description: "Parent unit not found" })
+  @ApiResponse({ status: 500, description: "Internal server error" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async findChildren(@Param('parentId') parentId: string): Promise<UnitResponseDto[]> {
+    return this.unitsService.findChildren(parentId);
+  }
+  
   @Post()
   @ApiOperation({ summary: 'Create a new unit' })
   @ApiResponse({
@@ -112,6 +127,8 @@ export class UnitsController {
       throw error;
     }
   }
+
+  
 
   @Get(':id')
   @ApiOperation({ summary: 'Get unit by ID' })
