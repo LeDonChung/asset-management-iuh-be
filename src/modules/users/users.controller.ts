@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBody, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBody, ApiResponse, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -35,20 +35,47 @@ export class UsersController {
         return this.usersService.findAll();
     }
 
+    @Get('inventory')
+    @HttpCode(HttpStatus.OK)
+    @ApiResponse({ status: 200, type: [UserResponseDto] })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    async findAllUserInventory(): Promise<UserResponseDto[]> {
+        return this.usersService.findAllUserInventory();
+    }
+
+    @Get('inventory-committee')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ 
+        summary: 'Lấy tất cả users có role liên quan đến kiểm kê',
+        description: 'Trả về danh sách users có các role codes liên quan đến kiểm kê bao gồm ban kiểm kê chính' 
+    })
+    @ApiResponse({ 
+        status: 200, 
+        type: [UserResponseDto],
+        description: 'Danh sách users có role liên quan đến kiểm kê'
+    })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
+        return this.usersService.findAllInventoryCommitteeUsers();
+    }
+
     /**
      * Update user information
      * @description Update user details based on the provided UpdateUserDto.
      * @param updateUserDto Data to update user information
      * @returns Updated user information
      */
-    @Patch()
+    @Patch(':id')
+    @ApiOperation({ summary: 'Update user information' })
+    @ApiResponse({ status: 200, description: 'User updated successfully' })
+    @ApiParam({ name: 'id', description: 'User ID' })
     @HttpCode(HttpStatus.OK)
     @ApiBody({ type: UpdateUserDto })
-    @ApiResponse({ status: 200, type: UserResponseDto })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_UPDATE_USER)
     @ApiBearerAuth()
-    async updateUser(@Body() updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
-        return this.usersService.update(updateUserDto);
+    async updateUser(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+        return this.usersService.update(id, updateUserDto);
     }
 }

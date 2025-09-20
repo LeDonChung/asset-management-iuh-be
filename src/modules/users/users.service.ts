@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User } from '../../entities/user.entity';
+import { User, UserStatus } from '../../entities/user.entity';
 import { Role } from '../../entities/role.entity';
 import { Unit } from '../../entities/unit.entity';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -13,6 +13,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
+
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
@@ -89,9 +90,9 @@ export class UsersService {
      * @param updateUserDto Data to update user information
      * @returns Updated user information
      */
-    async update(updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+    async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
         const user = await this.userRepository.findOne({
-            where: { id: updateUserDto.id },
+            where: { id: id, status: UserStatus.ACTIVE },
             relations: ['roles']
         });
 
@@ -204,5 +205,67 @@ export class UsersService {
                 name: user.unit.name,
             } : undefined,
         };
+    }
+
+    async findAllUserInventory(): Promise<UserResponseDto[]> {
+        try {
+            const inventoryRoleCodes = ["INVENTORY_COMMITTEE_HEAD", "INVENTORY_COMMITTEE_VICE_HEAD", "INVENTORY_COMMITTEE_SECRETARY", "INVENTORY_COMMITTEE_MEMBER", "INVENTORY_COMMITTEE_CHIEF_SECRETARY"];
+            
+            const users = await this.userRepository
+                .createQueryBuilder('user')
+                .leftJoinAndSelect('user.roles', 'role')
+                .where('user.status = :status', { status: UserStatus.ACTIVE })
+                .andWhere('role.code IN (:...roleCodes)', { roleCodes: inventoryRoleCodes })
+                .orderBy('user.createdAt', 'DESC')
+                .getMany();
+    
+            return users.map(this.transformToResponseDto);
+        } catch (error) {
+            console.error('Error finding all user inventory:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Lấy tất cả users có role codes liên quan đến kiểm kê
+     * @description Trả về danh sách users có các role codes liên quan đến kiểm kê bao gồm:
+     * - INVENTORY_COMMITTEE_HEAD: Trưởng ban kiểm kê
+     * - INVENTORY_COMMITTEE_VICE_HEAD: Phó trưởng ban kiểm kê  
+     * - INVENTORY_COMMITTEE_SECRETARY: Thư ký ban kiểm kê
+     * - INVENTORY_COMMITTEE_MEMBER: Thành viên ban kiểm kê
+     * - INVENTORY_COMMITTEE_CHIEF_SECRETARY: Thư ký trưởng ban kiểm kê
+     * @returns Danh sách users có role liên quan đến kiểm kê
+     */
+    async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
+        try {
+            const inventoryRoleCodes = [
+                "INVENTORY_COMMITTEE_HEAD", 
+                "INVENTORY_COMMITTEE_VICE_HEAD", 
+                "INVENTORY_COMMITTEE_SECRETARY", 
+                "INVENTORY_COMMITTEE_MEMBER", 
+                "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
+                "INVENTORY_SUB_HEAD",
+                "INVENTORY_SUB_SECRETARY",
+                "INVENTORY_GROUP_HEAD",
+                "INVENTORY_GROUP_SECRETARY",
+                "INVENTORY_GROUP_MEMBER",
+                "INVENTORY_SUB_MEMBER"
+            ];
+            
+            const users = await this.userRepository
+                .createQueryBuilder('user')
+                .leftJoinAndSelect('user.roles', 'role')
+                .leftJoinAndSelect('role.permissions', 'permission')
+                .leftJoinAndSelect('user.unit', 'unit')
+                .where('user.status = :status', { status: UserStatus.ACTIVE })
+                .andWhere('role.code IN (:...roleCodes)', { roleCodes: inventoryRoleCodes })
+                .orderBy('user.fullName', 'ASC')
+                .getMany();
+
+            return users.map(this.transformToResponseDto);
+        } catch (error) {
+            console.error('Error finding all inventory committee users:', error);
+            throw error;
+        }
     }
 }

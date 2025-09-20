@@ -7,6 +7,7 @@ import { InventorySessionResponseDto } from './dto/inventory-response.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { InventorySessionMemberResponseDto } from './dto/member-response.dto';
+import { InventoryFilterDto } from './dto/inventory-filter.dto';
 import { InventorySession } from 'src/entities/inventory-session.entity';
 import { FileUrl } from 'src/entities/file-url.entity';
 import { InventorySessionUnit } from 'src/entities/inventory-session-unit.entity';
@@ -15,9 +16,14 @@ import { Unit } from 'src/entities/unit.entity';
 import { User } from 'src/entities/user.entity';
 import { CommitteeRole } from 'src/common/shared/CommitteeRole';
 import { plainToInstance } from 'class-transformer';
+import { FilterUtil } from 'src/common/utils/filter.util';
+import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
+import { FieldType } from 'src/common/dto/filter.dto';
+import { InventorySessionStatus } from 'src/common/shared/InventorySessionStatus';
 
 @Injectable()
 export class InventoriesService {
+
   constructor(
     @InjectRepository(InventorySession)
     private inventorySessionRepository: Repository<InventorySession>,
@@ -31,7 +37,7 @@ export class InventoriesService {
     private unitRepository: Repository<Unit>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+  ) { }
 
   async create(createInventoryDto: CreateInventoryDto, currentUser?: User): Promise<InventorySessionResponseDto> {
     const { fileUrls, unitIds, ...inventoryData } = createInventoryDto;
@@ -44,7 +50,7 @@ export class InventoriesService {
     // Validation: Kiểm tra ngày bắt đầu và kết thúc
     const startDate = new Date(inventoryData.startDate);
     const endDate = new Date(inventoryData.endDate);
-    
+
     if (startDate >= endDate) {
       throw new BadRequestException('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
     }
@@ -107,7 +113,7 @@ export class InventoriesService {
 
     // Tạo inventory session units với sessionId đã có
     if (unitIds && unitIds.length > 0) {
-      const inventorySessionUnits = unitIds.map(unitId => 
+      const inventorySessionUnits = unitIds.map(unitId =>
         this.inventorySessionUnitRepository.create({
           sessionId: savedSession.id,
           unitId
@@ -122,9 +128,9 @@ export class InventoriesService {
   async findAll(): Promise<InventorySessionResponseDto[]> {
     const sessions = await this.inventorySessionRepository.find({
       relations: [
-        'creator', 
-        'fileUrls', 
-        'inventorySessionUnits', 
+        'creator',
+        'fileUrls',
+        'inventorySessionUnits',
         'inventorySessionUnits.unit',
         'inventorySessionUnits.subInventory',
         'inventorySessionUnits.subInventory.members',
@@ -143,13 +149,45 @@ export class InventoriesService {
     });
   }
 
+  async findAllWithFilter(filterDto: InventoryFilterDto): Promise<PaginatedResponseDto<InventorySessionResponseDto>> {
+    // Define inventory-specific configuration
+    const config = {
+      searchFields: ['name', 'period'],
+      fieldTypeMap: {
+        'name': FieldType.TEXT,
+        'period': FieldType.NUMBER,
+        'status': FieldType.SELECT,
+        'isGlobal': FieldType.BOOLEAN,
+        'year': FieldType.NUMBER,
+        'startDate': FieldType.DATE,
+        'endDate': FieldType.DATE,
+      },
+      defaultSorting: { field: 'createdAt', direction: 'DESC' as const },
+      relations: [
+        'fileUrls',
+        'inventorySessionUnits',
+      ]
+    };
+
+    return FilterUtil.getFilteredResults(
+      this.inventorySessionRepository,
+      filterDto,
+      InventorySessionResponseDto,
+      config,
+      'inventory'
+    );
+  }
+
   async findOne(id: string): Promise<InventorySessionResponseDto> {
     const inventorySession = await this.inventorySessionRepository.findOne({
       where: { id },
       relations: [
-        'creator', 
-        'fileUrls', 
-        'inventorySessionUnits', 
+        'creator',
+        'fileUrls',
+        'members',
+        'members.user',
+        'members.user.roles',
+        'inventorySessionUnits',
         'inventorySessionUnits.unit',
         'inventorySessionUnits.subInventory',
         'inventorySessionUnits.subInventory.members',
@@ -188,7 +226,7 @@ export class InventoriesService {
     if (updateData.startDate || updateData.endDate) {
       const startDate = updateData.startDate ? new Date(updateData.startDate) : existingSession.startDate;
       const endDate = updateData.endDate ? new Date(updateData.endDate) : existingSession.endDate;
-      
+
       if (startDate >= endDate) {
         throw new BadRequestException('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
       }
@@ -240,7 +278,7 @@ export class InventoriesService {
       if (updateData.endDate) {
         updateData.endDate = new Date(updateData.endDate) as any;
       }
-      
+
       Object.assign(existingSession, updateData);
     }
 
@@ -260,7 +298,7 @@ export class InventoriesService {
       }
     }
 
-    
+
 
     // Save tất cả trong một lần
     const savedSession = await this.inventorySessionRepository.save(existingSession);
@@ -273,7 +311,7 @@ export class InventoriesService {
 
       // Tạo inventory session units mới nếu có
       if (unitIds && unitIds.length > 0) {
-        const inventorySessionUnits = unitIds.map(unitId => 
+        const inventorySessionUnits = unitIds.map(unitId =>
           this.inventorySessionUnitRepository.create({
             inventorySession: existingSession,
             unitId,
@@ -283,6 +321,45 @@ export class InventoriesService {
       }
     }
     return this.findOne(savedSession.id);
+  }
+
+  async updateStatus(id: string, status: InventorySessionStatus): Promise<boolean> {
+    try {
+      if (!Object.values(InventorySessionStatus).includes(status)) {
+        throw new BadRequestException(`Trạng thái '${status}' không hợp lệ`);
+      }
+
+      const inventorySession = await this.inventorySessionRepository.findOne({
+        where: { id },
+      });
+
+      if (!inventorySession) {
+        throw new NotFoundException(`Inventory session với ID ${id} không tồn tại`);
+      }
+
+      const currentStatus = inventorySession.status;
+
+      const statusOrder = [
+        InventorySessionStatus.PLANNED,
+        InventorySessionStatus.IN_PROGRESS,
+        InventorySessionStatus.COMPLETED,
+        InventorySessionStatus.CLOSED
+      ];
+
+      const currentIndex = statusOrder.indexOf(currentStatus);
+      const newIndex = statusOrder.indexOf(status);
+
+      if (newIndex < currentIndex) {
+        throw new BadRequestException(`Không thể chuyển từ trạng thái '${currentStatus}' về '${status}'`);
+      }
+
+      inventorySession.status = status;
+      await this.inventorySessionRepository.save(inventorySession);
+      return true;
+    } catch (error) {
+      console.error('Error updating inventory session status:', error);
+      throw error;
+    }
   }
 
   async remove(id: string): Promise<void> {
@@ -357,7 +434,6 @@ export class InventoriesService {
       inventorySessionId,
       userId: addMemberDto.userId,
       role: addMemberDto.role,
-      notes: addMemberDto.notes,
       createdBy: currentUser.id
     });
 
@@ -418,10 +494,6 @@ export class InventoriesService {
     if (updateMemberDto.role !== undefined) {
       member.role = updateMemberDto.role;
     }
-    
-    if (updateMemberDto.notes !== undefined) {
-      member.notes = updateMemberDto.notes;
-    }
 
     const updatedMember = await this.inventorySessionMemberRepository.save(member);
 
@@ -443,8 +515,7 @@ export class InventoriesService {
       throw new NotFoundException('Không tìm thấy thành viên trong ban kiểm kê này');
     }
 
-    // Xóa thành viên (soft delete)
-    await this.inventorySessionMemberRepository.softDelete(memberId);
+    await this.inventorySessionMemberRepository.delete(memberId);
   }
 
   async getMembersByRole(

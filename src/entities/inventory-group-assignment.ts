@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, DeleteDateColumn, OneToMany } from "typeorm";
 import { InventoryGroup } from "./inventory-group";
 import { Unit } from "./unit.entity";
+import { InventoryResult } from "./inventory-result";
 
 @Entity("inventory_group_assignments")
 export class InventoryGroupAssignment {
@@ -42,4 +43,7 @@ export class InventoryGroupAssignment {
     @ManyToOne(() => Unit, (unit) => unit.inventoryGroupAssignments)
     @JoinColumn({ name: "unitId" })
     unit: Unit;
+
+    @OneToMany(() => InventoryResult, (result) => result.assignment)
+    results?: InventoryResult[];
 }

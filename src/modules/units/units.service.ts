@@ -141,14 +141,49 @@ export class UnitsService {
   }
 
   async findByType(type: UnitType): Promise<UnitResponseDto[]> {
-    const units = await this.unitRepository.find({
+    try {
+      const units = await this.unitRepository.find({
       where: { type },
-      relations: ["representative", "parentUnit", "childUnits", "rooms"],
+      relations: ["representative", "rooms"],
       order: { createdAt: "DESC" },
     });
     return plainToInstance(UnitResponseDto, units, {
       excludeExtraneousValues: true,
     });
+    } catch (error) {
+      console.error("Error fetching units by type:", error);
+      throw error;
+    }
+  }
+
+  async findChildren(parentId: string): Promise<UnitResponseDto[]> {
+    try {
+      // First check if parent unit exists
+      const parentUnit = await this.unitRepository.findOne({
+        where: { id: parentId },
+      });
+
+      if (!parentUnit) {
+        throw new NotFoundException({
+          code: "PARENT_UNIT_NOT_FOUND",
+          message: "Parent unit not found",
+        });
+      }
+
+      // Find all child units
+      const childUnits = await this.unitRepository.find({
+        where: { parentUnitId: parentId },
+        relations: ["representative", "rooms"],
+        order: { createdAt: "DESC" },
+      });
+
+      return plainToInstance(UnitResponseDto, childUnits, {
+        excludeExtraneousValues: true,
+      });
+    } catch (error) {
+      console.error("Error fetching child units:", error);
+      throw error;
+    }
   }
 
   async findOne(id: string): Promise<UnitResponseDto> {

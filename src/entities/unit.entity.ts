@@ -16,6 +16,7 @@ import { Room } from "./room.entity";
 import { InventorySessionUnit } from "./inventory-session-unit.entity";
 import { InventoryGroupAssignment } from "./inventory-group-assignment";
 import { Expose } from "class-transformer";
+import { AssetBook } from "./asset-book.entity";
 
 @Entity("units")
 export class Unit {
@@ -104,4 +105,7 @@ export class Unit {
   @OneToMany(() => InventoryGroupAssignment, (assignment) => assignment.unit)
   @Expose()
   inventoryGroupAssignments?: InventoryGroupAssignment[];
+
+  @OneToMany(() => AssetBook, (assetBook) => assetBook.unit)
+  assetBooks?: AssetBook[];
 }

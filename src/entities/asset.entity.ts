@@ -10,6 +10,7 @@ import {
   OneToOne,
   TableInheritance,
   ChildEntity,
+  OneToMany,
 } from 'typeorm';
 import { Category } from './category.entity';
 import { User } from './user.entity';
@@ -17,6 +18,8 @@ import { Room } from './room.entity';
 import { RfidTag } from './rfid-tag.entity';
 import { AssetType } from 'src/common/shared/AssetType';
 import { AssetStatus } from 'src/common/shared/AssetStatus';
+import { InventoryResult } from './inventory-result';
+import { AssetBookItem } from './asset-book-item.entity';
 
 
 @Entity('assets')
@@ -105,6 +108,11 @@ export class Asset {
   @JoinColumn({ name: 'current_room_id' })
   currentRoom: Room;
 
+  @OneToMany(() => InventoryResult, (result) => result.asset)
+  inventoryResults?: InventoryResult[];
+
+  @OneToMany(() => AssetBookItem, (item) => item.asset)
+  assetBookItems?: AssetBookItem[];
 }
 
 // Child entities for inheritance

@@ -10,6 +10,8 @@ import { LoginDto } from "./dtos/login.dto";
 import { ChangePasswordDto } from "./dtos/change-password.dto";
 import { UserProfileResponseDto } from "./dtos/user-profile-response.dto";
 import { UpdateProfileDto } from "./dtos/user-profile.dto";
+import { UserResponseDto } from "../users/dto/user-response.dto";
+import { UserLoginResponse } from "./dtos/user-login-response.dto";
 
 @Injectable()
 export class AuthService {
@@ -21,7 +23,7 @@ export class AuthService {
     ) { }
     async login(
         loginDto: LoginDto,
-    ): Promise<{ user: Omit<User, 'password'>; token: string }> {
+    ): Promise<{ user: Omit<UserLoginResponse, 'password'>; token: string }> {
         try {
             const { username, password } = loginDto;
 
@@ -43,10 +45,18 @@ export class AuthService {
             };
 
             const token = this.jwtService.sign(payload);
-
-            const { password: _, ...userWithoutPassword } = user;
-
-            return { user: userWithoutPassword, token };
+            const userLogin: UserLoginResponse = {
+                id: user.id,
+                username: user.username,
+                fullName: user.fullName,
+                roles: roles,
+                permissions: permissions,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                birthDate: user.birthDate
+            }
+        
+            return { user: userLogin, token };
         } catch (e) {
             this.logger.error(e, 'Login error:');
             throw e;
@@ -141,7 +151,9 @@ export class AuthService {
             );
         }
 
-        let user = await this.userRepository.findOneById(currentUser.id);
+        let user = await this.userRepository.findOne({
+            where: { id: currentUser.id, status: UserStatus.ACTIVE },
+        });
 
         if (!user) {
             throw new UnauthorizedException(
