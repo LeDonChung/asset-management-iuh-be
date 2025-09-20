@@ -16,9 +16,10 @@ import {
 import { Unit } from "./unit.entity";
 import { User } from "./user.entity";
 import { Asset } from "./asset.entity";
+import { AssetBookItem } from "./asset-book-item.entity";
 
 @Entity("rooms")
-@Unique("unique_room_location", ["building", "floor", "roomNumber"])
+@Unique("unique_room_location", ["building", "floor", "roomNumber", "unitId"])
 export class Room {
   @PrimaryGeneratedColumn("uuid")
   id: string;
@@ -74,5 +75,8 @@ export class Room {
   createdBy?: User;
 
   @OneToMany(() => Asset, (asset) => asset.currentRoom)
-  assets: Asset[];
+  assets?: Asset[];
+
+  @OneToMany(() => AssetBookItem, (item) => item.room)
+  assetBookItems?: AssetBookItem[];
 }

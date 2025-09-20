@@ -1,0 +1,8 @@
+export enum InventoryResultStatus {
+    MATCHED = "MATCHED",
+    MISSING = "MISSING",
+    EXCESS = "EXCESS",
+    BROKEN = "BROKEN",
+    NEEDS_REPAIR = "NEEDS_REPAIR",
+    LIQUIDATION_PROPOSED = "LIQUIDATION_PROPOSED",
+}

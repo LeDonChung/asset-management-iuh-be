@@ -35,7 +35,22 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 @Controller('api/v1/units')
 export class UnitsController {
   constructor(private readonly unitsService: UnitsService) {}
-
+  @Get(':parentId/children')
+  @ApiOperation({ summary: "Get child units of a parent unit" })
+  @ApiParam({ name: 'parentId', description: 'Parent unit UUID' })
+  @ApiResponse({
+    status: 200,
+    description: "List of child units retrieved successfully",
+    type: [UnitResponseDto],
+  })
+  @ApiResponse({ status: 404, description: "Parent unit not found" })
+  @ApiResponse({ status: 500, description: "Internal server error" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async findChildren(@Param('parentId') parentId: string): Promise<UnitResponseDto[]> {
+    return this.unitsService.findChildren(parentId);
+  }
+  
   @Post()
   @ApiOperation({ summary: 'Create a new unit' })
   @ApiResponse({
@@ -94,6 +109,26 @@ export class UnitsController {
   async findByType(@Param('type') type: UnitType): Promise<UnitResponseDto[]> {
     return this.unitsService.findByType(type);
   }
+
+  @Get('campuses')
+  @ApiOperation({ summary: "Get all campuses" })
+  @ApiResponse({
+    status: 200,
+    description: "List of campuses retrieved successfully",
+    type: [UnitResponseDto],
+  })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async findCampus(): Promise<UnitResponseDto[]> {
+    try{
+      return await this.unitsService.findByType(UnitType.CAMPUS);
+    } catch (error) {
+      console.error("Error in findCampus:", error);
+      throw error;
+    }
+  }
+
+  
 
   @Get(':id')
   @ApiOperation({ summary: 'Get unit by ID' })

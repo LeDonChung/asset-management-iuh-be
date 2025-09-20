@@ -296,7 +296,7 @@ export class AssetsService {
             entrydate: this.formatDate(row[10]?.toString() || ''), // K: Ngày nhập
             purchasePackage: parseInt(row[11]?.toString()) || 0, // L: Gói mua
             rfidId: row[12]?.toString() || '', // M: RFID Tag
-            status: AssetStatus.WAITING_ALLOCATION,
+            status: AssetStatus.IN_USE,
           };
 
           // Validation cơ bản

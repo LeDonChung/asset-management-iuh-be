@@ -25,16 +25,8 @@ export class InventorySessionMember {
   @Column({ comment: "ID của kỳ kiểm kê" })
   inventorySessionId: string;
 
-  @Column({
-    type: "enum",
-    enum: CommitteeRole,
-    default: CommitteeRole.MEMBER,
-    comment: "Vai trò trong kỳ kiểm kê"
-  })
-  role: CommitteeRole;
-
-  @Column({ nullable: true, comment: "Ghi chú thêm" })
-  notes?: string;
+  @Column({ nullable: true, comment: "Chức vụ" })
+  role?: string;
 
   @Column({ nullable: true, comment: "Người tạo" })
   createdBy?: string;

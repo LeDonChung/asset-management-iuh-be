@@ -21,6 +21,9 @@ import { SubInventoryMember } from "src/entities/sub-inventory-member.entity";
 import { InventoryGroup } from "src/entities/inventory-group";
 import { InventoryGroupMember } from "src/entities/inventory-group-member.entity";
 import { InventoryGroupAssignment } from "src/entities/inventory-group-assignment";
+import { InventoryResult } from "src/entities/inventory-result";
+import { AssetBook } from "src/entities/asset-book.entity";
+import { AssetBookItem } from "src/entities/asset-book-item.entity";
 
 export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
   imports: [],
@@ -63,7 +66,10 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
         SubInventoryMember,
         InventoryGroup,
         InventoryGroupMember,
-        InventoryGroupAssignment
+        InventoryGroupAssignment,
+        InventoryResult,
+        AssetBook,
+        AssetBookItem
       ],
       synchronize: false,
       logging: false,
@@ -106,7 +112,10 @@ const dataSource = new DataSource({
     SubInventoryMember,
     InventoryGroup,
     InventoryGroupMember,
-    InventoryGroupAssignment
+    InventoryGroupAssignment,
+    InventoryResult,
+    AssetBook,
+    AssetBookItem
   ],
   migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
   migrationsTableName: "typeorm_migrations",
