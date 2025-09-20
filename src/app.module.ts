@@ -17,6 +17,7 @@ import { InventoriesModule } from './modules/inventories/inventories.module';
 import { FilesModule } from './modules/files/files.module';
 import { InventorySubModule } from './modules/inventory-sub/inventory-sub.module';
 import { InventoryGroupModule } from './modules/inventory-group/inventory-group.module';
+import { AssetBooksModule } from './modules/asset-books/asset-books.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { InventoryGroupModule } from './modules/inventory-group/inventory-group.
     FilesModule,
     InventorySubModule,
     InventoryGroupModule,
+    AssetBooksModule,
   ],
   controllers: [],
   providers: [
