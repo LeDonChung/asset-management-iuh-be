@@ -18,6 +18,7 @@ import { FilesModule } from './modules/files/files.module';
 import { InventorySubModule } from './modules/inventory-sub/inventory-sub.module';
 import { InventoryGroupModule } from './modules/inventory-group/inventory-group.module';
 import { AssetBooksModule } from './modules/asset-books/asset-books.module';
+import { RedisModule } from './modules/redis/redis.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { AssetBooksModule } from './modules/asset-books/asset-books.module';
     InventorySubModule,
     InventoryGroupModule,
     AssetBooksModule,
+    RedisModule,
   ],
   controllers: [],
   providers: [
