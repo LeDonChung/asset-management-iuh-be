@@ -8,6 +8,7 @@ import { InventoryGroupMember } from 'src/entities/inventory-group-member.entity
 import { InventoryGroupAssignment } from 'src/entities/inventory-group-assignment';
 import { User } from 'src/entities/user.entity';
 import { Unit } from 'src/entities/unit.entity';
+import { InventorySession } from 'src/entities/inventory-session.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { Unit } from 'src/entities/unit.entity';
       InventoryGroupAssignment,
       User,
       Unit,
+      InventorySession,
     ]),
   ],
   controllers: [InventoryGroupController],
