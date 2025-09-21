@@ -10,6 +10,7 @@ import { InventoryGroupMember } from 'src/entities/inventory-group-member.entity
 import { InventoryGroupAssignment } from 'src/entities/inventory-group-assignment';
 import { User } from 'src/entities/user.entity';
 import { Unit } from 'src/entities/unit.entity';
+import { InventorySession } from 'src/entities/inventory-session.entity';
 import { CommitteeRole } from 'src/common/shared/CommitteeRole';
 import { InventoryGroupStatus } from 'src/common/shared/InventoryGroupStatus';
 import { plainToInstance } from 'class-transformer';
@@ -29,7 +30,116 @@ export class InventoryGroupService {
     private userRepository: Repository<User>,
     @InjectRepository(Unit)
     private unitRepository: Repository<Unit>,
+    @InjectRepository(InventorySession)
+    private inventorySessionRepository: Repository<InventorySession>,
   ) {}
+
+  /**
+   * Kiểm tra ngày assignment có nằm trong khoảng thời gian kỳ kiểm kê không
+   */
+  private async validateAssignmentDatesInSessionPeriod(subInventoryId: string, assignments: any[]): Promise<void> {
+    // Lấy thông tin tiểu ban và kỳ kiểm kê
+    const subInventory = await this.inventorySubRepository.findOne({
+      where: { id: subInventoryId },
+      relations: ['inventorySessionUnit', 'inventorySessionUnit.inventorySession']
+    });
+
+    if (!subInventory?.inventorySessionUnit?.inventorySession) {
+      throw new NotFoundException('Không tìm thấy thông tin kỳ kiểm kê');
+    }
+
+    const session = subInventory.inventorySessionUnit.inventorySession;
+    const sessionStartDate = new Date(session.startDate);
+    const sessionEndDate = new Date(session.endDate);
+
+    // Kiểm tra từng assignment
+    for (const assignment of assignments) {
+      const assignmentStartDate = new Date(assignment.startDate);
+      const assignmentEndDate = new Date(assignment.endDate);
+
+      if (assignmentStartDate < sessionStartDate || assignmentEndDate > sessionEndDate) {
+        throw new BadRequestException(
+          `Ngày phân công cho đơn vị ${assignment.unitId} phải nằm trong khoảng thời gian kỳ kiểm kê (${sessionStartDate.toLocaleDateString('vi-VN')} - ${sessionEndDate.toLocaleDateString('vi-VN')})`
+        );
+      }
+    }
+  }
+
+  /**
+   * Kiểm tra thời gian phân công không được chồng lấn (A(19-20) B(20-21) hoặc A(19-20) B(21-22))
+   */
+  private async validateNoOverlappingAssignmentsInGroup(assignments: any[]): Promise<void> {
+    if (assignments.length <= 1) return;
+
+    // Sắp xếp assignments theo startDate
+    const sortedAssignments = [...assignments].sort((a, b) => 
+      new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    );
+
+    // Lấy thông tin đơn vị để hiển thị tên trong thông báo lỗi
+    const unitIds = [...new Set(assignments.map(a => a.unitId))];
+    const units = await this.unitRepository.findByIds(unitIds);
+    const unitMap = new Map(units.map(unit => [unit.id, unit.name]));
+
+    for (let i = 0; i < sortedAssignments.length - 1; i++) {
+      const currentAssignment = sortedAssignments[i];
+      const nextAssignment = sortedAssignments[i + 1];
+      
+      const currentEndDate = new Date(currentAssignment.endDate);
+      const nextStartDate = new Date(nextAssignment.startDate);
+      
+      // Kiểm tra ngày kết thúc của assignment hiện tại phải nhỏ hơn hoặc bằng ngày bắt đầu của assignment tiếp theo
+      if (currentEndDate.getTime() > nextStartDate.getTime()) {
+        const currentUnitName = unitMap.get(currentAssignment.unitId) || currentAssignment.unitId;
+        const nextUnitName = unitMap.get(nextAssignment.unitId) || nextAssignment.unitId;
+        
+        throw new BadRequestException(
+          `Thời gian phân công không được chồng lấn:\n` +
+          `• Phân công ${i + 1}: ${currentUnitName} (${currentAssignment.startDate.split('T')[0]} - ${currentAssignment.endDate.split('T')[0]})\n` +
+          `• Phân công ${i + 2}: ${nextUnitName} (${nextAssignment.startDate.split('T')[0]} - ${nextAssignment.endDate.split('T')[0]})\n` +
+          `→ Ngày kết thúc của phân công ${i + 1} phải nhỏ hơn hoặc bằng ngày bắt đầu của phân công ${i + 2}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Kiểm tra đơn vị chưa được phân công trong cùng khoảng thời gian
+   */
+  private async validateNoOverlappingAssignments(assignments: any[], excludeGroupId?: string): Promise<void> {
+    for (const assignment of assignments) {
+      const assignmentStartDate = new Date(assignment.startDate);
+      const assignmentEndDate = new Date(assignment.endDate);
+
+      // Tìm các assignment trùng lặp
+      const queryBuilder = this.inventoryGroupAssignmentRepository
+        .createQueryBuilder('assignment')
+        .leftJoin('assignment.group', 'group')
+        .where('assignment.unitId = :unitId', { unitId: assignment.unitId })
+        .andWhere('group.status != :status', { status: InventoryGroupStatus.CANCELLED })
+        .andWhere(
+          '(assignment.startDate <= :endDate AND assignment.endDate >= :startDate)',
+          {
+            startDate: assignmentStartDate,
+            endDate: assignmentEndDate
+          }
+        );
+
+      // Loại trừ group hiện tại khi update
+      if (excludeGroupId) {
+        queryBuilder.andWhere('group.id != :excludeGroupId', { excludeGroupId });
+      }
+
+      const overlappingAssignments = await queryBuilder.getMany();
+
+      if (overlappingAssignments.length > 0) {
+        const overlappingGroup = overlappingAssignments[0];
+        throw new BadRequestException(
+          `Đơn vị ${assignment.unitId} đã được phân công cho nhóm khác trong khoảng thời gian này (${assignmentStartDate.toLocaleDateString('vi-VN')} - ${assignmentEndDate.toLocaleDateString('vi-VN')})`
+        );
+      }
+    }
+  }
 
   async create(createInventoryGroupDto: CreateInventoryGroupDto, currentUser: User): Promise<InventoryGroupResponseDto> {
     const { leaderId, secretaryId, memberIds, assignments, subInventoryId, ...groupData } = createInventoryGroupDto;
@@ -78,6 +188,15 @@ export class InventoryGroupService {
         throw new BadRequestException(`Ngày bắt đầu phải nhỏ hơn ngày kết thúc cho đơn vị ${assignment.unitId}`);
       }
     }
+
+    // Validate ngày assignment nằm trong khoảng thời gian kỳ kiểm kê
+    await this.validateAssignmentDatesInSessionPeriod(subInventoryId, assignments);
+
+    // Validate thời gian phân công không được chồng lấn (A(19-20) B(20-21) hoặc A(19-20) B(21-22))
+    await this.validateNoOverlappingAssignmentsInGroup(assignments);
+
+    // Validate không có assignment trùng lặp cho cùng đơn vị
+    await this.validateNoOverlappingAssignments(assignments);
 
     // Tạo nhóm
     const newGroup = this.inventoryGroupRepository.create({
@@ -276,6 +395,15 @@ export class InventoryGroupService {
           throw new BadRequestException(`Ngày bắt đầu phải nhỏ hơn ngày kết thúc cho đơn vị ${assignment.unitId}`);
         }
       }
+
+      // Validate ngày assignment nằm trong khoảng thời gian kỳ kiểm kê
+      await this.validateAssignmentDatesInSessionPeriod(group.subInventoryId, assignments);
+
+      // Validate thời gian phân công không được chồng lấn (A(19-20) B(20-21) hoặc A(19-20) B(21-22))
+      await this.validateNoOverlappingAssignmentsInGroup(assignments);
+
+      // Validate không có assignment trùng lặp cho cùng đơn vị (loại trừ group hiện tại)
+      await this.validateNoOverlappingAssignments(assignments, id);
 
       // Tạo phân công mới
       const newAssignments = assignments.map(assignment => 

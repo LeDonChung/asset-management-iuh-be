@@ -1,8 +1,9 @@
 import { InventoryResultStatus } from "src/common/shared/InventoryResultStatus";
 import { ScanMethod } from "src/common/shared/ScanMethod";
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { InventoryGroupAssignment } from "./inventory-group-assignment";
 import { Asset } from "./asset.entity";
+import { FileUrl } from "./file-url.entity";
 
 @Entity("inventory_results")
 export class InventoryResult {
@@ -30,17 +31,25 @@ export class InventoryResult {
     @Column({ comment: "Ghi chú" })
     note: string;
 
+    @ManyToMany(() => FileUrl, { cascade: true })
+    @JoinTable({
+        name: "file_url_inventory_results",
+        joinColumn: { name: "inventoryResultId", referencedColumnName: "id" },
+        inverseJoinColumn: { name: "fileUrlId", referencedColumnName: "id" },
+    })
+    fileUrls?: FileUrl[];
+
     @Column({ comment: "Người tạo" })
     createdBy: string;
 
-    @Column({ comment: "Ngày tạo" })
+    @CreateDateColumn()
     createdAt: Date;
 
-    @Column({ comment: "Ngày cập nhật" })
+    @UpdateDateColumn()
     updatedAt: Date;
 
-    @Column({ comment: "Ngày xóa" })
-    deletedAt: Date;
+    @DeleteDateColumn()
+    deletedAt?: Date;
 
     @ManyToOne(() => InventoryGroupAssignment, (assignment) => assignment.results)
     @JoinColumn({ name: "assignmentId" })
