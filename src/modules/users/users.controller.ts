@@ -8,6 +8,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PermissionConstants } from 'src/common/utils/permission.constant';
+import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
+import { UserFilterDto } from './dto/user-filter.dto';
 
 @ApiTags('Users')
 @Controller('api/v1/users')
@@ -77,5 +79,24 @@ export class UsersController {
     @ApiBearerAuth()
     async updateUser(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
         return this.usersService.update(id, updateUserDto);
+    }
+
+    @Post('filter')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ 
+        summary: 'Lấy danh sách users với bộ lọc và phân trang',
+        description: 'Trả về danh sách users với các bộ lọc theo unit, status và tìm kiếm theo username, fullName, email' 
+    })
+    @ApiResponse({ 
+        status: 200, 
+        type: PaginatedResponseDto,
+        description: 'Danh sách users với phân trang'
+    })
+    @ApiResponse({ status: 500, description: 'Lỗi server' })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_VIEW_USER)
+    @ApiBearerAuth()
+    async findWithPagination(@Body() filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
+        return this.usersService.findWithPagination(filterDto);
     }
 }

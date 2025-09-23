@@ -10,6 +10,10 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { errorResponse } from 'src/common/helpers/error-response';
 import { ERR_EXISTS, NOT_FOUND } from 'src/common/utils/error-type-response';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserFilterDto } from './dto/user-filter.dto';
+import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
+import { FieldType } from 'src/common/dto/filter.dto';
+import { FilterUtil } from 'src/common/utils/filter.util';
 
 @Injectable()
 export class UsersService {
@@ -176,6 +180,69 @@ export class UsersService {
         });
 
         return users.map(this.transformToResponseDto);
+    }
+
+     async findWithPagination(filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
+        try {
+            // Define user-specific configuration
+            const config = {
+                searchFields: ["username", "fullName", "email"],
+                fieldTypeMap: {
+                    username: FieldType.TEXT,
+                    fullName: FieldType.TEXT,
+                    email: FieldType.TEXT,
+                    status: FieldType.SELECT,
+                    unitId: FieldType.SELECT,
+                    phoneNumber: FieldType.TEXT,
+                    birthDate: FieldType.DATE,
+                    createdAt: FieldType.DATE,
+                    updatedAt: FieldType.DATE,
+                },
+                defaultSorting: { field: "createdAt", direction: "DESC" as const },
+                relations: ["roles", "unit"],
+            };
+
+            // Handle quick filters for backward compatibility
+            if (filterDto.unitFilter || filterDto.statusFilter) {
+                // Add quick filter conditions to the existing conditions
+                const quickFilterConditions = [];
+                
+                if (filterDto.unitFilter) {
+                    quickFilterConditions.push({
+                        field: 'unitId',
+                        fieldType: 'select',
+                        operator: 'equals',
+                        value: [filterDto.unitFilter]
+                    });
+                }
+                
+                if (filterDto.statusFilter) {
+                    quickFilterConditions.push({
+                        field: 'status',
+                        fieldType: 'select',
+                        operator: 'equals',
+                        value: [filterDto.statusFilter]
+                    });
+                }
+
+                // Merge with existing conditions
+                filterDto.conditions = [
+                    ...(filterDto.conditions || []),
+                    ...quickFilterConditions
+                ];
+            }
+
+            return FilterUtil.getFilteredResults(
+                this.userRepository,
+                filterDto,
+                UserResponseDto,
+                config,
+                "user"
+            );
+        } catch (error) {
+            console.error('Error finding users with pagination:', error);
+            throw error;
+        }
     }
 
     private transformToResponseDto(user: User): UserResponseDto {
