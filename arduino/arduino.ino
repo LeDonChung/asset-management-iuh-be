@@ -39,6 +39,13 @@ uint16_t currentMTU = 517; // mặc định
 // DEFAULT RFID(RS485) ADDRESS
 #define RFID_ADDRESS 01 // 0x01
 
+// Thêm các biến để kiểm soát tốc độ gửi
+unsigned long lastSendTime = 0;
+const unsigned long SEND_INTERVAL = 500; // Gửi mỗi 500ms để tăng tốc độ
+static String epcArray[15]; // Tăng từ 10 lên 15 tags
+static int epcCount = 0;
+static bool hasNewData = false;
+
 unsigned char CheckSum(unsigned char *uBuff, unsigned char uBuffLen)
 {
   unsigned char i, uSum = 0;
@@ -248,16 +255,20 @@ void sendStartInventory() {
   isScan = true;
   isAlert = false;
   isBuzzer = false;
-}
-
-
-void sendStopInventory() {
-  isScan = false;
-  String bleResp = "{\"cmd\":\"cmd_customized_session_target_inventory_stop\",\"status\":true}";
-  if (deviceConnected && pCharacteristic != NULL) {
-    sendBLEJson(bleResp);
+  // Reset data khi bắt đầu scan mới
+  epcCount = 0;
+  hasNewData = false;
+  lastSendTime = 0;
+  
+  // Clear array
+  for (int i = 0; i < 15; i++) {
+    epcArray[i] = "";
   }
+  
+  Serial.println("🚀 Bắt đầu scan inventory với interval " + String(SEND_INTERVAL) + "ms");
 }
+
+
 
 void sendSetRFLinkProfile(String profileID) {
   Serial.println(profileID);
@@ -578,6 +589,7 @@ void setup() {
 
   setupBuzzer();
 }
+
 void endScan() {
   byte cmd[] = {0xA0, 0x05, 0xFF, 0x89, 0x01, 0x00};
   byte checksum = CheckSum(cmd, 6);
@@ -592,6 +604,16 @@ void startScan() {
   RFID.write(cmd, 6);
   RFID.write(checksum);
 }
+
+void sendStopInventory() {
+  isScan = false;
+  endScan();
+  String bleResp = "{\"cmd\":\"cmd_customized_session_target_inventory_stop\",\"status\":true}";
+  if (deviceConnected && pCharacteristic != NULL) {
+    sendBLEJson(bleResp);
+  }
+}
+
 bool checkResponseChecksum(byte *buff, int len) {
   if (len < 4) return false;
   unsigned char uSum = 0;
@@ -605,8 +627,6 @@ bool checkResponseChecksum(byte *buff, int len) {
 void handlerScanInventoryRealtime() {
   static byte response[512];
   static int responseIndex = 0;
-  static String epcArray[10]; // Array to store up to 32 EPCs (adjust size as needed)
-  static int epcCount = 0; // Track number of EPCs
 
   if (isScan) {
     // Start scanning
@@ -623,24 +643,51 @@ void handlerScanInventoryRealtime() {
 
       if (responseIndex >= 2 && responseIndex >= response[1] + 2) {
         if (response[0] == 0xA0 && response[3] == 0x89 && checkResponseChecksum(response, responseIndex)) {
-          if (response[1] == 0x13 && epcCount < 10) { // Tag data packet, check array bounds
+          if (response[1] == 0x13 && epcCount < 10) {
             String epc = "";
-            for (int i = 7; i < 19; i++) { // EPC 12 bytes (byte 7 to 18)
+            for (int i = 7; i < 19; i++) {
               char hexPart[3];
               sprintf(hexPart, "%02X", response[i]);
               epc += String(hexPart);
             }
             Serial.print("\nEPC: ");
             Serial.print(epc);
-            epcArray[epcCount++] = epc; // Store EPC in array
+            
+            // Kiểm tra tag đã tồn tại chưa
+            bool tagExists = false;
+            for (int i = 0; i < epcCount; i++) {
+              if (epcArray[i] == epc) {
+                tagExists = true;
+                break;
+              }
+            }
+            
+            // Chỉ thêm tag mới
+            if (!tagExists && epcCount < 15) {
+              epcArray[epcCount++] = epc;
+              hasNewData = true;
+            }
           }
         }
-        responseIndex = 0; // Reset for new packet
+        responseIndex = 0;
       }
     }
 
-    // Process and send EPCs as JSON via BLE
-    if (epcCount > 0) {
+    // Gửi dữ liệu theo interval hoặc khi đầy array
+    unsigned long currentTime = millis();
+    bool shouldSend = false;
+    
+    // Gửi khi có dữ liệu mới và đã qua interval
+    if (hasNewData && (currentTime - lastSendTime >= SEND_INTERVAL)) {
+      shouldSend = true;
+    }
+    
+    // Hoặc gửi khi array đầy (15 tags)
+    if (epcCount >= 15) {
+      shouldSend = true;
+    }
+    
+    if (shouldSend && epcCount > 0) {
       String epcList = "[";
       for (int i = 0; i < epcCount; i++) {
         epcList += "\"" + epcArray[i] + "\"";
@@ -649,12 +696,23 @@ void handlerScanInventoryRealtime() {
       epcList += "]";
       
       String bleResp = "{\"cmd\":\"cmd_customized_session_target_inventory_start\",\"tags\":" + epcList + "}";
-      Serial.println("📤 Gửi BLE: " + bleResp);
+      Serial.println("📤 Gửi BLE (" + String(epcCount) + " tags): " + bleResp);
 
       if (deviceConnected && pCharacteristic != NULL) {
         sendBLEJson(bleResp);
+        Serial.println("✅ Đã gửi thành công " + String(epcCount) + " tags");
+      } else {
+        Serial.println("❌ Không thể gửi - device không kết nối");
       }
-      epcCount = 0; // Reset EPC count after sending
+      
+      lastSendTime = currentTime;
+      hasNewData = false;
+      
+      // Reset array để tiếp tục scan tags mới
+      epcCount = 0;
+      for (int i = 0; i < 15; i++) {
+        epcArray[i] = "";
+      }
     }
 
     endScan();
