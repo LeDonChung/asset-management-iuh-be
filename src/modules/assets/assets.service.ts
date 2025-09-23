@@ -295,7 +295,7 @@ export class AssetsService {
             quantity: parseInt(row[9]?.toString()) || 1, // J: Số lượng
             entrydate: this.formatDate(row[10]?.toString() || ''), // K: Ngày nhập
             purchasePackage: parseInt(row[11]?.toString()) || 0, // L: Gói mua
-            rfidId: row[12]?.toString() || '', // M: RFID Tag
+            rfidId: row[12]?.toString() || '', // M: RFID Tag nếu có
             status: AssetStatus.IN_USE,
           };
 
