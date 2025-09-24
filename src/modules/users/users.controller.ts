@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus
 import { ApiTags, ApiBody, ApiResponse, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, UpdateUserStatusDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -10,6 +10,7 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PermissionConstants } from 'src/common/utils/permission.constant';
 import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
+import { UserStatus } from 'src/entities/user.entity';
 
 @ApiTags('Users')
 @Controller('api/v1/users')
@@ -110,5 +111,18 @@ export class UsersController {
     @ApiBearerAuth()
     async findOne(@Param('id') id: string): Promise<UserResponseDto> {
         return this.usersService.findById(id);
+    }
+
+    @Patch(':id/update-status')
+    @ApiOperation({ summary: 'Update user status' })
+    @HttpCode(HttpStatus.OK)
+    @ApiResponse({ status: 200, description: 'User status updated successfully' })
+    @ApiParam({ name: 'id', description: 'User ID' })
+    @ApiBody({ type: UpdateUserStatusDto })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_UPDATE_USER)
+    @ApiBearerAuth()
+    async updateStatus(@Param('id') id: string, @Body() updateStatusDto: UpdateUserStatusDto): Promise<boolean> {
+        return this.usersService.updateStatus(id, updateStatusDto.status);
     }
 }

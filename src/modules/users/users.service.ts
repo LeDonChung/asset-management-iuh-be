@@ -343,6 +343,12 @@ export class UsersService {
         }
     }
 
+    /**
+     * findById
+     * @description Tìm user theo ID
+     * @param id ID user
+     * @returns Thông tin user
+     */
     async findById(id: string): Promise<UserResponseDto> {
         try {
             const user = await this.userRepository.findOne({
@@ -353,6 +359,32 @@ export class UsersService {
             return this.transformToResponseDto(user);
         } catch (error) {
             console.error('Error finding user by ID:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * lockAccountUser
+     * @description Khóa tài khoản user (cập nhật status thành LOCKED)
+     * @param id ID user
+     * @returns true nếu khóa thành công, false nếu không tìm thấy user
+     */
+    async updateStatus(id: string, status: UserStatus): Promise<boolean> {
+        try {
+            const user = await this.userRepository.findOne({ where: { id } });
+            if (!user) {
+                throw new NotFoundException(errorResponse(NOT_FOUND, `User not found`));
+            }
+
+            const result = await this.userRepository.update(user.id, { status, updatedAt: new Date() });
+
+            if (result.affected && result.affected > 0) {
+                return true;
+            } else {
+                throw new Error('Failed to update user status');
+            }
+        } catch (error) {
+            console.error('Error updating user status:', error);
             throw error;
         }
     }
