@@ -125,4 +125,16 @@ export class UsersController {
     async updateStatus(@Param('id') id: string, @Body() updateStatusDto: UpdateUserStatusDto): Promise<boolean> {
         return this.usersService.updateStatus(id, updateStatusDto.status);
     }
+
+    @Patch(':id/deleted')
+    @ApiOperation({ summary: 'Delete user by ID' })
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiResponse({ status: 204, description: 'User deleted successfully' })
+    @ApiParam({ name: 'id', description: 'User ID' })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_UPDATE_USER)
+    @ApiBearerAuth()
+    async remove(@Param('id') id: string): Promise<boolean> {
+        return this.usersService.deletedUser(id);
+    }
 }

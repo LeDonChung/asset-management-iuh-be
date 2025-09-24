@@ -181,7 +181,6 @@ export class UsersService {
 
     async findAll(): Promise<UserResponseDto[]> {
         const users = await this.userRepository.find({
-            where: { deletedAt: null },
             relations: ['roles', 'roles.permissions', 'unit'],
             order: { createdAt: 'DESC' }
         });
@@ -385,6 +384,37 @@ export class UsersService {
             }
         } catch (error) {
             console.error('Error updating user status:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * deletedUser
+     * @description Xóa mềm user (cập nhật deletedAt và status thành DELETED)
+     * @param id ID user
+     * @returns true nếu xóa thành công, false nếu không tìm thấy user
+     */
+    async deletedUser(id: string): Promise<boolean> {
+        try {
+            const user = await this.userRepository.findOne({ where: { id } });
+            if (!user) {
+                throw new NotFoundException(errorResponse(NOT_FOUND, `User not found`));
+            }
+            const result = await this.userRepository.update(
+                user.id, 
+                { 
+                    deletedAt: new Date(),
+                    status: UserStatus.DELETED 
+                }
+            );
+
+            if (result.affected && result.affected > 0) {
+                return true;
+            } else {
+                throw new Error('Failed to delete user');
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
             throw error;
         }
     }
