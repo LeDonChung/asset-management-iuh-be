@@ -99,4 +99,16 @@ export class UsersController {
     async findWithPagination(@Body() filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
         return this.usersService.findWithPagination(filterDto);
     }
+
+    @Get(':id')
+    @ApiOperation({ summary: 'Get user by ID' })
+    @HttpCode(HttpStatus.OK)
+    @ApiResponse({ status: 200, type: UserResponseDto })
+    @ApiParam({ name: 'id', description: 'User ID' })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_VIEW_USER)
+    @ApiBearerAuth()
+    async findOne(@Param('id') id: string): Promise<UserResponseDto> {
+        return this.usersService.findById(id);
+    }
 }
