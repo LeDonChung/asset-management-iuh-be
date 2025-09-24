@@ -5,6 +5,7 @@ import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { UpdateRfidDto } from './dto/update-rfid.dto';
 import { AssetResponseDto } from './dto/asset-response.dto';
+import { ClassifyRfidsResponseDto } from './dto/classify-rfids-response.dto';
 import { Asset, FixedAsset, ToolsEquipment } from 'src/entities/asset.entity';
 import { RfidTag } from 'src/entities/rfid-tag.entity';
 import { AssetType } from 'src/common/shared/AssetType';
@@ -474,5 +475,77 @@ export class AssetsService {
       .substring(0, 20); // Giới hạn độ dài
     
     return code || 'CATEGORY_' + Date.now();
+  }
+
+  async classifyRfids(
+    rfids: string[],
+    currentRoomId: string,
+    currentUnitId: string
+  ): Promise<ClassifyRfidsResponseDto> {
+    if (!rfids || rfids.length === 0) {
+      return {
+        matched: [],
+        neighbors: [],
+        otherRooms: [],
+        unknowns: []
+      };
+    }
+
+    // Tìm tất cả assets có RFID trong danh sách
+    const assetsWithRfids = await this.assetRepository
+      .createQueryBuilder('asset')
+      .leftJoinAndSelect('asset.rfidTag', 'rfidTag')
+      .leftJoinAndSelect('asset.currentRoom', 'currentRoom')
+      .leftJoinAndSelect('asset.category', 'category')
+      .leftJoinAndSelect('currentRoom.unit', 'unit')
+      .leftJoinAndSelect('currentRoom.adjacentRooms', 'adjacentRooms')
+      .where('rfidTag.rfidId IN (:...rfids)', { rfids })
+      .getMany();
+
+    // Lấy thông tin phòng hiện tại để check adjacent rooms
+    const currentRoom = await this.roomRepository.findOne({
+      where: { id: currentRoomId },
+      relations: ['adjacentRooms']
+    });
+
+    // Lấy danh sách RFID đã tìm thấy
+    const foundRfids = assetsWithRfids
+      .map(asset => (asset as FixedAsset)?.rfidTag?.rfidId)
+      .filter(rfid => rfid);
+
+    // RFID không tìm thấy trong hệ thống
+    const unknowns = rfids.filter(rfid => !foundRfids.includes(rfid));
+
+    // Phân loại assets
+    const matched: AssetResponseDto[] = [];
+    const neighbors: AssetResponseDto[] = [];
+    const otherRooms: AssetResponseDto[] = [];
+
+    // Lấy danh sách ID các phòng hàng xóm
+    const adjacentRoomIds = currentRoom?.adjacentRooms?.map(room => room.id) || [];
+
+    for (const asset of assetsWithRfids) {
+      const assetDto = plainToClass(AssetResponseDto, asset, {
+        excludeExtraneousValues: true,
+      });
+
+      if (asset.currentRoom?.id === currentRoomId) {
+        // Tài sản thuộc phòng hiện tại
+        matched.push(assetDto);
+      } else if (adjacentRoomIds.includes(asset.currentRoom?.id)) {
+        // Tài sản thuộc phòng hàng xóm
+        neighbors.push(assetDto);
+      } else {
+        // Tài sản thuộc phòng khác
+        otherRooms.push(assetDto);
+      }
+    }
+
+    return {
+      matched,
+      neighbors,
+      otherRooms,
+      unknowns
+    };
   }
 }
