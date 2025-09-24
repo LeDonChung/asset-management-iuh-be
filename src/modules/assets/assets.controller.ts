@@ -30,6 +30,8 @@ import { UpdateAssetDto } from "./dto/update-asset.dto";
 import { UpdateRfidDto } from "./dto/update-rfid.dto";
 import { AssetResponseDto } from "./dto/asset-response.dto";
 import { ImportResultDto } from "./dto/import-asset.dto";
+import { ClassifyRfidsDto } from "./dto/classify-rfids.dto";
+import { ClassifyRfidsResponseDto } from "./dto/classify-rfids-response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "src/entities/user.entity";
@@ -213,5 +215,24 @@ export class AssetsController {
     }
 
     return this.assetsService.importFromExcel(file, currentUser);
+  }
+
+  @Post("rfid/classify")
+  @ApiOperation({ summary: "Phân loại RFID tags theo phòng hiện tại" })
+  @ApiResponse({ 
+    status: 200, 
+    description: "RFID classification completed successfully",
+    type: ClassifyRfidsResponseDto
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBody({ type: ClassifyRfidsDto })
+  @ApiBearerAuth()
+  async classifyRfids(@Body() classifyRfidsDto: ClassifyRfidsDto): Promise<ClassifyRfidsResponseDto> {
+    return this.assetsService.classifyRfids(
+      classifyRfidsDto.rfids,
+      classifyRfidsDto.currentRoomId,
+      classifyRfidsDto.currentUnitId
+    );
   }
 }
