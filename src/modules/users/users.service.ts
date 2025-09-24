@@ -79,6 +79,9 @@ export class UsersService {
                 user.roles = roles;
             }
 
+            user.createdAt = new Date();
+            user.updatedAt = new Date();
+            
             const savedUser = await this.userRepository.save(user);
 
             return this.transformToResponseDto(savedUser);
@@ -169,12 +172,16 @@ export class UsersService {
                 user.roles = [];
             }
         }
+
+        user.updatedAt = new Date();
+
         const updatedUser = await this.userRepository.save(user);
         return this.transformToResponseDto(updatedUser);
     }
 
     async findAll(): Promise<UserResponseDto[]> {
         const users = await this.userRepository.find({
+            where: { deletedAt: null },
             relations: ['roles', 'roles.permissions', 'unit'],
             order: { createdAt: 'DESC' }
         });
@@ -182,7 +189,7 @@ export class UsersService {
         return users.map(this.transformToResponseDto);
     }
 
-     async findWithPagination(filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
+    async findWithPagination(filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
         try {
             // Define user-specific configuration
             const config = {
@@ -206,7 +213,7 @@ export class UsersService {
             if (filterDto.unitFilter || filterDto.statusFilter) {
                 // Add quick filter conditions to the existing conditions
                 const quickFilterConditions = [];
-                
+
                 if (filterDto.unitFilter) {
                     quickFilterConditions.push({
                         field: 'unitId',
@@ -215,7 +222,7 @@ export class UsersService {
                         value: [filterDto.unitFilter]
                     });
                 }
-                
+
                 if (filterDto.statusFilter) {
                     quickFilterConditions.push({
                         field: 'status',
@@ -277,7 +284,7 @@ export class UsersService {
     async findAllUserInventory(): Promise<UserResponseDto[]> {
         try {
             const inventoryRoleCodes = ["INVENTORY_COMMITTEE_HEAD", "INVENTORY_COMMITTEE_VICE_HEAD", "INVENTORY_COMMITTEE_SECRETARY", "INVENTORY_COMMITTEE_MEMBER", "INVENTORY_COMMITTEE_CHIEF_SECRETARY"];
-            
+
             const users = await this.userRepository
                 .createQueryBuilder('user')
                 .leftJoinAndSelect('user.roles', 'role')
@@ -285,7 +292,7 @@ export class UsersService {
                 .andWhere('role.code IN (:...roleCodes)', { roleCodes: inventoryRoleCodes })
                 .orderBy('user.createdAt', 'DESC')
                 .getMany();
-    
+
             return users.map(this.transformToResponseDto);
         } catch (error) {
             console.error('Error finding all user inventory:', error);
@@ -306,10 +313,10 @@ export class UsersService {
     async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
         try {
             const inventoryRoleCodes = [
-                "INVENTORY_COMMITTEE_HEAD", 
-                "INVENTORY_COMMITTEE_VICE_HEAD", 
-                "INVENTORY_COMMITTEE_SECRETARY", 
-                "INVENTORY_COMMITTEE_MEMBER", 
+                "INVENTORY_COMMITTEE_HEAD",
+                "INVENTORY_COMMITTEE_VICE_HEAD",
+                "INVENTORY_COMMITTEE_SECRETARY",
+                "INVENTORY_COMMITTEE_MEMBER",
                 "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
                 "INVENTORY_SUB_HEAD",
                 "INVENTORY_SUB_SECRETARY",
@@ -318,7 +325,7 @@ export class UsersService {
                 "INVENTORY_GROUP_MEMBER",
                 "INVENTORY_SUB_MEMBER"
             ];
-            
+
             const users = await this.userRepository
                 .createQueryBuilder('user')
                 .leftJoinAndSelect('user.roles', 'role')
@@ -332,6 +339,20 @@ export class UsersService {
             return users.map(this.transformToResponseDto);
         } catch (error) {
             console.error('Error finding all inventory committee users:', error);
+            throw error;
+        }
+    }
+
+    async findById(id: string): Promise<UserResponseDto> {
+        try {
+            const user = await this.userRepository.findOne({
+                where: { id, status: UserStatus.ACTIVE },
+                relations: ['roles', 'unit'],
+            });
+            if (!user) throw new Error('User not found');
+            return this.transformToResponseDto(user);
+        } catch (error) {
+            console.error('Error finding user by ID:', error);
             throw error;
         }
     }
