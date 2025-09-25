@@ -83,6 +83,9 @@ export class Asset {
   })
   status: AssetStatus;
 
+  @Column({ name: 'allow_move', default: true, comment: 'Cho phép di chuyển' })
+  allowMove: boolean;
+
   @Column({ name: 'created_by', nullable: false, comment: 'User who initiated the handover' })
   createdBy: string;
 

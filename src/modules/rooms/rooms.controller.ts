@@ -73,7 +73,6 @@ export class RoomsController {
     type: RoomResponseDto,
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_ROOM)
   @ApiBearerAuth()
   async findOne(@Param("id") id: string): Promise<RoomResponseDto> {
     return this.roomsService.findOne(id);
