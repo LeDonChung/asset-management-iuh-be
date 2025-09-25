@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, FindManyOptions } from 'typeorm';
+import { Repository, Like, FindManyOptions, In } from 'typeorm';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { UpdateRfidDto } from './dto/update-rfid.dto';
@@ -19,6 +19,7 @@ import { ImportAssetDto, ImportResultDto } from './dto/import-asset.dto';
 
 @Injectable()
 export class AssetsService {
+  
   constructor(
     @InjectRepository(Asset)
     private readonly assetRepository: Repository<Asset>,
@@ -29,6 +30,18 @@ export class AssetsService {
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
   ) {}
+
+  async findByRfids(rfids: string[]): Promise<{ rfid: string; allowMove: boolean; }[]> {
+    const rfidTags = await this.rfidTagRepository.find({
+      where: { rfidId: In(rfids) },
+      relations: ['asset'],
+    });
+
+    return rfidTags.map(rfid => ({
+      rfid: rfid.rfidId,
+      allowMove: rfid.asset?.allowMove ?? false,
+    }));
+  }
 
   async create(createAssetDto: CreateAssetDto, currentUser: User): Promise<AssetResponseDto> {
     try {

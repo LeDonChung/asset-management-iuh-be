@@ -28,7 +28,7 @@ export class FilesController {
     schema: {
       type: 'object',
       properties: {
-        file: {
+        file: { 
           type: 'string',
           format: 'binary',
           description: 'File ảnh (PNG, JPG, JPEG)'
