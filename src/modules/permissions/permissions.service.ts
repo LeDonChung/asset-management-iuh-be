@@ -32,7 +32,7 @@ export class PermissionsService {
         if (!permission) {
           permission = this.permissionRepository.create({
             name: permissionName,
-            code: CommonUtils.generateCode(PERMISSION_CODE_PREFIX, permissionName),
+            code: CommonUtils.generateCode(permissionName, PERMISSION_CODE_PREFIX),
           });
           permission = await this.permissionRepository.save(permission);
         }
@@ -94,7 +94,7 @@ export class PermissionsService {
             });
             if (existingPermission) {
               existingPermission.name = permDto.name;
-              existingPermission.code = CommonUtils.generateCode(PERMISSION_CODE_PREFIX, permDto.name);
+              existingPermission.code = CommonUtils.generateCode(permDto.name, PERMISSION_CODE_PREFIX);
               return this.permissionRepository.save(existingPermission);
             } else {
               throw new NotFoundException(`Permission with ID ${permDto.id} not found`);
@@ -110,7 +110,7 @@ export class PermissionsService {
               // Tạo mới permission
               permission = this.permissionRepository.create({
                 name: permDto.name,
-                code: CommonUtils.generateCode(PERMISSION_CODE_PREFIX, permDto.name),
+                code: CommonUtils.generateCode(permDto.name, PERMISSION_CODE_PREFIX),
               });
               permission = await this.permissionRepository.save(permission);
             }
