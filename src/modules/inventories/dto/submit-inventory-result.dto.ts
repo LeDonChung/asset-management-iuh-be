@@ -9,6 +9,11 @@ export class SubmitInventoryResultItemDto {
   @IsUUID()
   assetId: string;
 
+  @ApiProperty({ description: 'ID của phòng' })
+  @IsString()
+  @IsUUID()
+  roomId: string;
+
   @ApiProperty({ description: 'Số lượng trên hệ thống' })
   @IsNumber()
   @Min(0)

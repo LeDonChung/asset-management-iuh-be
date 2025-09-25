@@ -955,6 +955,7 @@ export class InventoriesService {
         status: result.status,
         note: result.note || '',
         createdBy: currentUser.id,
+        roomId: result.roomId,
       });
 
       // Lưu inventory result trước
@@ -993,6 +994,7 @@ export class InventoriesService {
         createdBy: result.createdBy,
         createdAt: result.createdAt,
         updatedAt: result.updatedAt,
+        roomId: result.roomId,
       })),
       note: note || '',
       totalResults: savedResults.length,
@@ -1056,9 +1058,9 @@ export class InventoriesService {
     const results = await this.inventoryResultRepository
       .createQueryBuilder('result')
       .leftJoin('result.asset', 'asset')
-      .select('DISTINCT asset.currentRoomId as roomId')
+      .select('DISTINCT result.roomId as roomId')
       .where('result.assignmentId = :assignmentId', { assignmentId })
-      .andWhere('asset.currentRoomId IS NOT NULL')
+      .andWhere('result.roomId IS NOT NULL')
       .getRawMany();
 
     // Tạo Map để dễ tra cứu
@@ -1081,8 +1083,7 @@ export class InventoriesService {
     // Lấy kết quả kiểm kê đã submit cho phòng này
     const results = await this.inventoryResultRepository.find({
       where: { 
-        assignmentId,
-        asset: { currentRoomId: roomId }
+        roomId: roomId
       },
       relations: ['asset', 'assignment', 'fileUrls']
     });
@@ -1104,6 +1105,7 @@ export class InventoriesService {
         note: result.note,
         createdAt: result.createdAt,
         asset: result.asset,
+        roomId: result.roomId,
         isSubmitted: true
       };
     });

@@ -4,6 +4,7 @@ import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, JoinTab
 import { InventoryGroupAssignment } from "./inventory-group-assignment";
 import { Asset } from "./asset.entity";
 import { FileUrl } from "./file-url.entity";
+import { Room } from "./room.entity";
 
 @Entity("inventory_results")
 export class InventoryResult {
@@ -18,6 +19,9 @@ export class InventoryResult {
 
     @Column({ comment: "ID của phân công kiểm kê" })
     assignmentId: string;
+
+    @Column({ comment: "ID của phòng" })
+    roomId: string;
 
     @Column({ comment: "Số lượng thực tế kiểm kê" })
     countedQuantity: number;
@@ -58,4 +62,8 @@ export class InventoryResult {
     @ManyToOne(() => Asset, (asset) => asset.inventoryResults)
     @JoinColumn({ name: "assetId" })
     asset: Asset;
+
+    @ManyToOne(() => Room, (room) => room.inventoryResults)
+    @JoinColumn({ name: "roomId" })
+    room: Room;
 }

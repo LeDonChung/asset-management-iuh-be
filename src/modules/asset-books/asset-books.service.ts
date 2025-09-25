@@ -4,7 +4,7 @@ import { Repository, DataSource, IsNull } from 'typeorm';
 import { CreateAssetBookDto } from './dto/create-asset-book.dto';
 import { AssetBook } from 'src/entities/asset-book.entity';
 import { Unit } from 'src/entities/unit.entity';
-import { Asset } from 'src/entities/asset.entity';
+import { Asset, FixedAsset } from 'src/entities/asset.entity';
 import { Room } from 'src/entities/room.entity';
 import { AssetBookStatus } from 'src/common/shared/AssetBookStatus';
 import { 
@@ -21,7 +21,7 @@ export class AssetBooksService {
   async findOneByUnitIdAndRoomId(unitId: string, roomId: string, assetType?: AssetType): Promise<AssetBookResponseDto> {
     const assetBook = await this.assetBookRepository.findOne({
       where: { unitId, status: AssetBookStatus.OPEN, lookedAt: IsNull(), items: { roomId, asset: { type: assetType } } },
-      relations: ['unit', 'items', 'items.asset', 'items.room'],
+      relations: ['unit', 'items', 'items.asset', 'items.room', 'items.asset.rfidTag'],
     });
 
     if (!assetBook) {
@@ -144,7 +144,7 @@ export class AssetBooksService {
   async findOne(id: string): Promise<AssetBookResponseDto> {
     const assetBook = await this.assetBookRepository.findOne({
       where: { id },
-      relations: ['unit', 'items', 'items.asset', 'items.room'],
+      relations: ['unit', 'items', 'items.asset', 'items.room', 'items.asset.rfidTag'],
     });
 
     if (!assetBook) {
@@ -157,7 +157,7 @@ export class AssetBooksService {
   async findOneByUnitIdAndYear(unitId: string, year: number): Promise<AssetBookResponseDto> {
     const assetBook = await this.assetBookRepository.findOne({
       where: { unitId, year },
-      relations: ['unit', 'items', 'items.asset', 'items.room'],
+      relations: ['unit', 'items', 'items.asset', 'items.room', 'items.asset.rfidTag'],
     });
 
     if (!assetBook) {
@@ -170,7 +170,7 @@ export class AssetBooksService {
   async findAllByUnitId(unitId: string): Promise<AssetBookResponseDto[]> {
     const assetBooks = await this.assetBookRepository.find({
       where: { unitId },
-      relations: ['unit', 'items', 'items.asset', 'items.room'],
+      relations: ['unit', 'items', 'items.asset', 'items.room', 'items.asset.rfidTag'],
     });
 
     return assetBooks.map(book => this.transformToResponseDto(book));
@@ -180,7 +180,7 @@ export class AssetBooksService {
   async findOneByUnitIdAndCurrentYear(unitId: string): Promise<AssetBookResponseDto> {
     const assetBook = await this.assetBookRepository.findOne({
       where: { unitId, status: AssetBookStatus.OPEN, lookedAt: IsNull() },
-      relations: ['unit', 'items', 'items.asset', 'items.room'],
+      relations: ['unit', 'items', 'items.asset', 'items.room', 'items.asset.rfidTag'],
     });
 
     if (!assetBook) {
@@ -224,6 +224,7 @@ export class AssetBooksService {
             categoryId: item.asset.categoryId,
             status: item.asset.status,
             createdAt: item.asset.createdAt,
+            rfidTag: item.asset.type === AssetType.FIXED_ASSET ? (item.asset as FixedAsset).rfidTag : null,
           },
           room: {
             id: item.room.id,
