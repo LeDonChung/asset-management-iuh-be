@@ -15,7 +15,7 @@ import { ApiBody, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { AssetBookResponseDto } from './dto/asset-book-response.dto';
 import { AssetType } from 'src/common/shared/AssetType';
 
-@Controller('asset-books')
+@Controller('api/v1/asset-books')
 export class AssetBooksController {
   constructor(private readonly assetBooksService: AssetBooksService) {}
 

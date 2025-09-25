@@ -189,7 +189,7 @@ export class UnitsService {
   async findOne(id: string): Promise<UnitResponseDto> {
     const unit = await this.unitRepository.findOne({
       where: { id },
-      relations: ["representative", "parentUnit", "childUnits", "childUnits.childUnits", "rooms"],
+      relations: ["representative", "rooms"],
     });
 
     if (!unit) {

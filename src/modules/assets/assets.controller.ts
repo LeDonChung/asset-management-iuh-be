@@ -30,6 +30,8 @@ import { UpdateAssetDto } from "./dto/update-asset.dto";
 import { UpdateRfidDto } from "./dto/update-rfid.dto";
 import { AssetResponseDto } from "./dto/asset-response.dto";
 import { ImportResultDto } from "./dto/import-asset.dto";
+import { ClassifyRfidsDto } from "./dto/classify-rfids.dto";
+import { ClassifyRfidsResponseDto } from "./dto/classify-rfids-response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "src/entities/user.entity";
@@ -38,11 +40,23 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
 
 @ApiTags("Assets")
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
-@Controller("assets")
+@Controller("api/v1/assets")
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
+
+  
+  @Post("/allow-move")
+  @ApiOperation({ summary: "Kiểm tra trạng thái cho phép di chuyển của tài sản" })
+  @ApiResponse({ 
+    status: 200,
+    description: "Allow move status retrieved successfully",
+    type: Boolean 
+  })
+  @ApiResponse({ status: 404, description: "Asset not found" })
+  @ApiBody({ description: 'RFID của tài sản cần kiểm tra', required: true, isArray: true })
+  async getAllowMoveStatus(@Body() rfids: string[]): Promise<{ rfid: string; allowMove: boolean }[]> {
+    return await this.assetsService.findByRfids(rfids);
+  }
 
   @Post()
   @ApiOperation({ summary: "Định danh tài sản - cả cố định, công cụ dụng cụ" })
@@ -213,5 +227,24 @@ export class AssetsController {
     }
 
     return this.assetsService.importFromExcel(file, currentUser);
+  }
+
+  @Post("rfid/classify")
+  @ApiOperation({ summary: "Phân loại RFID tags theo phòng hiện tại" })
+  @ApiResponse({ 
+    status: 200, 
+    description: "RFID classification completed successfully",
+    type: ClassifyRfidsResponseDto
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBody({ type: ClassifyRfidsDto })
+  @ApiBearerAuth()
+  async classifyRfids(@Body() classifyRfidsDto: ClassifyRfidsDto): Promise<ClassifyRfidsResponseDto> {
+    return this.assetsService.classifyRfids(
+      classifyRfidsDto.rfids,
+      classifyRfidsDto.currentRoomId,
+      classifyRfidsDto.currentUnitId
+    );
   }
 }
