@@ -139,7 +139,6 @@ export class UnitsController {
     type: UnitResponseDto,
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<UnitResponseDto> {
     return this.unitsService.findOne(id);
