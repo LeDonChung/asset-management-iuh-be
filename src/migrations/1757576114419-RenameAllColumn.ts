@@ -1,0 +1,128 @@
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class RenameAllColumn1757576114419 implements MigrationInterface {
+    name = 'RenameAllColumn1757576114419'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP CONSTRAINT "FK_502ed5d35cdbd15f4b20ae10a0e"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP CONSTRAINT "FK_5e9f45dec467d9be358f42265bd"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP CONSTRAINT "FK_d054011300b1ff199b06a1456b9"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "FK_412f7ec1946b3a3e709c9343f90"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "FK_d7329fe4838a9aee677a68871c8"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" DROP COLUMN "created_at"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" DROP COLUMN "updated_at"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "updated_at"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "is_global"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "start_date"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "end_date"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "created_by"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "created_at"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "session_id"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "unit_id"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "created_at"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "updated_at"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP COLUMN "created_at"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "PK_28b5716036a20f24d0b1cc732ff"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "PK_d7329fe4838a9aee677a68871c8" PRIMARY KEY ("file_url_id")`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP COLUMN "inventory_session_id"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "PK_d7329fe4838a9aee677a68871c8"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP COLUMN "file_url_id"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" ADD "createdAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "file_urls" ADD "updatedAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "file_urls" ADD "deletedAt" TIMESTAMP`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "isGlobal" boolean NOT NULL DEFAULT false`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."isGlobal" IS 'true: Một kỳ cho toàn bộ các đơn vị sử dụng, false: Một kì cho một đơn vị sử dụng'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "startDate" date NOT NULL`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."startDate" IS 'Ngày bắt đầu'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "endDate" date NOT NULL`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."endDate" IS 'Ngày kết thúc'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "createdBy" uuid NOT NULL`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."createdBy" IS 'Người tạo'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "createdAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "updatedAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "deletedAt" TIMESTAMP`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "sessionId" uuid NOT NULL`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_session_units"."sessionId" IS 'ID của kỳ kiểm kê'`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "unitId" uuid NOT NULL`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_session_units"."unitId" IS 'ID của đơn vị'`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "createdAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "updatedAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "deletedAt" TIMESTAMP`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD "inventorySessionId" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "PK_c9edd95906e5abf279fba85ecf1" PRIMARY KEY ("inventorySessionId")`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD "fileUrlId" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "PK_c9edd95906e5abf279fba85ecf1"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "PK_8bc5fc1598348a717d4d03d2ac5" PRIMARY KEY ("inventorySessionId", "fileUrlId")`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD "createdAt" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD CONSTRAINT "FK_3fee21fc84b7a7deb442b8a9659" FOREIGN KEY ("createdBy") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD CONSTRAINT "FK_b2bea7159cfec2d828520988168" FOREIGN KEY ("sessionId") REFERENCES "inventory_sessions"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD CONSTRAINT "FK_c1a095e7881a315a9b25453ecd4" FOREIGN KEY ("unitId") REFERENCES "units"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "FK_c9edd95906e5abf279fba85ecf1" FOREIGN KEY ("inventorySessionId") REFERENCES "inventory_sessions"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "FK_3e9471f00245ccc6bb3ca576a32" FOREIGN KEY ("fileUrlId") REFERENCES "file_urls"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "FK_3e9471f00245ccc6bb3ca576a32"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "FK_c9edd95906e5abf279fba85ecf1"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP CONSTRAINT "FK_c1a095e7881a315a9b25453ecd4"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP CONSTRAINT "FK_b2bea7159cfec2d828520988168"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP CONSTRAINT "FK_3fee21fc84b7a7deb442b8a9659"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP COLUMN "createdAt"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "PK_8bc5fc1598348a717d4d03d2ac5"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "PK_c9edd95906e5abf279fba85ecf1" PRIMARY KEY ("inventorySessionId")`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP COLUMN "fileUrlId"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "PK_c9edd95906e5abf279fba85ecf1"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP COLUMN "inventorySessionId"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "deletedAt"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "updatedAt"`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "createdAt"`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_session_units"."unitId" IS 'ID của đơn vị'`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "unitId"`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_session_units"."sessionId" IS 'ID của kỳ kiểm kê'`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" DROP COLUMN "sessionId"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "deletedAt"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "updatedAt"`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "createdAt"`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."createdBy" IS 'Người tạo'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "createdBy"`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."endDate" IS 'Ngày kết thúc'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "endDate"`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."startDate" IS 'Ngày bắt đầu'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "startDate"`);
+        await queryRunner.query(`COMMENT ON COLUMN "inventory_sessions"."isGlobal" IS 'true: Một kỳ cho toàn bộ các đơn vị sử dụng, false: Một kì cho một đơn vị sử dụng'`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" DROP COLUMN "isGlobal"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" DROP COLUMN "deletedAt"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" DROP COLUMN "updatedAt"`);
+        await queryRunner.query(`ALTER TABLE "file_urls" DROP COLUMN "createdAt"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD "file_url_id" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "PK_d7329fe4838a9aee677a68871c8" PRIMARY KEY ("file_url_id")`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD "inventory_session_id" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" DROP CONSTRAINT "PK_d7329fe4838a9aee677a68871c8"`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "PK_28b5716036a20f24d0b1cc732ff" PRIMARY KEY ("inventory_session_id", "file_url_id")`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD "created_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "deleted_at" TIMESTAMP`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "updated_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "created_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "unit_id" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD "session_id" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "created_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "created_by" uuid NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "end_date" date NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "start_date" date NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "is_global" boolean NOT NULL DEFAULT false`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "deleted_at" TIMESTAMP`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD "updated_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "file_urls" ADD "deleted_at" TIMESTAMP`);
+        await queryRunner.query(`ALTER TABLE "file_urls" ADD "updated_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "file_urls" ADD "created_at" TIMESTAMP NOT NULL DEFAULT now()`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "FK_d7329fe4838a9aee677a68871c8" FOREIGN KEY ("file_url_id") REFERENCES "file_urls"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "file_urls_inventory_sessions" ADD CONSTRAINT "FK_412f7ec1946b3a3e709c9343f90" FOREIGN KEY ("inventory_session_id") REFERENCES "inventory_sessions"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD CONSTRAINT "FK_d054011300b1ff199b06a1456b9" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "inventory_session_units" ADD CONSTRAINT "FK_5e9f45dec467d9be358f42265bd" FOREIGN KEY ("session_id") REFERENCES "inventory_sessions"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "inventory_sessions" ADD CONSTRAINT "FK_502ed5d35cdbd15f4b20ae10a0e" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+    }
+
+}

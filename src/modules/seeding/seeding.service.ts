@@ -7,6 +7,12 @@ import { Role } from "../../entities/role.entity";
 import { Permission } from "../../entities/permission.entity";
 import { ManagerPermission } from "src/entities/manager-permission.entity";
 import { PermissionConstants } from "src/common/utils/permission.constant";
+import { Category } from "src/entities/category.entity";
+import { CommonUtils } from "src/common/utils/common.utils";
+import { UnitType } from "src/common/shared/UnitType";
+import { Unit } from "src/entities/unit.entity";
+import { Room } from "src/entities/room.entity";
+import { RoomStatus } from "src/common/shared/RoomStatus";
 
 @Injectable()
 export class SeedingService implements OnModuleInit {
@@ -21,6 +27,12 @@ export class SeedingService implements OnModuleInit {
     private readonly permissionRepository: Repository<Permission>,
     @InjectRepository(ManagerPermission)
     private readonly managerPermissionRepository: Repository<ManagerPermission>,
+    @InjectRepository(Category)
+    private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(Unit)
+    private readonly unitRepository: Repository<Unit>,
+    @InjectRepository(Room)
+    private readonly roomRepository: Repository<Room>
   ) {}
 
   async onModuleInit() {
@@ -30,16 +42,239 @@ export class SeedingService implements OnModuleInit {
 
   async seedDatabase() {
     try {
-      this.logger.log('Starting database seeding...');
+      this.logger.log("Starting database seeding...");
 
       await this.seedPermissions();
       await this.seedRoles();
       await this.seedAdminUser();
+      await this.seedInventoryUsers();
+      await this.seedUnits();
+      await this.seedCategories();
       this.logger.log("Database seeding completed successfully");
     } catch (error) {
       this.logger.error("Error during database seeding:", error);
     }
   }
+
+  private async seedCategories() {
+    const categories = [
+      {
+        name: "Máy in",
+      },
+      {
+        name: "Thiết bị văn phòng",
+      },
+      {
+        name: "Máy tính",
+      },
+      {
+        name: "Máy chiếu",
+      },
+      {
+        name: "Điều hòa",
+      },
+      {
+        name: "Bàn ghế",
+      },
+      {
+        name: "Tủ kệ",
+      },
+      {
+        name: "Máy photocopy",
+      },
+    ];
+    for (const category of categories) {
+      let categoryFind = await this.categoryRepository.findOne({
+        where: { name: category.name },
+      });
+      if (!categoryFind) {
+        const categoryCreate = this.categoryRepository.create(category);
+        categoryCreate.code = CommonUtils.generateCode(category.name);
+        await this.categoryRepository.save(categoryCreate);
+      }
+    }
+  }
+
+  async generateUnitCode(): Promise<number> {
+    const count = await this.unitRepository.count();
+    return count + 1;
+}
+
+private async generateRoomCode(
+    building: string,
+    floor: string,
+    roomNumber: string,
+    unitId?: string
+): Promise<string> {
+    const buildingPart = building.toUpperCase();
+    const floorPart = floor.padStart(2, "0");
+    const roomNumberPart = roomNumber.padStart(2, "0");
+    const unit = await this.unitRepository.findOne({
+        where: { id: unitId },
+    });
+    return `${unit?.unitCode ?? ""}${buildingPart}${floorPart}.${roomNumberPart}`;
+}
+
+private async seedUnits() {
+    // Create three units type Campus
+    const unitsCampus = [
+        {
+            name: "Đại học Công nghiệp Thành phố Hồ Chí Minh",
+            type: UnitType.CAMPUS,
+        },
+        {
+            name: "Cơ sở Thanh Hóa",
+            type: UnitType.CAMPUS,
+        },
+        {
+            name: "Cơ sở Phạm Văn Chiêu",
+            type: UnitType.CAMPUS,
+        },
+    ];
+
+    const unitsCampusCreated = [];
+    for (const unit of unitsCampus) {
+        let unitFind = await this.unitRepository.findOne({
+            where: { name: unit.name },
+        });
+        if (!unitFind) {
+            const unitCreate = this.unitRepository.create(unit);
+            unitCreate.unitCode = await this.generateUnitCode();
+            const value = await this.unitRepository.save(unitCreate);
+            unitsCampusCreated.push(value);
+        } else {
+            return;
+        }
+    }
+
+    const unitsUserDept = [
+        {
+            name: "Khoa Công nghệ thông tin",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Cơ khí",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Động Lực",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Công nghệ May thời trang",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Công nghệ Điện",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Công nghệ Điện tử",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Công nghệ Nhiệt - lạnh",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Khoa Công nghệ Hóa học",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Viện CNSH&TP",
+            type: UnitType.USER_DEPT,
+        },
+        {
+            name: "Viện KHCN&QLMT",
+            type: UnitType.USER_DEPT,
+        }
+    ];
+
+    const unitsUserDeptCreated = [];
+    for (const unit of unitsCampusCreated) {
+        for (const unitUserDept of unitsUserDept) {
+            let unitFind = await this.unitRepository.findOne({
+                where: { name: unitUserDept.name, parentUnit: { id: unit.id } },
+            });
+            if (!unitFind) {
+                const unitCreate = this.unitRepository.create(unitUserDept);
+                unitCreate.unitCode = await this.generateUnitCode();
+                unitCreate.parentUnit = unit;
+                const value = await this.unitRepository.save(unitCreate);
+                unitsUserDeptCreated.push(value);
+            } else {
+                unitsUserDeptCreated.push(unitFind);
+            }
+        }
+    }
+
+    // Define building, floor, and room structure
+    const buildings = ['A', 'B']; // Each department gets 2 buildings
+    const floors = ['1', '2', '3', '4', '5']; // 5 floors per building
+    const roomNumbers = ['01', '02', '03', '04', '05']; // 5 rooms per floor
+
+    // Create rooms for each department in each campus
+    for (const campus of unitsCampusCreated) {
+        for (const dept of unitsUserDeptCreated.filter(d => d.parentUnit.id === campus.id)) {
+            for (const building of buildings) {
+                for (const floor of floors) {
+                    const roomsCreated = []; // Track rooms on this floor for adjacent room assignment
+                    for (let i = 0; i < roomNumbers.length; i++) {
+                        const roomNumber = roomNumbers[i];
+                        const floorPart = floor.padStart(2, "0");
+                        const roomCreate = this.roomRepository.create({
+                            name: `${building}${floorPart}.${roomNumber}`,
+                            building,
+                            floor,
+                            roomNumber,
+                            status: RoomStatus.ACTIVE,
+                            unit: dept,
+                            adjacentRooms: [],
+                        });
+
+                        // Generate unique room code
+                        roomCreate.roomCode = await this.generateRoomCode(
+                            building,
+                            floor,
+                            roomNumber,
+                            dept.id
+                        );
+
+                        // Save the room first to ensure it exists in the database
+                        const savedRoom = await this.roomRepository.save(roomCreate);
+                        roomsCreated.push(savedRoom);
+                    }
+
+                    // Assign adjacent rooms (after all rooms on the floor are saved)
+                    for (let i = 0; i < roomsCreated.length; i++) {
+                        const room = roomsCreated[i];
+                        room.adjacentRooms = [];
+
+                        // Add previous room as adjacent (if it exists)
+                        if (i > 0) {
+                            room.adjacentRooms.push(roomsCreated[i - 1]);
+                        }
+                        // Add next room as adjacent (if it exists)
+                        if (i < roomsCreated.length - 1) {
+                            room.adjacentRooms.push(roomsCreated[i + 1]);
+                        }
+
+                        // Save the room with updated adjacent rooms
+                        await this.roomRepository.save(room);
+
+                        // Update adjacent rooms to include this room
+                        if (room.adjacentRooms.length > 0) {
+                            for (const adjRoom of room.adjacentRooms) {
+                                adjRoom.adjacentRooms = [...(adjRoom.adjacentRooms ?? []), room];
+                                await this.roomRepository.save(adjRoom);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
   private async seedPermissions() {
     const managerPermissions = [
@@ -82,6 +317,194 @@ export class SeedingService implements OnModuleInit {
           {
             name: "Xem vai trò",
             code: PermissionConstants.PERM_VIEW_ROLE,
+          },
+        ],
+      },
+      {
+        name: "Quản lý thể loại",
+        permissions: [
+          {
+            name: "Tạo thể loại",
+            code: PermissionConstants.PERM_CREATE_CATEGORY,
+          },
+          {
+            name: "Chỉnh sửa thể loại",
+            code: PermissionConstants.PERM_UPDATE_CATEGORY,
+          },
+          {
+            name: "Xóa thể loại",
+            code: PermissionConstants.PERM_REMOVE_CATEGORY,
+          },
+          {
+            name: "Xem thể loại",
+            code: PermissionConstants.PERM_VIEW_CATEGORY,
+          },
+        ],
+      },
+      {
+        name: "Quản lý đơn vị",
+        permissions: [
+          {
+            name: "Tạo đơn vị",
+            code: PermissionConstants.PERM_CREATE_UNIT,
+          },
+          {
+            name: "Chỉnh sửa đơn vị",
+            code: PermissionConstants.PERM_UPDATE_UNIT,
+          },
+          {
+            name: "Xóa đơn vị",
+            code: PermissionConstants.PERM_REMOVE_UNIT,
+          },
+          {
+            name: "Xem đơn vị",
+            code: PermissionConstants.PERM_VIEW_UNIT,
+          },
+        ],
+      },
+      {
+        name: "Quản lý phòng",
+        permissions: [
+          {
+            name: "Tạo phòng",
+            code: PermissionConstants.PERM_CREATE_ROOM,
+          },
+          {
+            name: "Chỉnh sửa phòng",
+            code: PermissionConstants.PERM_UPDATE_ROOM,
+          },
+          {
+            name: "Xóa phòng",
+            code: PermissionConstants.PERM_REMOVE_ROOM,
+          },
+          {
+            name: "Xem phòng",
+            code: PermissionConstants.PERM_VIEW_ROOM,
+          },
+        ],
+      },
+      {
+        name: "Quản lý tài sản",
+        permissions: [
+          {
+            name: "Chỉnh sửa tài sản",
+            code: PermissionConstants.PERM_UPDATE_ASSET,
+          },
+          {
+            name: "Xóa tài sản",
+            code: PermissionConstants.PERM_REMOVE_ASSET,
+          },
+          {
+            name: "Xem tài sản",
+            code: PermissionConstants.PERM_VIEW_ASSET,
+          },
+          {
+            name: "Định danh tài sản",
+            code: PermissionConstants.PERM_IDENTIFY_ASSET,
+          },
+          {
+            name: "Cập nhật RFID",
+            code: PermissionConstants.PERM_UPDATE_RFID,
+          },
+          {
+            name: "Xóa RFID",
+            code: PermissionConstants.PERM_REMOVE_RFID,
+          },
+          {
+            name: "Nhập khẩu tài sản",
+            code: PermissionConstants.PERM_IMPORT_ASSET,
+          },
+        ],
+      },
+      {
+        name: "Quản lý kiểm kê",
+        permissions: [
+          {
+            name: "Tạo kỳ kiểm kê",
+            code: PermissionConstants.PERM_CREATE_INVENTORY,
+          },
+          {
+            name: "Chỉnh sửa kỳ kiểm kê",
+            code: PermissionConstants.PERM_UPDATE_INVENTORY,
+          },
+          {
+            name: "Xóa kỳ kiểm kê",
+            code: PermissionConstants.PERM_REMOVE_INVENTORY,
+          },
+          {
+            name: "Xem kỳ kiểm kê",
+            code: PermissionConstants.PERM_VIEW_INVENTORY,
+          },
+        ],
+      },
+      {
+        name: "Quản lý nhóm kiểm kê",
+        permissions: [
+          {
+            name: "Tạo nhóm kiểm kê",
+            code: PermissionConstants.PERM_CREATE_INVENTORY_GROUP,
+          },
+          {
+            name: "Chỉnh sửa nhóm kiểm kê",
+            code: PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          },
+          {
+            name: "Xóa nhóm kiểm kê",
+            code: PermissionConstants.PERM_REMOVE_INVENTORY_GROUP,
+          },
+          {
+            name: "Xem nhóm kiểm kê",
+            code: PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          },
+          {
+            name: "Phân công nhóm kiểm kê",
+            code: PermissionConstants.PERM_ASSIGN_INVENTORY_GROUP,
+          },
+          {
+            name: "Quản lý thành viên nhóm",
+            code: PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
+          },
+        ],
+      },
+      {
+        name: "Quản lý tiểu ban kiểm kê",
+        permissions: [
+          {
+            name: "Tạo tiểu ban kiểm kê",
+            code: PermissionConstants.PERM_CREATE_INVENTORY_SUB,
+          },
+          {
+            name: "Chỉnh sửa tiểu ban kiểm kê",
+            code: PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
+          },
+          {
+            name: "Xóa tiểu ban kiểm kê",
+            code: PermissionConstants.PERM_REMOVE_INVENTORY_SUB,
+          },
+          {
+            name: "Xem tiểu ban kiểm kê",
+            code: PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          },
+          {
+            name: "Quản lý thành viên tiểu ban",
+            code: PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+          },
+        ],
+      },
+      {
+        name: "Quản lý ban kiểm kê",
+        permissions: [
+          {
+            name: "Phê duyệt kết quả kiểm kê",
+            code: PermissionConstants.PERM_APPROVE_INVENTORY_RESULT,
+          },
+          {
+            name: "Xem xét báo cáo kiểm kê",
+            code: PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
+          },
+          {
+            name: "Hoàn thiện kiểm kê",
+            code: PermissionConstants.PERM_FINALIZE_INVENTORY,
           },
         ],
       },
@@ -132,7 +555,197 @@ export class SeedingService implements OnModuleInit {
       const permissions = await this.permissionRepository.find();
       adminRole.permissions = permissions;
       await this.roleRepository.save(adminRole);
-      this.logger.log('Created ADMIN role');
+      this.logger.log("Created ADMIN role");
+    } else {
+      // Ensure ADMIN role has all permissions
+      const permissions = await this.permissionRepository.find();
+      adminRole.permissions = permissions;
+      await this.roleRepository.save(adminRole);
+      this.logger.log("Updated ADMIN role with all permissions");
+    }
+
+    // Create inventory committee roles
+    await this.createInventoryRoles();
+  }
+
+  private async createInventoryRoles() {
+    const inventoryRoles = [
+      {
+        name: "Trưởng ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_HEAD",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_CREATE_INVENTORY,
+          PermissionConstants.PERM_UPDATE_INVENTORY,
+          PermissionConstants.PERM_REMOVE_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_CREATE_INVENTORY_SUB,
+          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
+          PermissionConstants.PERM_REMOVE_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_CREATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_REMOVE_INVENTORY_GROUP,
+          PermissionConstants.PERM_APPROVE_INVENTORY_RESULT,
+          PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
+          PermissionConstants.PERM_FINALIZE_INVENTORY,
+          PermissionConstants.PERM_ASSIGN_INVENTORY_GROUP,
+          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
+          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+        ],
+      },
+      {
+        name: "Phó trưởng ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_VICE_HEAD",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
+        name: "Thư ký ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_SECRETARY",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_UPDATE_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
+          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
+          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+        ],
+      },
+      {
+        name: "Ủy viên ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_MEMBER",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
+        name: "Thư ký tổng hợp ban kiểm kê",
+        code: "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
+        name: "Trưởng tiểu ban kiểm kê",
+        code: "INVENTORY_SUB_HEAD",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_CREATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_REMOVE_INVENTORY_GROUP,
+          PermissionConstants.PERM_ASSIGN_INVENTORY_GROUP,
+          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
+          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_IDENTIFY_ASSET,
+        ],
+      },
+      {
+        name: "Thư ký tiểu ban kiểm kê",
+        code: "INVENTORY_SUB_SECRETARY",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
+          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_IDENTIFY_ASSET,
+        ],
+      },
+      {
+        name: "Thành viên tiểu ban kiểm kê",
+        code: "INVENTORY_SUB_MEMBER",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+      {
+        name: "Trưởng nhóm kiểm kê",
+        code: "INVENTORY_GROUP_HEAD",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_UPDATE_ASSET,
+          PermissionConstants.PERM_IDENTIFY_ASSET,
+          PermissionConstants.PERM_UPDATE_RFID,
+        ],
+      },
+      {
+        name: "Thư ký nhóm kiểm kê",
+        code: "INVENTORY_GROUP_SECRETARY",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_UPDATE_ASSET,
+          PermissionConstants.PERM_IDENTIFY_ASSET,
+          PermissionConstants.PERM_UPDATE_RFID,
+        ],
+      },
+      {
+        name: "Thành viên nhóm kiểm kê",
+        code: "INVENTORY_GROUP_MEMBER",
+        permissions: [
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
+          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+        ],
+      },
+    ];
+
+    for (const roleData of inventoryRoles) {
+      let role = await this.roleRepository.findOne({
+        where: { code: roleData.code },
+        relations: ["permissions"],
+      });
+
+      if (!role) {
+        role = this.roleRepository.create({
+          name: roleData.name,
+          code: roleData.code,
+        });
+
+        const permissions = await this.permissionRepository.find({
+          where: roleData.permissions.map((code) => ({ code })),
+        });
+
+        role.permissions = permissions;
+        await this.roleRepository.save(role);
+        this.logger.log(`Created ${roleData.name} role`);
+      } else {
+        // Update permissions for existing role
+        const permissions = await this.permissionRepository.find({
+          where: roleData.permissions.map((code) => ({ code })),
+        });
+        role.permissions = permissions;
+        await this.roleRepository.save(role);
+        this.logger.log(`Updated ${roleData.name} role permissions`);
+      }
     }
   }
 
@@ -160,5 +773,119 @@ export class SeedingService implements OnModuleInit {
       this.logger.log("Created ADMIN user");
     }
   }
-}
 
+  private async seedInventoryUsers() {
+    const inventoryUsers = [
+      {
+        username: "truongban_kiemke",
+        fullName: "Nguyễn Văn Trưởng",
+        email: "truongban.kiemke@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "thuky_ban_kiemke",
+        fullName: "Trần Thị Thư",
+        email: "thuky.ban.kiemke@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+      {
+        username: "truong_tieuban_1",
+        fullName: "Lê Văn Minh",
+        email: "truong.tieuban1@iuh.edu.vn",
+        roleCode: "INVENTORY_SUB_HEAD",
+      },
+      {
+        username: "thuky_tieuban_1",
+        fullName: "Phạm Thị Lan",
+        email: "thuky.tieuban1@iuh.edu.vn",
+        roleCode: "INVENTORY_SUB_SECRETARY",
+      },
+      {
+        username: "truong_tieuban_2",
+        fullName: "Hoàng Văn Đức",
+        email: "truong.tieuban2@iuh.edu.vn",
+        roleCode: "INVENTORY_SUB_HEAD",
+      },
+      {
+        username: "thuky_tieuban_2",
+        fullName: "Võ Thị Hương",
+        email: "thuky.tieuban2@iuh.edu.vn",
+        roleCode: "INVENTORY_SUB_SECRETARY",
+      },
+      {
+        username: "truong_nhom_1",
+        fullName: "Đặng Văn Hùng",
+        email: "truong.nhom1@iuh.edu.vn",
+        roleCode: "INVENTORY_GROUP_HEAD",
+      },
+      {
+        username: "thuky_nhom_1",
+        fullName: "Ngô Thị Mai",
+        email: "thuky.nhom1@iuh.edu.vn",
+        roleCode: "INVENTORY_GROUP_SECRETARY",
+      },
+      {
+        username: "truong_nhom_2",
+        fullName: "Bùi Văn Tài",
+        email: "truong.nhom2@iuh.edu.vn",
+        roleCode: "INVENTORY_GROUP_HEAD",
+      },
+      {
+        username: "thuky_nhom_2",
+        fullName: "Lý Thị Nga",
+        email: "thuky.nhom2@iuh.edu.vn",
+        roleCode: "INVENTORY_GROUP_SECRETARY",
+      },
+      {
+        username: "truong_nhom_3",
+        fullName: "Phan Văn Long",
+        email: "truong.nhom3@iuh.edu.vn",
+        roleCode: "INVENTORY_GROUP_HEAD",
+      },
+      {
+        username: "thuky_nhom_3",
+        fullName: "Đỗ Thị Yến",
+        email: "thuky.nhom3@iuh.edu.vn",
+        roleCode: "INVENTORY_GROUP_SECRETARY",
+      },
+    ];
+
+    const defaultPassword = "Inventory@123";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 12);
+
+    for (const userData of inventoryUsers) {
+      let user = await this.userRepository.findOne({
+        where: { username: userData.username },
+        relations: ["roles"],
+      });
+
+      if (!user) {
+        const role = await this.roleRepository.findOne({
+          where: { code: userData.roleCode },
+        });
+
+        if (role) {
+          user = this.userRepository.create({
+            username: userData.username,
+            password: hashedPassword,
+            fullName: userData.fullName,
+            email: userData.email,
+            status: UserStatus.ACTIVE,
+            roles: [role],
+          });
+
+          await this.userRepository.save(user);
+          this.logger.log(
+            `Created user: ${userData.username} with role: ${role.name}`
+          );
+        } else {
+          this.logger.warn(
+            `Role ${userData.roleCode} not found for user ${userData.username}`
+          );
+        }
+      } else {
+        this.logger.log(`User ${userData.username} already exists`);
+      }
+    }
+  }
+}

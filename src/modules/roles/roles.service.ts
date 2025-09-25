@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { Role } from "../../entities/role.entity";
@@ -18,6 +18,7 @@ import { ERR_EXISTS, NOT_FOUND } from "src/common/utils/error-type-response";
 
 @Injectable()
 export class RolesService {
+  
   constructor(
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
@@ -41,7 +42,7 @@ export class RolesService {
 
     const role = this.roleRepository.create({
       name: createRoleDto.name,
-      code: CommonUtils.generateCode(ROLE_CODE_PREFIX, createRoleDto.name),
+      code: CommonUtils.generateCode(createRoleDto.name, ROLE_CODE_PREFIX),
     });
 
     if (createRoleDto.permissionIds && createRoleDto.permissionIds.length > 0) {
@@ -113,7 +114,7 @@ export class RolesService {
       }
 
       role.name = updateRoleDto.name;
-      role.code = CommonUtils.generateCode(ROLE_CODE_PREFIX, updateRoleDto.name);
+      role.code = CommonUtils.generateCode(updateRoleDto.name, ROLE_CODE_PREFIX);
     }
 
     // Cập nhật permissions nếu có
@@ -176,5 +177,14 @@ export class RolesService {
           code: permission.code,
         })) ?? [],
     };
+  }
+
+  async findAllInventoryRoles(): Promise<RoleResponseDto[]> {
+    const roles = await this.roleRepository.find({
+      where: { code: In(["INVENTORY_COMMITTEE_HEAD", "INVENTORY_COMMITTEE_VICE_HEAD", "INVENTORY_COMMITTEE_SECRETARY", "INVENTORY_COMMITTEE_MEMBER", "INVENTORY_COMMITTEE_CHIEF_SECRETARY"]) },
+      relations: ["permissions"],
+    });
+
+    return roles.map(this.transformToResponseDto);
   }
 }
