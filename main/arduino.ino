@@ -2,45 +2,49 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <BLEClient.h>
-#include <BLEAdvertisedDevice.h>
-
-// =================== CẤU HÌNH =====================
-#define PIR_PIN 15              // Chân PIR sensor
-#define NOTIFY_INTERVAL 1000    // Gửi notify mỗi 1 giây
-#define ALERT_DURATION 20000    // 20 giây dừng gửi
-
-// BLE Configuration
-#define SERVICE_UUID        "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
-#define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
-#define BLE_NAME "ESP2_Peripheral"
-#define TARGET_DEVICE_NAME "ESP2_Peripheral"
-
-// BLE Central Configuration
-BLEClient* pClient = NULL;
-BLERemoteCharacteristic* pRemoteCharacteristic = NULL;
-bool doConnect = false;
-bool connected = false;
-bool doScan = false;
-
-// =================== BIẾN TOÀN CỤC =====================
+#include <ArduinoJson.h>
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
-bool oldDeviceConnected = false;
 
-// RFID Tag storage
-String currentScannedTag = "";
+#include <WiFi.h>
+#include <SocketIoClient.h>
 
-// PIR và thời gian
-bool motionDetected = false;
-unsigned long motionStartTime = 0;
-unsigned long lastNotifyTime = 0;
-bool isAlerting = false;
+char* ssid = "ThahhTuyenn";
+char* password = "12345678";
 
-// Alert timing
-unsigned long alertStartTime = 0;
-bool alertActive = false;
+char* server = "192.168.1.34";
+uint16_t port = 3001;
+SocketIoClient webSocket;
+
+#define SERVICE_UUID        "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+#define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_NAME "RFID"
+
+
+#define RXD2 16
+#define TXD2 17
+#define BUZZER_PIN 18
+
+// RENAME SERIAL02 TO RFID
+#define RFID Serial2
+uint16_t currentMTU = 517; // mặc định
+
+// DEFAULT BAUD RATE RFID
+#define BAUD_RFID 115200
+
+// DEFAULT BAUD RATE ESP32
+#define BAUD_ESP32 115200
+
+// DEFAULT RFID(RS485) ADDRESS
+#define RFID_ADDRESS 01 // 0x01
+
+// Thêm các biến để kiểm soát tốc độ gửi
+unsigned long lastSendTime = 0;
+const unsigned long SEND_INTERVAL = 500; // Gửi mỗi 500ms để tăng tốc độ
+static String epcArray[15]; // Tăng từ 10 lên 15 tags
+static int epcCount = 0;
+static bool hasNewData = false;
 
 unsigned char CheckSum(unsigned char *uBuff, unsigned char uBuffLen)
 {
@@ -171,7 +175,7 @@ void sendGetReaderTemperature () {
   // Parse nhiệt độ nếu đúng định dạng phản hồi
   if (len >= 7 && resp[0] == 0xA0 && resp[3] == 0x7B) {
     int temp = resp[5];  // resp[5] là giá trị nhiệt độ, ví dụ 0x31 = 49
-    bleResp = "{\"cmd\":\"cmd_get_reader_temperature\",\"value\":\"" + String(temp) + "\",\"unit\":\"C\",\"raw\":\"" + hexStr + "\"}";
+    bleResp = "{\"cmd\":\"cmd_get_reader_temperature\",\"value\":" + String(temp) + ",\"unit\":\"C\",\"raw\":\"" + hexStr + "\"}";
   } else {
     bleResp = "{\"cmd\":\"cmd_get_reader_temperature\",\"error\":\"invalid_response\",\"raw\":\"" + hexStr + "\"}";
   }
@@ -222,70 +226,6 @@ void sendReaderIdentifier() {
   }
 }
 
-// BLE Central Functions
-void setupBLECentral() {
-  BLEDevice::init("");
-  BLEScan* pBLEScan = BLEDevice::getScan();
-  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
-  pBLEScan->setInterval(1349);
-  pBLEScan->setWindow(449);
-  pBLEScan->setActiveScan(true);
-  pBLEScan->start(5, false);
-  Serial.println("🔍 Bắt đầu scan tìm ESP2...");
-}
-
-void connectToESP2() {
-  if (doConnect) {
-    if (pClient->connect()) {
-      Serial.println("✅ Kết nối thành công đến ESP2!");
-      pClient->setMTU(517);
-      
-      BLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
-      if (pRemoteService == nullptr) {
-        Serial.println("❌ Không tìm thấy service");
-        return;
-      }
-      
-      pRemoteCharacteristic = pRemoteService->getCharacteristic(CHARACTERISTIC_UUID);
-      if (pRemoteCharacteristic == nullptr) {
-        Serial.println("❌ Không tìm thấy characteristic");
-        return;
-      }
-      
-      if (pRemoteCharacteristic->canNotify()) {
-        pRemoteCharacteristic->registerForNotify([](BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
-          String receivedData = String((char*)pData, length);
-          Serial.print("📥 Nhận từ ESP2: ");
-          Serial.println(receivedData);
-          
-          if (receivedData == "scan_rfid") {
-            Serial.println("🚀 ESP2 yêu cầu scan RFID - Bắt đầu alert!");
-            sendStartAlert();
-          }
-        });
-      }
-      
-      if (pRemoteCharacteristic->canWrite()) {
-        Serial.println("✅ Có thể gửi dữ liệu đến ESP2");
-      }
-      
-    } else {
-      Serial.println("❌ Kết nối thất bại!");
-    }
-    doConnect = false;
-  }
-}
-
-void sendToESP2(String message) {
-  if (connected && pRemoteCharacteristic != NULL) {
-    pRemoteCharacteristic->writeValue(message.c_str(), message.length());
-    Serial.println("📤 Đã gửi đến ESP2: " + message);
-  } else {
-    Serial.println("❌ ESP2 chưa kết nối, không thể gửi: " + message);
-  }
-}
-
-
 volatile bool isScan = false;
 volatile bool isBuzzer = false;
 volatile bool isAlert = false;
@@ -294,16 +234,12 @@ void sendStartAlert() {
   isAlert = true;
   isScan = false;
   isBuzzer = false;
-  alertActive = true;
-  alertStartTime = millis();
   
   // Thiết lập WiFi và WebSocket khi bắt đầu alert
   if (strlen(ssid) > 0 && strlen(password) > 0 && strlen(server) > 0 && port > 0) {
     setupWifi();
     setupWebSocket();
   }
-  
-  Serial.println("🚨 Alert mode bắt đầu - Scan trong 20 giây");
 }
 
 void sendEndAlert() {
@@ -331,6 +267,8 @@ void sendStartInventory() {
   
   Serial.println("🚀 Bắt đầu scan inventory với interval " + String(SEND_INTERVAL) + "ms");
 }
+
+
 
 void sendSetRFLinkProfile(String profileID) {
   Serial.println(profileID);
@@ -419,6 +357,7 @@ void sendGetRFLinkProfile() {
   }
 }
 
+
 void sendSetOutputPower(byte power) {
   if (power > 33) power = 33;
 
@@ -471,35 +410,6 @@ void setupSettingAlert(JsonObject value) {
     setupWebSocket();
   }
 }
-
-// BLE Central Callback Classes
-class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-  void onResult(BLEAdvertisedDevice advertisedDevice) {
-    Serial.print("🔍 Tìm thấy thiết bị: ");
-    Serial.println(advertisedDevice.toString().c_str());
-
-    if (advertisedDevice.haveName() && advertisedDevice.getName() == TARGET_DEVICE_NAME) {
-      BLEDevice::getScan()->stop();
-      pClient = BLEDevice::createClient();
-      pClient->setClientCallbacks(new MyClientCallbacks());
-      pClient->connect(&advertisedDevice);
-      doConnect = true;
-    }
-  }
-};
-
-class MyClientCallbacks: public BLEClientCallbacks {
-  void onConnect(BLEClient* pclient) {
-    Serial.println("🔵 Đã kết nối đến ESP2!");
-    connected = true;
-  }
-
-  void onDisconnect(BLEClient* pclient) {
-    connected = false;
-    Serial.println("⚪ Đã ngắt kết nối khỏi ESP2!");
-    doScan = true;
-  }
-};
 
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
@@ -587,6 +497,8 @@ void sendHexCommand(String cmd) {
   RFID.write(buffer, index);
 }
 
+
+
 void setupBLE() {
   BLEDevice::init(BLE_NAME);
   pServer = BLEDevice::createServer();
@@ -632,6 +544,9 @@ void setupWifi() {
   }
 }
 
+
+
+
 void onConnect(const char * payload, size_t length) {
   Serial.println("WebSocket connected!");
 }
@@ -643,21 +558,14 @@ void onDisconnect(const char * payload, size_t length) {
 }
 void onWarningResponse(const char * payload, size_t length) {
   Serial.printf("Received warningResponse: %s\n", payload);
-  
-  // Chỉ xử lý phản hồi cuối cùng khi alert kết thúc
-  if (!alertActive) {
-    if (strcmp(payload, "true") == 0) {
-      isBuzzer = false;
-      Serial.println("✅ Tag hợp lệ - Tắt còi!");
-      sendToESP2("rfid_ok");
-    } else {
-      isBuzzer = true;
-      Serial.println("❌ Tag không hợp lệ - Bật còi và yêu cầu chụp ảnh!");
-      sendToESP2("take_photo");
-    }
+  if (strcmp(payload, "true") == 0) {
+    isBuzzer = false;
+    Serial.println("Unexpected payload, buzzer not activated!");
+  } else {
+    isBuzzer = true;
+    Serial.println("Buzzer activated!");
   }
 }
-
 void setupWebSocket() {
   webSocket.on("connect", onConnect);
   webSocket.on("disconnect", onDisconnect);
@@ -675,10 +583,6 @@ void setup() {
 
   setupBLE();
   Serial.println("Thiết lập kết nối BLE thành công!!");
-  
-  // Khởi tạo BLE Central để kết nối ESP2
-  setupBLECentral();
-  Serial.println("Thiết lập BLE Central thành công!!");
 
   RFID.begin(BAUD_RFID, SERIAL_8N1, RXD2, TXD2);
   Serial.println("Thiết lập kết nối RFID thành công!!");
@@ -818,36 +722,10 @@ void handlerScanInventoryRealtime() {
 void handlerAlertWarningRealtime() {
   static byte response[512];
   static int responseIndex = 0;
-  static String epcArray[20]; // Tăng kích thước array
+  static String epcArray[10]; 
   static int epcCount = 0; 
 
-  if (isAlert && alertActive) {
-    // Kiểm tra thời gian alert
-    unsigned long currentTime = millis();
-    if (currentTime - alertStartTime >= ALERT_DURATION) {
-      // Kết thúc alert sau 20 giây
-      alertActive = false;
-      isAlert = false;
-      endScan();
-      
-      // Gửi tất cả tags đã scan để validation cuối cùng
-      if (epcCount > 0) {
-        String allTags = "[";
-        for (int i = 0; i < epcCount; i++) {
-          allTags += "\"" + epcArray[i] + "\"";
-          if (i < epcCount - 1) allTags += ",";
-        }
-        allTags += "]";
-        
-        String finalPayload = "{\"tags\":" + allTags + ",\"final\":true}";
-        Serial.println("📤 Gửi tất cả tags cuối cùng: " + finalPayload);
-        webSocket.emit("warning", finalPayload.c_str());
-      }
-      
-      Serial.println("⏰ Alert kết thúc sau 20 giây");
-      return;
-    }
-    
+  if (isAlert) {
     // Start scanning
     startScan();
     while (RFID.available()) {
@@ -862,8 +740,8 @@ void handlerAlertWarningRealtime() {
 
       if (responseIndex >= 2 && responseIndex >= response[1] + 2) {
         if (response[0] == 0xA0 && response[3] == 0x89 && checkResponseChecksum(response, responseIndex)) {
-          if (response[1] == 0x13 && epcCount < 20) { // Tăng giới hạn array
-            char epcBuffer[25] = {0};
+          if (response[1] == 0x13 && epcCount < 10) { // Tag data packet, check array bounds
+            char epcBuffer[25] = {0}; // 12 bytes * 2 + null
             int index = 0;
             for (int i = 7; i < 19; i++) {
               sprintf(&epcBuffer[index], "%02X", response[i]);
@@ -872,28 +750,16 @@ void handlerAlertWarningRealtime() {
 
             Serial.print("\nEPC: ");
             Serial.println(epcBuffer);
-            
-            // Kiểm tra tag đã tồn tại chưa
-            bool tagExists = false;
-            for (int i = 0; i < epcCount; i++) {
-              if (epcArray[i] == String(epcBuffer)) {
-                tagExists = true;
-                break;
-              }
-            }
-            
-            // Chỉ thêm tag mới
-            if (!tagExists) {
-              epcArray[epcCount++] = String(epcBuffer);
-              
-              // Gửi từng tag ngay lập tức lên WebSocket
-              String rawPayload = "\"" + String(epcBuffer) + "\"";
-              Serial.println("📤 Sending WebSocket warning: " + rawPayload);
-              webSocket.emit("warning", rawPayload.c_str());
-            }
+            epcArray[epcCount++] = String(epcBuffer);
+
+            String rawPayload = "\"" + String(epcBuffer) + "\"";
+            Serial.println("📤 Sending WebSocket warning: " + rawPayload);
+            webSocket.emit("warning", rawPayload.c_str());
+ 
+            delay(1000);
           }
         }
-        responseIndex = 0;
+        responseIndex = 0; // Reset for new packet
       }
     }
 
@@ -903,15 +769,6 @@ void handlerAlertWarningRealtime() {
 }
 
 void loop() {
-  // Xử lý kết nối BLE Central
-  if (doConnect) {
-    connectToESP2();
-  }
-  
-  if (doScan) {
-    BLEDevice::getScan()->start(0);
-  }
-  
   // Chỉ gọi webSocket.loop() khi isAlert = true
   if (isAlert) {
     webSocket.loop();
