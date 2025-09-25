@@ -34,6 +34,14 @@ import { PermissionConstants } from "src/common/utils/permission.constant";
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
+  /**
+   * create
+   * @description Tạo vai trò mới
+   * @param createRoleDto Dữ liệu để tạo vai trò mới
+   * @returns Vai trò đã được tạo dưới dạng RoleResponseDto
+   * @throws BadRequestException Nếu vai trò với tên đã tồn tại
+   * @throws NotFoundException Nếu bất kỳ quyền nào trong danh sách không tồn tại
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiBadRequestResponse({ description: "Bad Request" })
@@ -47,6 +55,11 @@ export class RolesController {
     return this.rolesService.create(createRoleDto);
   }
 
+  /**
+   * findAll
+   * @description Lấy tất cả các vai trò
+   * @returns Danh sách tất cả vai trò
+   */
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiResponse({ status: 200, type: [RoleResponseDto] })
@@ -57,6 +70,11 @@ export class RolesController {
     return this.rolesService.findAll();
   }
 
+  /**
+   * findAllInventoryRoles
+   * @description Lấy tất cả các vai trò dành cho kiểm kê
+   * @returns Danh sách vai trò dành cho kiểm kê
+   */
   @Get("inventory")
   @HttpCode(HttpStatus.OK)
   @ApiResponse({ status: 200, type: [RoleResponseDto] })
@@ -66,6 +84,12 @@ export class RolesController {
     return this.rolesService.findAllInventoryRoles();
   }
 
+  /**
+   * findOne
+   * @description Lấy một vai trò theo ID
+   * @param id ID của vai trò cần lấy
+   * @returns Vai trò dưới dạng RoleResponseDto
+   */
   @Get(":id")
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({ description: "Not Found" })
@@ -77,6 +101,16 @@ export class RolesController {
     return this.rolesService.findOne(id);
   }
 
+  /**
+   * update
+   * @description Cập nhật vai trò theo ID
+   * @param id ID của vai trò cần cập nhật
+   * @param updateRoleDto Dữ liệu để cập nhật vai trò
+   * @returns Vai trò đã được cập nhật dưới dạng RoleResponseDto
+   * @throws NotFoundException Nếu vai trò với ID không tồn tại
+   * @throws BadRequestException Nếu vai trò với tên đã tồn tại
+   * @throws NotFoundException Nếu bất kỳ quyền nào trong danh sách không tồn tại
+   */
   @Patch(":id")
   @HttpCode(HttpStatus.OK)
   @ApiBody({ type: UpdateRoleDto })
@@ -93,6 +127,14 @@ export class RolesController {
     return this.rolesService.update(id, updateRoleDto);
   }
 
+  /**
+   * remove
+   * @description Xóa vai trò theo ID
+   * @param id ID của vai trò cần xóa
+   * @returns None
+   * @throws NotFoundException Nếu vai trò với ID không tồn tại
+   * @throws BadRequestException Nếu vai trò đang được sử dụng bởi người dùng hoặc các thực thể khác
+   */
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, PermissionsGuard)
