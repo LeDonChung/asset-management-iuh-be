@@ -9,6 +9,16 @@ import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SeedingModule } from './modules/seeding/seeding.module';
+import { UnitsModule } from './modules/units/units.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { RoomsModule } from './modules/rooms/rooms.module';
+import { InventoriesModule } from './modules/inventories/inventories.module';
+import { FilesModule } from './modules/files/files.module';
+import { InventorySubModule } from './modules/inventory-sub/inventory-sub.module';
+import { InventoryGroupModule } from './modules/inventory-group/inventory-group.module';
+import { AssetBooksModule } from './modules/asset-books/asset-books.module';
+import { RedisModule } from './modules/redis/redis.module';
 
 @Module({
   imports: [
@@ -39,6 +49,16 @@ import { SeedingModule } from './modules/seeding/seeding.module';
     UsersModule,
     AuthModule,
     SeedingModule,
+    UnitsModule,
+    AssetsModule,
+    CategoriesModule,
+    RoomsModule,
+    InventoriesModule,
+    FilesModule,
+    InventorySubModule,
+    InventoryGroupModule,
+    AssetBooksModule,
+    RedisModule,
   ],
   controllers: [],
   providers: [

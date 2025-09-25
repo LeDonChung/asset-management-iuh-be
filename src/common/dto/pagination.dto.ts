@@ -18,14 +18,14 @@ export class PaginationDto {
     description: 'Number of items per page',
     minimum: 1,
     maximum: 100,
-    default: 10 
+    default: 5 
   })
   @IsOptional()
   @Transform(({ value }) => parseInt(value))
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number = 10;
+  limit?: number = 5;
 
   get skip(): number {
     return (this.page - 1) * this.limit;
@@ -46,4 +46,40 @@ export interface PaginatedResult<T> {
     hasNext: boolean;
     hasPrev: boolean;
   };
+}
+
+export class PaginatedResponseDto<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+    // Navigation helpers
+    nextPage: number | null;
+    prevPage: number | null;
+    firstPage: number;
+    lastPage: number;
+  };
+
+  constructor(data: T[], pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  }) {
+    this.data = data;
+    this.pagination = {
+      ...pagination,
+      // Add navigation helpers
+      nextPage: pagination.hasNext ? pagination.page + 1 : null,
+      prevPage: pagination.hasPrev ? pagination.page - 1 : null,
+      firstPage: 1,
+      lastPage: pagination.totalPages
+    };
+  }
 }

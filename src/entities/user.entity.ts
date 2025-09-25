@@ -9,9 +9,12 @@ import {
   ManyToMany,
   JoinTable,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { Role } from './role.entity';
 import { Unit } from './unit.entity';
+import { Asset } from './asset.entity';
+import { InventorySession } from './inventory-session.entity';
 
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
@@ -74,4 +77,10 @@ export class User {
   @ManyToOne(() => Unit, (unit) => unit.users)
   @JoinColumn({ name: 'unitId' })
   unit?: Unit;
+
+  @OneToMany(() => Asset, (asset) => asset.creator)
+  createdAssets?: Asset[];
+
+  @OneToMany(() => InventorySession, (inventorySession) => inventorySession.creator)
+  createdInventorySessions?: InventorySession[];
 }
