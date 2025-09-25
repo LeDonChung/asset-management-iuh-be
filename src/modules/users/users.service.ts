@@ -400,13 +400,9 @@ export class UsersService {
             if (!user) {
                 throw new NotFoundException(errorResponse(NOT_FOUND, `User not found`));
             }
-            const result = await this.userRepository.update(
-                user.id, 
-                { 
-                    deletedAt: new Date(),
-                    status: UserStatus.DELETED 
-                }
-            );
+            await this.userRepository.update(user.id, { status: UserStatus.DELETED });
+
+            const result = await this.userRepository.softDelete(user.id);
 
             if (result.affected && result.affected > 0) {
                 return true;
