@@ -49,6 +49,7 @@ export class FilesController {
   async uploadImage(
     @UploadedFile() file: Express.Multer.File
   ): Promise<UploadResponseDto> {
+    console.log(file);
     if (!file) {
       throw new BadRequestException('Vui lòng chọn file ảnh để upload');
     }
