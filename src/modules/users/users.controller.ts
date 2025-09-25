@@ -126,7 +126,7 @@ export class UsersController {
         return this.usersService.updateStatus(id, updateStatusDto.status);
     }
 
-    @Patch(':id/deleted')
+    @Delete(':id')
     @ApiOperation({ summary: 'Delete user by ID' })
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiResponse({ status: 204, description: 'User deleted successfully' })
