@@ -40,11 +40,23 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
 
 @ApiTags("Assets")
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
-@Controller("assets")
+@Controller("api/v1/assets")
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
+
+  
+  @Post("/allow-move")
+  @ApiOperation({ summary: "Kiểm tra trạng thái cho phép di chuyển của tài sản" })
+  @ApiResponse({ 
+    status: 200,
+    description: "Allow move status retrieved successfully",
+    type: Boolean 
+  })
+  @ApiResponse({ status: 404, description: "Asset not found" })
+  @ApiBody({ description: 'RFID của tài sản cần kiểm tra', required: true, isArray: true })
+  async getAllowMoveStatus(@Body() rfids: string[]): Promise<{ rfid: string; allowMove: boolean }[]> {
+    return await this.assetsService.findByRfids(rfids);
+  }
 
   @Post()
   @ApiOperation({ summary: "Định danh tài sản - cả cố định, công cụ dụng cụ" })
