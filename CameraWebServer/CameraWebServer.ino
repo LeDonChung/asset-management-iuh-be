@@ -13,12 +13,12 @@
 
 
 // ✅ WebSocket Configuration (thay thế BLE)
-const char* socketServer = "192.168.1.34";
+const char* socketServer = "34.158.42.23";
 const int socketPort = 3001;
 SocketIoClient webSocket;
 
 // API
-const char* host = "192.168.1.34";   // Server IP
+const char* host = "34.158.42.23";   // Server IP
 const int port = 3000;               // Server port
 const char* url = "/api/v1/files/upload/image";
 
