@@ -7,17 +7,21 @@ BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 
+String deviceId = "ESP32_RFID_01";
+String deviceReceive = "ESP32_CAM_01";
+String deviceType = "rfid";
+
 #include <WiFi.h>
 #include <SocketIoClient.h>
 
-char* ssid = "ThahhTuyenn";
-char* password = "12345678";
+char* ssid = "Ruby tu C13 den C25";
+char* password = "VietnhatC136868";
 
-char* server = "172.20.10.12";
+char* server = "192.168.1.34";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 
-#define SERVICE_UUID        "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+#define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
 
@@ -28,7 +32,7 @@ SocketIoClient webSocket;
 
 // RENAME SERIAL02 TO RFID
 #define RFID Serial2
-uint16_t currentMTU = 517; // mặc định
+uint16_t currentMTU = 517;  // mặc định
 
 // DEFAULT BAUD RATE RFID
 #define BAUD_RFID 115200
@@ -37,17 +41,19 @@ uint16_t currentMTU = 517; // mặc định
 #define BAUD_ESP32 115200
 
 // DEFAULT RFID(RS485) ADDRESS
-#define RFID_ADDRESS 01 // 0x01
+#define RFID_ADDRESS 01  // 0x01
 
 // Thêm các biến để kiểm soát tốc độ gửi
 unsigned long lastSendTime = 0;
-const unsigned long SEND_INTERVAL = 500; // Gửi mỗi 500ms để tăng tốc độ
-static String epcArray[15]; // Tăng từ 10 lên 15 tags
+const unsigned long SEND_INTERVAL = 500;  // Gửi mỗi 500ms để tăng tốc độ
+static String epcArray[15];               // Tăng từ 10 lên 15 tags
 static int epcCount = 0;
 static bool hasNewData = false;
 
-unsigned char CheckSum(unsigned char *uBuff, unsigned char uBuffLen)
-{
+const unsigned long MOTION_SCAN_DURATION = 20000;
+String lastValidRFID = "";
+
+unsigned char CheckSum(unsigned char* uBuff, unsigned char uBuffLen) {
   unsigned char i, uSum = 0;
   for (i = 0; i < uBuffLen; i++) {
     uSum = uSum + uBuff[i];
@@ -56,7 +62,7 @@ unsigned char CheckSum(unsigned char *uBuff, unsigned char uBuffLen)
   return uSum;
 }
 
-int readRFIDResponse(byte *buffer, int maxLen = 32, unsigned long timeout = 300) {
+int readRFIDResponse(byte* buffer, int maxLen = 32, unsigned long timeout = 300) {
   unsigned long start = millis();
   int index = 0;
 
@@ -78,7 +84,7 @@ void sendBLEJson(const String& json) {
   }
 }
 void sendGetOutputPower() {
-  byte cmd[] = {0xA0, 0x03, 0x01, 0x77};
+  byte cmd[] = { 0xA0, 0x03, 0x01, 0x77 };
   byte checksum = CheckSum(cmd, 4);
 
   RFID.write(cmd, 4);
@@ -101,10 +107,9 @@ void sendGetOutputPower() {
   // Kiểm tra phản hồi hợp lệ và lấy power antenna 1
   String bleResp;
   if (len >= 9 && resp[0] == 0xA0 && resp[3] == 0x77) {
-    int power1 = resp[4]; // Giá trị 0-33 (dBm)
+    int power1 = resp[4];  // Giá trị 0-33 (dBm)
 
-    bleResp = "{\"cmd\":\"cmd_get_output_power\",\"value\":" + String(power1) +
-              ",\"unit\":\"dBm\",\"raw\":\"" + hexStr + "\"}";
+    bleResp = "{\"cmd\":\"cmd_get_output_power\",\"value\":" + String(power1) + ",\"unit\":\"dBm\",\"raw\":\"" + hexStr + "\"}";
   } else {
     bleResp = "{\"cmd\":\"cmd_get_output_power\",\"error\":\"invalid_response\",\"raw\":\"" + hexStr + "\"}";
   }
@@ -114,7 +119,7 @@ void sendGetOutputPower() {
   }
 }
 void sendFirmwareCommand() {
-  byte cmd[] = {0xA0, 0x03, 0x01, 0x72};
+  byte cmd[] = { 0xA0, 0x03, 0x01, 0x72 };
   byte checksum = CheckSum(cmd, 4);
 
   RFID.write(cmd, 4);
@@ -149,8 +154,8 @@ void sendFirmwareCommand() {
   }
 }
 
-void sendGetReaderTemperature () {
-  byte cmd[] = {0xA0, 0x03, 0x01, 0x7B};
+void sendGetReaderTemperature() {
+  byte cmd[] = { 0xA0, 0x03, 0x01, 0x7B };
   byte checksum = CheckSum(cmd, 4);
 
   RFID.write(cmd, 4);
@@ -186,7 +191,7 @@ void sendGetReaderTemperature () {
 }
 
 void sendReaderIdentifier() {
-  byte cmd[] = {0xA0, 0x03, 0x01, 0x68};
+  byte cmd[] = { 0xA0, 0x03, 0x01, 0x68 };
   byte checksum = CheckSum(cmd, 4);
 
   RFID.write(cmd, 4);
@@ -209,11 +214,11 @@ void sendReaderIdentifier() {
 
   // Kiểm tra phản hồi hợp lệ và có 12 byte ID
   if (len >= 17 && resp[0] == 0xA0 && resp[3] == 0x68) {
-    char idStr[13]; // 12 ký tự + null-terminator
+    char idStr[13];  // 12 ký tự + null-terminator
     for (int i = 0; i < 12; i++) {
       idStr[i] = (char)resp[4 + i];
     }
-    idStr[12] = '\0'; // Kết thúc chuỗi
+    idStr[12] = '\0';  // Kết thúc chuỗi
 
     bleResp = "{\"cmd\":\"get_reader_identifier\",\"value\":\"" + String(idStr) + "\",\"raw\":\"" + hexStr + "\"}";
   } else {
@@ -226,45 +231,53 @@ void sendReaderIdentifier() {
   }
 }
 
+
 volatile bool isScan = false;
 volatile bool isBuzzer = false;
+volatile bool isMotionScan = false;
 volatile bool isAlert = false;
+unsigned long motionScanStart = 0;
 
 void sendStartAlert() {
-  isAlert = true;
-  isScan = false;
-  isBuzzer = false;
-  
   // Thiết lập WiFi và WebSocket khi bắt đầu alert
   if (strlen(ssid) > 0 && strlen(password) > 0 && strlen(server) > 0 && port > 0) {
     setupWifi();
     setupWebSocket();
   }
+  isMotionScan = false;
+  isAlert = true;
+  isScan = false;
+  isBuzzer = false;
+  motionScanStart = millis();
+  lastValidRFID = "";
+  Serial.println("[ALERT] Bắt đầu chế độ cảnh báo chuyển động!");
 }
 
 void sendEndAlert() {
+  isMotionScan = false;
   isAlert = false;
   isBuzzer = false;
   String bleResp = "{\"cmd\":\"cmd_send_alert_stop\",\"status\":true}";
   if (deviceConnected && pCharacteristic != NULL) {
     sendBLEJson(bleResp);
   }
+  Serial.println("[ALERT] Kết thúc chế độ cảnh báo chuyển động!");
 }
+
 
 void sendStartInventory() {
   isScan = true;
+  isMotionScan = false;
   isAlert = false;
   isBuzzer = false;
   // Reset data khi bắt đầu scan mới
   epcCount = 0;
   hasNewData = false;
   lastSendTime = 0;
-  
   // Clear array
   for (int i = 0; i < 15; i++) {
     epcArray[i] = "";
   }
-  
   Serial.println("🚀 Bắt đầu scan inventory với interval " + String(SEND_INTERVAL) + "ms");
 }
 
@@ -272,9 +285,9 @@ void sendStartInventory() {
 
 void sendSetRFLinkProfile(String profileID) {
   Serial.println(profileID);
-  byte id = (byte) strtoul(profileID.c_str(), NULL, 16);
-  byte cmd[] = {0xA0, 0x04, 0x01, 0x69, id};
-  byte checksum = CheckSum(cmd, 5); 
+  byte id = (byte)strtoul(profileID.c_str(), NULL, 16);
+  byte cmd[] = { 0xA0, 0x04, 0x01, 0x69, id };
+  byte checksum = CheckSum(cmd, 5);
 
   RFID.write(cmd, 5);
   RFID.write(checksum);
@@ -310,7 +323,7 @@ void sendSetRFLinkProfile(String profileID) {
 }
 
 void sendGetRFLinkProfile() {
-  byte cmd[] = {0xA0, 0x03, 0x01, 0x6A};
+  byte cmd[] = { 0xA0, 0x03, 0x01, 0x6A };
   byte checksum = CheckSum(cmd, 4);
 
   RFID.write(cmd, 4);
@@ -361,7 +374,7 @@ void sendGetRFLinkProfile() {
 void sendSetOutputPower(byte power) {
   if (power > 33) power = 33;
 
-  byte cmd[] = {0xA0, 0x07, 0x01, 0x76, power, power, power, power};
+  byte cmd[] = { 0xA0, 0x07, 0x01, 0x76, power, power, power, power };
   byte checksum = CheckSum(cmd, 8);
 
   RFID.write(cmd, 8);
@@ -394,30 +407,28 @@ void sendSetOutputPower(byte power) {
   }
 }
 
+
 void setupSettingAlert(JsonObject value) {
-  ssid     = strdup(value["wifiName"] | "");
+  ssid = strdup(value["wifiName"] | "");
   password = strdup(value["wifiPassword"] | "");
-  server   = strdup(value["host"] | "");
+  server = strdup(value["host"] | "");
   const char* portStr = value["port"] | "0";
   port = atoi(portStr);
 
   Serial.println("Setting WiFi: " + String(ssid));
   Serial.println("Setting Host: " + String(server) + ":" + String(port));
-  
-  // Chỉ thiết lập WiFi và WebSocket khi isAlert = true
-  if (isAlert) {
-    setupWifi();
-    setupWebSocket();
-  }
+
+  setupWifi();
+  setupWebSocket();
 }
 
-class MyServerCallbacks: public BLEServerCallbacks {
+class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
     Serial.println("🔵 Thiết bị đã kết nối!");
   }
 
-  void onMtuChanged(uint16_t mtu, esp_ble_gatts_cb_param_t *param) {
+  void onMtuChanged(uint16_t mtu, esp_ble_gatts_cb_param_t* param) {
     currentMTU = mtu;
     Serial.print("New MTU: ");
     Serial.println(mtu);
@@ -429,50 +440,64 @@ class MyServerCallbacks: public BLEServerCallbacks {
   }
 };
 
-class MyCallbacks: public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    String rxValue = String(pCharacteristic->getValue().c_str());
 
+void sendBLECaptureSignal() {
+  if (deviceConnected && pCharacteristic != NULL) {
+    String signal = "capture=1";
+    pCharacteristic->setValue(signal.c_str());
+    pCharacteristic->notify();
+    Serial.println("📤 Đã gửi tín hiệu 'capture=1' đến CameraWebServer2");
+  }
+}
+
+class MyCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) {
+    String rxValue = String(pCharacteristic->getValue().c_str());
     if (rxValue.length() > 0) {
       Serial.print("📥 Nhận từ client: ");
       Serial.println(rxValue);
-
-      // Parse JSON nhận được
+      if (isMotionScan) {
+        return;
+      }
+      if (rxValue == "motion=1") {
+        Serial.println("🔔 Nhận motion=1, bắt đầu scan RFID 20s");
+        isMotionScan = true;
+        motionScanStart = millis();
+        lastValidRFID = "";
+        return;
+      }
+      // ...existing JSON BLE command handling...
       StaticJsonDocument<128> doc;
       DeserializationError error = deserializeJson(doc, rxValue);
-
       if (error) {
         Serial.println("❌ Lỗi parse JSON!");
         return;
       }
-
       String command = doc["command"];
-      int value = doc["value"]; // có thể null
-
-      // Xử lý lệnh
+      int value = doc["value"];
       if (command == "cmd_get_firmware_version") {
-        sendFirmwareCommand(); // Gửi lệnh hex tới RFID
-      } else if(command == "cmd_get_output_power") {
+        sendFirmwareCommand();
+      } else if (command == "cmd_get_output_power") {
         sendGetOutputPower();
-      } else if(command == "get_reader_identifier") {
+      } else if (command == "get_reader_identifier") {
         sendReaderIdentifier();
-      } else if(command == "cmd_get_reader_temperature") {
+      } else if (command == "cmd_get_reader_temperature") {
         sendGetReaderTemperature();
-      } else if(command == "cmd_set_output_power") {
+      } else if (command == "cmd_set_output_power") {
         sendSetOutputPower(doc["value"]);
-      } else if(command == "cmd_customized_session_target_inventory_start") {
+      } else if (command == "cmd_customized_session_target_inventory_start") {
         sendStartInventory();
-      } else if(command == "cmd_customized_session_target_inventory_stop") {
+      } else if (command == "cmd_customized_session_target_inventory_stop") {
         sendStopInventory();
-      } else if(command == "cmd_set_rf_link_profile") {
+      } else if (command == "cmd_set_rf_link_profile") {
         sendSetRFLinkProfile(doc["value"]);
-      } else if(command == "cmd_get_rf_link_profile") {
+      } else if (command == "cmd_get_rf_link_profile") {
         sendGetRFLinkProfile();
-      } else if(command == "cmd_send_alert_start") {
+      } else if (command == "cmd_send_alert_start") {
         sendStartAlert();
-      } else if(command == "cmd_send_alert_stop") {
+      } else if (command == "cmd_send_alert_stop") {
         sendEndAlert();
-      } else if(command == "cmd_send_setting_alert") {
+      } else if (command == "cmd_send_setting_alert") {
         JsonObject value = doc["value"].as<JsonObject>();
         setupSettingAlert(value);
       }
@@ -488,7 +513,7 @@ void sendHexCommand(String cmd) {
   byte buffer[64];
   int index = 0;
 
-  char *token = strtok((char*)cmd.c_str(), " ");
+  char* token = strtok((char*)cmd.c_str(), " ");
   while (token != NULL && index < 64) {
     buffer[index++] = (byte)strtol(token, NULL, 16);
     token = strtok(NULL, " ");
@@ -504,14 +529,11 @@ void setupBLE() {
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pService = pServer->createService(SERVICE_UUID);
+  BLEService* pService = pServer->createService(SERVICE_UUID);
 
   pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ |
-                      BLECharacteristic::PROPERTY_WRITE |
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
+    CHARACTERISTIC_UUID,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
 
   pCharacteristic->addDescriptor(new BLE2902());
   pCharacteristic->setCallbacks(new MyCallbacks());
@@ -528,8 +550,7 @@ void setupWifi() {
   unsigned long startAttemptTime = millis();
 
   // Chờ trong 10 giây
-  while (WiFi.status() != WL_CONNECTED &&
-         millis() - startAttemptTime < 10000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
     Serial.print(".");
     delay(500);
   }
@@ -547,29 +568,78 @@ void setupWifi() {
 
 
 
-void onConnect(const char * payload, size_t length) {
+void onConnect(const char* payload, size_t length) {
   Serial.println("WebSocket connected!");
+
+  // ✅ Đăng ký device type khi kết nối
+  DynamicJsonDocument doc(256);
+  doc["deviceId"] = deviceId;
+  doc["deviceType"] = deviceType;
+
+  String registerData;
+  serializeJson(doc, registerData);
+  webSocket.emit("register", registerData.c_str());
+
+  Serial.println("📝 Device registered as Arduino RFID Scanner");
 }
 
-void onDisconnect(const char * payload, size_t length) {
+void onDisconnect(const char* payload, size_t length) {
   Serial.println("WebSocket disconnected!");
   // Attempt to reconnect
   webSocket.begin(server, port);
 }
-void onWarningResponse(const char * payload, size_t length) {
+void receiveCommandCheckRfidWarning(const char* payload, size_t length) {
   Serial.printf("Received warningResponse: %s\n", payload);
   if (strcmp(payload, "true") == 0) {
+    if (!isBuzzer) {
+      isBuzzer = true;
+
+      // ✅ Gửi yêu cầu chụp ảnh qua Socket.IO thay vì BLE
+      if (WiFi.status() == WL_CONNECTED) {
+        DynamicJsonDocument captureDoc(512);
+        captureDoc["deviceId"] = deviceId;
+        captureDoc["deviceReceive"] = deviceReceive;
+
+        String captureRequest;
+        serializeJson(captureDoc, captureRequest);
+        webSocket.emit("send_request_capture", captureRequest.c_str());
+
+        Serial.println("📤 Gửi yêu cầu chụp ảnh qua Socket.IO: " + captureRequest);
+      } else {
+        Serial.println("❌ WiFi không kết nối, không thể gửi yêu cầu chụp ảnh");
+      }
+    }
+    Serial.println("Buzzer activated!");
+  } else {
     isBuzzer = false;
     Serial.println("Unexpected payload, buzzer not activated!");
-  } else {
-    isBuzzer = true;
-    Serial.println("Buzzer activated!");
   }
 }
+
+// Handler cho sự kiện startDetectScan từ Socket.IO
+void receiveCommandStartMotionScan(const char* payload, size_t length) {
+  // Parse JSON payload
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, payload, length);
+
+  if (error) {
+    Serial.printf("❌ JSON parsing failed: %s\n", error.c_str());
+    return;
+  }
+
+  String deviceReceive = doc["deviceId"];
+  if (deviceId == deviceReceive) {
+    unsigned long duration = doc["duration"] | 20000;
+    isMotionScan = true;
+    motionScanStart = millis();
+  }
+}
+
 void setupWebSocket() {
   webSocket.on("connect", onConnect);
   webSocket.on("disconnect", onDisconnect);
-  webSocket.on("warningResponse", onWarningResponse);
+  webSocket.on("receive_command_check_rfid_warning", receiveCommandCheckRfidWarning);
+  webSocket.on("receive_command_start_motion_scan", receiveCommandStartMotionScan);
   webSocket.begin(server, port);
   Serial.println("Thiết lập kết nối socket.");
 }
@@ -577,6 +647,7 @@ void setupBuzzer() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
 }
+
 void setup() {
   Serial.begin(BAUD_ESP32);
   Serial.println("Thiết lập kết nối ESP32 thành công!!");
@@ -588,17 +659,21 @@ void setup() {
   Serial.println("Thiết lập kết nối RFID thành công!!");
 
   setupBuzzer();
+
+  isMotionScan = false;
+  isScan = false;
+  isAlert = false;
 }
 
 void endScan() {
-  byte cmd[] = {0xA0, 0x05, 0xFF, 0x89, 0x01, 0x00};
+  byte cmd[] = { 0xA0, 0x05, 0xFF, 0x89, 0x01, 0x00 };
   byte checksum = CheckSum(cmd, 6);
 
   RFID.write(cmd, 6);
   RFID.write(checksum);
 }
 void startScan() {
-  byte cmd[] = {0xA0, 0x05, 0xFF, 0x89, 0x00, 0x00};
+  byte cmd[] = { 0xA0, 0x05, 0xFF, 0x89, 0x00, 0x00 };
   byte checksum = CheckSum(cmd, 6);
 
   RFID.write(cmd, 6);
@@ -614,7 +689,7 @@ void sendStopInventory() {
   }
 }
 
-bool checkResponseChecksum(byte *buff, int len) {
+bool checkResponseChecksum(byte* buff, int len) {
   if (len < 4) return false;
   unsigned char uSum = 0;
   for (int i = 0; i < len - 1; i++) {
@@ -652,7 +727,7 @@ void handlerScanInventoryRealtime() {
             }
             Serial.print("\nEPC: ");
             Serial.print(epc);
-            
+
             // Kiểm tra tag đã tồn tại chưa
             bool tagExists = false;
             for (int i = 0; i < epcCount; i++) {
@@ -661,7 +736,7 @@ void handlerScanInventoryRealtime() {
                 break;
               }
             }
-            
+
             // Chỉ thêm tag mới
             if (!tagExists && epcCount < 15) {
               epcArray[epcCount++] = epc;
@@ -676,17 +751,17 @@ void handlerScanInventoryRealtime() {
     // Gửi dữ liệu theo interval hoặc khi đầy array
     unsigned long currentTime = millis();
     bool shouldSend = false;
-    
+
     // Gửi khi có dữ liệu mới và đã qua interval
     if (hasNewData && (currentTime - lastSendTime >= SEND_INTERVAL)) {
       shouldSend = true;
     }
-    
+
     // Hoặc gửi khi array đầy (15 tags)
     if (epcCount >= 15) {
       shouldSend = true;
     }
-    
+
     if (shouldSend && epcCount > 0) {
       String epcList = "[";
       for (int i = 0; i < epcCount; i++) {
@@ -694,7 +769,7 @@ void handlerScanInventoryRealtime() {
         if (i < epcCount - 1) epcList += ",";
       }
       epcList += "]";
-      
+
       String bleResp = "{\"cmd\":\"cmd_customized_session_target_inventory_start\",\"tags\":" + epcList + "}";
       Serial.println("📤 Gửi BLE (" + String(epcCount) + " tags): " + bleResp);
 
@@ -704,10 +779,10 @@ void handlerScanInventoryRealtime() {
       } else {
         Serial.println("❌ Không thể gửi - device không kết nối");
       }
-      
+
       lastSendTime = currentTime;
       hasNewData = false;
-      
+
       // Reset array để tiếp tục scan tags mới
       epcCount = 0;
       for (int i = 0; i < 15; i++) {
@@ -718,67 +793,139 @@ void handlerScanInventoryRealtime() {
     endScan();
   }
 }
-
-void handlerAlertWarningRealtime() {
-  static byte response[512];
+void handlerMotionRealtime() {
+  static byte response[64];
   static int responseIndex = 0;
-  static String epcArray[10]; 
-  static int epcCount = 0; 
+  static String motionRFIDs[15];
+  static int motionRFIDCount = 0;
+  static bool scanStarted = false;
+  static bool hasNewMotionData = false;
+  static unsigned long lastMotionSendTime = 0;
+  static unsigned long lastScanRestart = 0;
 
-  if (isAlert) {
-    // Start scanning
+  // Bắt đầu scan nếu chưa bắt đầu
+  if (!scanStarted) {
     startScan();
-    while (RFID.available()) {
-      byte b = RFID.read();
-      if (responseIndex < sizeof(response)) {
-        response[responseIndex++] = b;
-      } else {
-        Serial.println("⚠️ Buffer overflow, resetting...");
-        responseIndex = 0;
-        continue;
-      }
+    scanStarted = true;
+    lastMotionSendTime = 0;
+    hasNewMotionData = false;
+    motionRFIDCount = 0;
+    lastScanRestart = millis();
+    for (int i = 0; i < 15; i++) motionRFIDs[i] = "";
+    Serial.println("🚀 Bắt đầu scan motion 20s...");
+  }
 
-      if (responseIndex >= 2 && responseIndex >= response[1] + 2) {
-        if (response[0] == 0xA0 && response[3] == 0x89 && checkResponseChecksum(response, responseIndex)) {
-          if (response[1] == 0x13 && epcCount < 10) { // Tag data packet, check array bounds
-            char epcBuffer[25] = {0}; // 12 bytes * 2 + null
-            int index = 0;
-            for (int i = 7; i < 19; i++) {
-              sprintf(&epcBuffer[index], "%02X", response[i]);
-              index += 2;
+  // Restart scan mỗi 100ms để đảm bảo scan liên tục
+  if (millis() - lastScanRestart > 100) {
+    startScan();
+    lastScanRestart = millis();
+  }
+
+  // Scan liên tục trong 20 giây
+  while (RFID.available()) {
+    byte b = RFID.read();
+    if (responseIndex < sizeof(response)) {
+      response[responseIndex++] = b;
+    } else {
+      responseIndex = 0;
+      continue;
+    }
+    if (responseIndex >= 2 && responseIndex >= response[1] + 2) {
+      if (response[0] == 0xA0 && response[3] == 0x89 && checkResponseChecksum(response, responseIndex)) {
+        if (response[1] == 0x13) {
+          String epc = "";
+          for (int i = 7; i < 19; i++) {
+            char hexPart[3];
+            sprintf(hexPart, "%02X", response[i]);
+            epc += String(hexPart);
+          }
+          Serial.print("\nRFID phát hiện: ");
+          Serial.println(epc);
+          // Thêm vào mảng nếu chưa có
+          bool tagExists = false;
+          for (int i = 0; i < motionRFIDCount; i++) {
+            if (motionRFIDs[i] == epc) {
+              tagExists = true;
+              break;
             }
-
-            Serial.print("\nEPC: ");
-            Serial.println(epcBuffer);
-            epcArray[epcCount++] = String(epcBuffer);
-
-            String rawPayload = "\"" + String(epcBuffer) + "\"";
-            Serial.println("📤 Sending WebSocket warning: " + rawPayload);
-            webSocket.emit("warning", rawPayload.c_str());
- 
-            delay(1000);
+          }
+          if (!tagExists && motionRFIDCount < 15) {
+            motionRFIDs[motionRFIDCount++] = epc;
+            hasNewMotionData = true;
           }
         }
-        responseIndex = 0; // Reset for new packet
       }
+      responseIndex = 0;
+    }
+  }
+
+  
+  // Gửi dữ liệu theo interval trong 20 giây
+  unsigned long currentTime = millis();
+  bool shouldSend = false;
+
+  // Gửi khi có RFID và đã qua interval (không cần dữ liệu mới)
+  if (motionRFIDCount > 0 && (currentTime - lastMotionSendTime >= SEND_INTERVAL)) {
+    shouldSend = true;
+  }
+
+  // Hoặc gửi khi array đầy (15 tags)
+  if (motionRFIDCount >= 15) {
+    shouldSend = true;
+  }
+
+  if (shouldSend && motionRFIDCount > 0) {
+    String rfidList = "[";
+    for (int i = 0; i < motionRFIDCount; i++) {
+      rfidList += "\"" + motionRFIDs[i] + "\"";
+      if (i < motionRFIDCount - 1) rfidList += ",";
+    }
+    rfidList += "]";
+
+    // ✅ Gửi scan result lên server
+    if (WiFi.status() == WL_CONNECTED) {
+      // Gửi warning (backward compatibility)
+      DynamicJsonDocument warningDoc(256);
+      JsonArray warningArr = warningDoc.to<JsonArray>();
+      for (int i = 0; i < motionRFIDCount; i++) {
+        warningArr.add(motionRFIDs[i]);
+      }
+      String warningJson;
+      serializeJson(warningArr, warningJson);
+      webSocket.emit("send_command_check_rfid_warning", warningJson.c_str());
+
+      Serial.println("📤 Gửi warning: " + warningJson);
     }
 
+    lastMotionSendTime = currentTime;
+    hasNewMotionData = false;
+  }
+
+  // Kiểm tra hết 20 giây
+  if (millis() - motionScanStart >= MOTION_SCAN_DURATION) {
+    isMotionScan = false;
+    scanStarted = false;
     endScan();
-    delay(500);
+    isBuzzer = false;
+
+    // Reset array khi kết thúc 20s
+    motionRFIDCount = 0;
+    for (int i = 0; i < 15; i++) motionRFIDs[i] = "";
+    Serial.println("✅ Kết thúc scan RFID 20s.");
   }
 }
-
 void loop() {
-  // Chỉ gọi webSocket.loop() khi isAlert = true
   if (isAlert) {
     webSocket.loop();
   }
-  
-  if(isScan) {
-    handlerScanInventoryRealtime();
+  // Xử lý scan RFID 20s khi nhận motion=1 (alert motion)
+  if (isAlert && isMotionScan) {
+    handlerMotionRealtime();
   }
-  if(isAlert) {
-    handlerAlertWarningRealtime();
+
+
+  if (isScan) {
+    handlerScanInventoryRealtime();
   }
 
   if (isBuzzer) {
