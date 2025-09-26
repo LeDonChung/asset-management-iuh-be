@@ -1,86 +1,108 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
-  asset-db:
+  postgres:
     image: postgres:15-alpine
-    container_name: asset_management_db
+    container_name: asset-management-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: asset
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      POSTGRES_DB: ${DB_NAME:-asset}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     networks:
-      - asset_network
+      - asset-management-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d asset"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis for caching (optional)
-  asset-redis:
+  # Redis Cache (Optional)
+  redis:
     image: redis:7-alpine
-    container_name: asset_management_redis
+    container_name: asset-management-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - asset_network
+      - asset-management-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Backend Application (Development)
-  asset-app:
+  # NestJS Application
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: asset_management_app
+    container_name: asset-management-backend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - DB_HOST=asset-db
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=asset
-      - JWT_SECRET=your-super-secret-jwt-key-for-development
-      - API_URL=http://localhost:3000
-      - REDIS_HOST=asset-redis
-      - REDIS_PORT=6379
+      - NODE_ENV=production
+      - PORT=3000
+      
+      # Database Configuration (Docker services)
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-asset}
+      
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET}
+      
+      # SMTP Configuration (Optional - configure if needed)
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=your-email@gmail.com
+      - SMTP_PASS=your-app-password
+
+      # CLOUDFLARE
+      - CLOUDFLARE_R2_ENDPOINT=${CLOUDFLARE_R2_ENDPOINT}
+      - CLOUDFLARE_R2_ACCESS_KEY_ID=${CLOUDFLARE_R2_ACCESS_KEY_ID}
+      - CLOUDFLARE_R2_SECRET_ACCESS_KEY=${CLOUDFLARE_R2_SECRET_ACCESS_KEY}
+      - CLOUDFLARE_R2_BUCKET_NAME=${CLOUDFLARE_R2_BUCKET_NAME}
+      - CLOUDFLARE_R2_PUBLIC_URL=${CLOUDFLARE_R2_PUBLIC_URL}
+
+      #REDIS
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
+      - REDIS_DB=${REDIS_DB:-0}
+
     volumes:
-      - .:/app
-      - /app/node_modules
-      - logs_data:/app/logs
+      - uploads_data:/app/uploads
     networks:
-      - asset_network
+      - asset-management-network
     depends_on:
-      asset-db:
+      postgres:
         condition: service_healthy
-      asset-redis:
+      redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
-  logs_data:
+  uploads_data:
     driver: local
 
 networks:
-  asset_network:
+  asset-management-network:
     driver: bridge
