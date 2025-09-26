@@ -1,11 +1,11 @@
 pipeline {
     agent any
     tools {
-        nodejs 'NodeJS' // Cần cấu hình NodeJS trong Jenkins Global Tool Configuration
+        nodejs 'NodeJS'
     }
     environment {
         BRANCH_DEPLOY = 'deploy'
-        PRODUCTION_HOST = "172.236.138.143" // Thay đổi thành host máy ảo của bạn
+        PRODUCTION_HOST = "34.158.42.23"
         DOCKER_HUB_REPO = 'ledonchung'
         APP_NAME = 'asset-management-iuh-be'
     }
@@ -18,7 +18,7 @@ pipeline {
 
         stage('Load .env') {
             steps {
-                withCredentials([file(credentialsId: 'asset-env-be', variable: 'ENV_FILE')]) {
+                withCredentials([file(credentialsId: 'asset-management-iuh-be', variable: 'ENV_FILE')]) {
                     sh 'rm -f .env'
                     sh 'cp "$ENV_FILE" .env'
                 }
@@ -38,22 +38,10 @@ pipeline {
             }
         }
 
-        // stage('Run Tests') {
-        //     steps {
-        //         script {
-        //             try {
-        //                 sh 'pnpm run test'
-        //             } catch (Exception e) {
-        //                 echo "Tests failed, but continuing with deployment"
-        //             }
-        //         }
-        //     }
-        // }
-
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -f Dockerfile.prod -t ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ."
+                    sh "docker build -f Dockerfile -t ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ."
                     sh "docker tag ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ${DOCKER_HUB_REPO}/${APP_NAME}:latest"
                 }
             }
@@ -77,16 +65,21 @@ pipeline {
                 ]) {
                     script {
                         def remoteHost = "${PRODUCTION_HOST}"
-                        def deployDir = "/home/$USER/asset-management"
+                        def deployDir = "/home/$USER/asset-management-be"
         
                         // Gửi file .env từ Jenkins sang server
                         sh """
                             scp -i $KEY -o StrictHostKeyChecking=no .env $USER@$remoteHost:${deployDir}/.env || true
                         """
                         
-                        // Gửi file docker-compose.prod.yml từ Jenkins sang server
+                        // Gửi file docker-compose.yml từ Jenkins sang server
                         sh """
-                            scp -i $KEY -o StrictHostKeyChecking=no docker-compose.prod.yml $USER@$remoteHost:${deployDir}/docker-compose.yml || true
+                            scp -i $KEY -o StrictHostKeyChecking=no docker-compose.yml $USER@$remoteHost:${deployDir}/docker-compose.yml || true
+                        """
+
+                        // Gửi script init-db.sql nếu có
+                        sh """
+                            scp -i $KEY -o StrictHostKeyChecking=no -r scripts/ $USER@$remoteHost:${deployDir}/ || true
                         """
         
                         // SSH vào server để deploy
@@ -118,8 +111,15 @@ pipeline {
                             # Update docker-compose để sử dụng image mới
                             sed -i "s|image: ${DOCKER_HUB_REPO}/${APP_NAME}:.*|image: ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}|g" docker-compose.yml
         
-                            # Start services
+                            # Start services (PostgreSQL, Redis, và Backend)
                             docker-compose -f docker-compose.yml --env-file .env up -d
+        
+                            # Đợi database khởi động và chạy migrations
+                            echo "⏳ Waiting for database to be ready..."
+                            sleep 30
+                            
+                            # Chạy database migrations (nếu có)
+                            docker-compose exec -T app pnpm run migration:run || echo "⚠️ No migrations to run"
         
                             # Show running containers
                             docker-compose ps
@@ -150,10 +150,13 @@ EOF
             """
         }
         success {
-            echo "✅ Deployment successful! Application is running at http://${PRODUCTION_HOST}:3000"
+            echo "✅ Backend deployment successful! API is running at http://${PRODUCTION_HOST}:3000"
+            echo "📊 Swagger documentation available at http://${PRODUCTION_HOST}:3000/api"
+            echo "🗄️ Database: PostgreSQL running on port 5432"
+            echo "🚀 Redis: Cache server running on port 6379"
         }
         failure {
-            echo "❌ Deployment failed! Please check the logs."
+            echo "❌ Backend deployment failed! Please check the logs."
         }
     }
-} 
+}
