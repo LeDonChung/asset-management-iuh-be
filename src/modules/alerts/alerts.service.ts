@@ -7,6 +7,8 @@ import { Repository } from "typeorm";
 import { CreateAlertDto } from "./dto/create-alert.dto";
 import { AlertResponseDto } from "./dto/alert-response.dto";
 import { Alert, AlertStatus, AlertType } from "src/entities/alert.entity";
+import { CreateAlertResolutionDto } from "./dto/create-alert-resolution.dto";
+import { AlertResolution } from "src/entities/alert-resolution.entity";
 
 @Injectable()
 export class AlertsService {
@@ -19,6 +21,8 @@ export class AlertsService {
         private readonly roomRepository: Repository<Room>,
         @InjectRepository(Alert)
         private readonly alertRepository: Repository<Alert>,
+        @InjectRepository(AlertResolution)
+        private readonly alertResolutionRepository: Repository<AlertResolution>,
     ) { }
 
     async create(createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
@@ -54,10 +58,43 @@ export class AlertsService {
         try {
             const alerts = await this.alertRepository.find({
                 relations: ['asset', 'room', 'resolution'],
+                order: { createdAt: 'DESC' },
             });
             return alerts.map(alert => this.transformToResponseDto(alert));
         } catch (error) {
             console.error('Error fetching alerts:', error);
+            throw error;
+        }
+    }
+
+    async createAlertResolution(createResolution: CreateAlertResolutionDto, currentUser: User): Promise<AlertResponseDto> {
+        try {
+            const { alertId, resolution, note } = createResolution;
+            const alert = await this.alertRepository.findOne({ 
+                where: { id: alertId }, 
+                relations: ['resolution', 'asset', 'room'] 
+            });
+            
+            if (!alert) {
+                throw new Error("Alert not found");
+            }
+
+            const alertResolution = this.alertResolutionRepository.create({
+                alertId: alert.id,
+                resolverId: currentUser.id,
+                resolution,
+                note,
+            });
+            
+            const savedAlertResolution = await this.alertResolutionRepository.save(alertResolution);
+
+            alert.status = AlertStatus.RESOLVED;
+            alert.resolution = savedAlertResolution;
+            await this.alertRepository.save(alert);
+
+            return this.transformToResponseDto(alert);
+        } catch (error) {
+            console.error('Error creating alert resolution:', error);
             throw error;
         }
     }
@@ -81,6 +118,7 @@ export class AlertsService {
                 id: alert.resolution.id,
                 note: alert.resolution.note,
                 resolvedAt: alert.resolution.resolvedAt,
+                resolution: alert.resolution.resolution,
             } : undefined,
         }
     }

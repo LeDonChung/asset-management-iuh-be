@@ -31,6 +31,7 @@ export class AlertResolution {
     note: string;
 
     @Column({ name: 'resolved_at', type: 'timestamp' })
+    @CreateDateColumn()
     resolvedAt: Date;
 
     // Relations

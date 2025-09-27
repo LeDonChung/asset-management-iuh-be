@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Expose } from "class-transformer";
-import { AlertStatus, AlertType } from "src/entities/alert.entity";
+import { AlertResolutionStatus, AlertStatus, AlertType } from "src/entities/alert.entity";
 
 export class RoomResponseDto {
     @ApiProperty({ example: "uuid" })
@@ -25,6 +25,8 @@ export class AlertResolutionResponseDto {
     note: string;
     @ApiProperty({ example: "2024-01-02T00:00:00.000Z" })
     resolvedAt: Date;
+    @ApiProperty({ example: AlertResolutionStatus.CONFIRMED, enum: AlertResolutionStatus })
+    resolution: AlertResolutionStatus;
 }
 
 export class AlertResponseDto {
