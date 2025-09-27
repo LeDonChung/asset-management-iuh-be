@@ -7,6 +7,9 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { PermissionConstants } from "src/common/utils/permission.constant";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { AlertResponseDto } from "./dto/alert-response.dto";
+import { CreateAlertResolutionDto } from "./dto/create-alert-resolution.dto";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { User } from "src/entities/user.entity";
 
 @ApiTags('Alerts')
 @Controller('api/v1/alerts')
@@ -32,5 +35,19 @@ export class AlertsController {
     @ApiBearerAuth()
     async findAll(): Promise<AlertResponseDto[]> {
         return this.alertsService.findAll();
+    }
+
+    @Post('resolve')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiResponse({ status: 200, type: [AlertResponseDto] })
+    @ApiBody({ type: CreateAlertResolutionDto })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_CREATE_USER)
+    @ApiBearerAuth()
+    async createAlertResolution(
+        @Body() createAlertResolutionDto: CreateAlertResolutionDto,
+        @CurrentUser() currentUser: User
+    ): Promise<AlertResponseDto> {
+        return this.alertsService.createAlertResolution(createAlertResolutionDto, currentUser);
     }
 }
