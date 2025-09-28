@@ -19,4 +19,20 @@ export class CreateAlertDto {
     @IsOptional()
     @IsNotEmpty({ message: 'Room ID must not be empty' })
     roomId: string;
+
+    @ApiProperty({
+        example: 'http://example.com/image.jpg',
+        description: 'Optional image URL related to the alert',
+    })
+    @IsString()
+    @IsOptional()
+    image?: string;
+
+    @ApiProperty({
+        example: 'uuid-device-id',
+        description: 'ID of the device that triggered the alert',
+    })
+    @IsString()
+    @IsNotEmpty({ message: 'Device ID must not be empty' })
+    deviceId: string;
 }
