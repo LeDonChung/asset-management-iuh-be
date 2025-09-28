@@ -7,8 +7,7 @@ import { Repository } from "typeorm";
 import { CreateAlertDto } from "./dto/create-alert.dto";
 import { AlertResponseDto } from "./dto/alert-response.dto";
 import { Alert, AlertStatus, AlertType } from "src/entities/alert.entity";
-import { CreateAlertResolutionDto } from "./dto/create-alert-resolution.dto";
-import { AlertResolution } from "src/entities/alert-resolution.entity";
+import { UpdateAlertDto } from "./dto/update-alert.dto";
 
 @Injectable()
 export class AlertsService {
@@ -21,8 +20,6 @@ export class AlertsService {
         private readonly roomRepository: Repository<Room>,
         @InjectRepository(Alert)
         private readonly alertRepository: Repository<Alert>,
-        @InjectRepository(AlertResolution)
-        private readonly alertResolutionRepository: Repository<AlertResolution>,
     ) { }
 
     async create(createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
@@ -32,8 +29,12 @@ export class AlertsService {
             const asset = await this.assetRepository.findOne({ where: { id: assetId } });
             const room = await this.roomRepository.findOne({ where: { id: roomId } });
 
-            if (!asset || !room) {
-                throw new Error("Asset or Room not found");
+            if(!asset) {
+                throw new Error("Asset not found");
+            }
+
+            if(!room) {
+                throw new Error("Room not found");
             }
 
             // Nếu cả asset và room đều tồn tại, tiến hành tạo alert
@@ -42,6 +43,8 @@ export class AlertsService {
                 roomId: room.id,
                 type: AlertType.UNAUTHORIZED_MOVEMENT,
                 status: AlertStatus.PENDING,
+                image: createAlertDto.image ? createAlertDto.image : undefined,
+                deviceId: createAlertDto.deviceId,
             });
 
             const savedAlert = await this.alertRepository.save(alert);
@@ -54,10 +57,51 @@ export class AlertsService {
         }
     }
 
+    async createManyAlerts(createAlertDtos: CreateAlertDto[]): Promise<AlertResponseDto[]> {
+        try {
+            const alerts: Alert[] = [];
+            const lstError = [];
+
+            // Lấy danh sách assetId và roomId từ createAlertDtos để truy vấn một lần (tránh query trong vòng lặp)
+            const lstAssetId = createAlertDtos.map(dto => dto.assetId);
+            const lstRoomId = createAlertDtos.map(dto => dto.roomId);
+            const assets = await this.assetRepository.findByIds(lstAssetId);
+            const rooms = await this.roomRepository.findByIds(lstRoomId);
+            
+
+            createAlertDtos.map(async (dto, index) => {
+                const { assetId, roomId } = dto;
+                const asset = assets.find(a => a.id === assetId);
+                const room = rooms.find(r => r.id === roomId);
+                if (!asset) {
+                    lstError.push({ index, message: "Asset not found" });
+                } else if (!room) {
+                    lstError.push({ index, message: "Room not found" });
+                } else {
+                    const alert = this.alertRepository.create({
+                        assetId: asset.id,
+                        roomId: room.id,
+                        type: AlertType.UNAUTHORIZED_MOVEMENT,
+                        status: AlertStatus.PENDING,
+                        image: dto.image ? dto.image : undefined,
+                        deviceId: dto.deviceId,
+                    });
+                    alerts.push(alert);
+                }
+
+            });
+            await this.alertRepository.save(alerts);
+            return alerts.map(alert => this.transformToResponseDto(alert));
+        } catch (error) {
+            console.error('Error creating multiple alerts:', error);
+            throw error;
+        }
+    }
+
     async findAll(): Promise<AlertResponseDto[]> {
         try {
             const alerts = await this.alertRepository.find({
-                relations: ['asset', 'room', 'resolution'],
+                relations: ['asset', 'room', 'user'],
                 order: { createdAt: 'DESC' },
             });
             return alerts.map(alert => this.transformToResponseDto(alert));
@@ -67,34 +111,21 @@ export class AlertsService {
         }
     }
 
-    async createAlertResolution(createResolution: CreateAlertResolutionDto, currentUser: User): Promise<AlertResponseDto> {
+    async resolveAlert(alertId: string, updateAlertDto: UpdateAlertDto, currentUser: User): Promise<AlertResponseDto> {
         try {
-            const { alertId, resolution, note } = createResolution;
-            const alert = await this.alertRepository.findOne({ 
-                where: { id: alertId }, 
-                relations: ['resolution', 'asset', 'room'] 
-            });
-            
+            const alert = await this.alertRepository.findOne({ where: { id: alertId } });
             if (!alert) {
                 throw new Error("Alert not found");
             }
 
-            const alertResolution = this.alertResolutionRepository.create({
-                alertId: alert.id,
-                resolverId: currentUser.id,
-                resolution,
-                note,
-            });
-            
-            const savedAlertResolution = await this.alertResolutionRepository.save(alertResolution);
+            alert.status = updateAlertDto.status;
+            alert.note = updateAlertDto.note;
+            alert.resolverId = currentUser.id;
 
-            alert.status = AlertStatus.RESOLVED;
-            alert.resolution = savedAlertResolution;
             await this.alertRepository.save(alert);
-
             return this.transformToResponseDto(alert);
         } catch (error) {
-            console.error('Error creating alert resolution:', error);
+            console.error('Error resolving alert:', error);
             throw error;
         }
     }
@@ -114,12 +145,14 @@ export class AlertsService {
                 name: alert.asset.name,
                 fixedCode: alert.asset.fixedCode,
             } : undefined,
-            resolution: alert.resolution ? {
-                id: alert.resolution.id,
-                note: alert.resolution.note,
-                resolvedAt: alert.resolution.resolvedAt,
-                resolution: alert.resolution.resolution,
+            resolver: alert.resolver ? {
+                id: alert.resolver.id,
+                fullName: alert.resolver.fullName,
+                email: alert.resolver.email,
             } : undefined,
+            note: alert.note ? alert.note : undefined,
+            image: alert.image ? alert.image : undefined,
+            resolvedAt: alert.resolvedAt ? alert.resolvedAt : undefined,
         }
     }
 }
