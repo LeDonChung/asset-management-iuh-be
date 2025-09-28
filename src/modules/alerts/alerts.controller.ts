@@ -10,6 +10,7 @@ import { AlertResponseDto } from "./dto/alert-response.dto";
 import { CreateAlertResolutionDto } from "./dto/create-alert-resolution.dto";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "src/entities/user.entity";
+import { UserAlertResponseDto } from "./dto/user-alert-response.dto";
 
 @ApiTags('Alerts')
 @Controller('api/v1/alerts')
@@ -49,5 +50,12 @@ export class AlertsController {
         @CurrentUser() currentUser: User
     ): Promise<AlertResponseDto> {
         return this.alertsService.createAlertResolution(createAlertResolutionDto, currentUser);
+    }
+
+    @Post('/get-user-rfid-alerts')
+    @HttpCode(HttpStatus.OK)
+    @ApiResponse({ status: 200, type: [UserAlertResponseDto] })
+    async getUserRfidAlerts(@Body() rfids: string[]): Promise<UserAlertResponseDto[]> {
+        return this.alertsService.getUserRfidAlerts(rfids);
     }
 }
