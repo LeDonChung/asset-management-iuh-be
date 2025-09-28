@@ -25,7 +25,6 @@ import { InventoryResult } from "src/entities/inventory-result";
 import { AssetBook } from "src/entities/asset-book.entity";
 import { AssetBookItem } from "src/entities/asset-book-item.entity";
 import { Alert } from "src/entities/alert.entity";
-import { AlertResolution } from "src/entities/alert-resolution.entity";
 
 export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
   imports: [],
@@ -72,8 +71,7 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
         InventoryResult,
         AssetBook,
         AssetBookItem,
-        Alert,
-        AlertResolution
+        Alert
       ],
       synchronize: false,
       logging: false,
@@ -120,8 +118,7 @@ const dataSource = new DataSource({
     InventoryResult,
     AssetBook,
     AssetBookItem,
-    Alert,
-    AlertResolution
+    Alert
   ],
   migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
   migrationsTableName: "typeorm_migrations",
