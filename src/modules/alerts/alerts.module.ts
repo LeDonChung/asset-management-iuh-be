@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Alert } from '../../entities/alert.entity';
-import { AlertResolution } from '../../entities/alert-resolution.entity';
 import { Asset } from 'src/entities/asset.entity';
 import { User } from 'src/entities/user.entity';
 import { Room } from 'src/entities/room.entity';
@@ -10,7 +9,7 @@ import { AlertsController } from './alerts.controller';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Alert, AlertResolution, Asset, User, Room])
+        TypeOrmModule.forFeature([Alert, Asset, User, Room])
     ],
     controllers: [AlertsController],
     providers: [AlertsService],
