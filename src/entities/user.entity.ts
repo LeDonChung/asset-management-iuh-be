@@ -15,7 +15,7 @@ import { Role } from './role.entity';
 import { Unit } from './unit.entity';
 import { Asset } from './asset.entity';
 import { InventorySession } from './inventory-session.entity';
-import { AlertResolution } from './alert-resolution.entity';
+import { Alert } from './alert.entity';
 
 export enum UserStatus {
     ACTIVE = 'ACTIVE',
@@ -85,6 +85,6 @@ export class User {
     @OneToMany(() => InventorySession, (inventorySession) => inventorySession.creator)
     createdInventorySessions?: InventorySession[];
 
-    @OneToMany(() => AlertResolution, (alertResolution) => alertResolution.resolver)
-    alertResolutions?: AlertResolution[];
+    @OneToMany(() => Alert, (alert) => alert.resolver)
+    alerts?: Alert[];
 }
