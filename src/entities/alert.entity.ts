@@ -1,16 +1,12 @@
 export enum AlertStatus {
     PENDING = 'PENDING',
-    RESOLVED = 'RESOLVED'
+    CONFIRMED = 'CONFIRMED',
+    FALSE_ALARM = 'FALSE_ALARM',
+    SYSTEM_ERROR = 'SYSTEM_ERROR'
 }
 
 export enum AlertType {
     UNAUTHORIZED_MOVEMENT = 'UNAUTHORIZED_MOVEMENT'
-}
-
-export enum AlertResolutionStatus {
-    CONFIRMED = 'CONFIRMED',
-    FALSE_ALARM = 'FALSE_ALARM',
-    SYSTEM_ERROR = 'SYSTEM_ERROR'
 }
 
 export enum DamageReportStatus {
@@ -28,10 +24,12 @@ import {
     JoinColumn,
     CreateDateColumn,
     OneToOne,
+    UpdateDateColumn,
+    IsNull,
 } from 'typeorm';
 import { Asset } from './asset.entity';
 import { Room } from './room.entity';
-import { AlertResolution } from './alert-resolution.entity';
+import { User } from './user.entity';
 
 @Entity('alerts')
 export class Alert {
@@ -58,8 +56,25 @@ export class Alert {
     })
     status: AlertStatus;
 
-    @CreateDateColumn({ name: 'created_at' })
+    @Column({ name: 'resolver_id', nullable: true })
+    resolverId: string;
+
+    @Column({ type: 'text', nullable: true })
+    note: string;
+
+    @Column({ type: 'text', nullable: true })
+    image: string;
+
+    @Column({ name: 'device_id', type: 'text' })
+    deviceId: string;
+
+    @Column({ name: 'created_at', type: 'timestamp' })
+    @CreateDateColumn()
     createdAt: Date;
+
+    @Column({ name: 'resolved_at', type: 'timestamp' })
+    @UpdateDateColumn()
+    resolvedAt: Date;
 
     // Relations
     @ManyToOne(() => Asset, (asset) => asset.alerts)
@@ -70,6 +85,7 @@ export class Alert {
     @JoinColumn({ name: 'room_id' })
     room?: Room;
 
-    @OneToOne(() => AlertResolution, (resolution) => resolution.alert)
-    resolution?: AlertResolution;
+    @ManyToOne(() => User, (user) => user.alerts)
+    @JoinColumn({ name: 'resolver_id' })
+    resolver?: User;
 }
