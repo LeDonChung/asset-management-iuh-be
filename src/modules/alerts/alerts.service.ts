@@ -101,7 +101,7 @@ export class AlertsService {
     async findAll(): Promise<AlertResponseDto[]> {
         try {
             const alerts = await this.alertRepository.find({
-                relations: ['asset', 'room', 'user'],
+                relations: ['asset', 'room', 'resolver'],
                 order: { createdAt: 'DESC' },
             });
             return alerts.map(alert => this.transformToResponseDto(alert));
