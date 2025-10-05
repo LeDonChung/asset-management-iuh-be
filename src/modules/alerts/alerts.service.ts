@@ -73,118 +73,6 @@ export class AlertsService {
     }
   }
 
-  async createManyAlerts(
-    createAlertDtos: CreateAlertDto[]
-  ): Promise<AlertResponseDto[]> {
-    try {
-      const lstError = [];
-
-      // Lấy danh sách assetId và roomId từ createAlertDtos để truy vấn một lần (tránh query trong vòng lặp)
-      const lstAssetId = createAlertDtos.map((dto) => dto.assetId);
-      const lstRoomId = createAlertDtos.map((dto) => dto.roomId);
-      const assets = await this.assetRepository.findByIds(lstAssetId);
-      const rooms = await this.roomRepository.findByIds(lstRoomId);
-
-      const alertPromises = createAlertDtos.map(async (dto, index) => {
-        const { assetId, roomId } = dto;
-        const asset = assets.find((a) => a.id === assetId);
-        const room = rooms.find((r) => r.id === roomId);
-
-        return this.alertRepository.create({
-          assetId: asset.id,
-          roomId: room.id,
-          type: AlertType.UNAUTHORIZED_MOVEMENT,
-          status: AlertStatus.PENDING,
-          image: dto.image ? dto.image : undefined,
-          deviceId: dto.deviceId,
-        });
-      });
-      const alerts: Alert[] = await Promise.all(alertPromises);
-      await this.alertRepository.save(alerts);
-      // Lấy lại alerts vừa tạo với đầy đủ thông tin quan hệ
-      const alertIds = alerts.map((alert) => alert.id);
-      const fullAlerts = await this.alertRepository.find({
-        where: { id: In(alertIds) },
-        relations: ["asset", "room", "asset.rfidTag"],
-      });
-      return fullAlerts.map((alert) => this.transformToResponseDto(alert));
-    } catch (error) {
-      console.error("Error creating multiple alerts:", error);
-      throw error;
-    }
-  }
-
-  async findAll(): Promise<AlertResponseDto[]> {
-    try {
-      const alerts = await this.alertRepository.find({
-        relations: ["asset", "room", "asset.rfidTag"],
-        order: { createdAt: "DESC" },
-      });
-      return alerts.map((alert) => this.transformToResponseDto(alert));
-    } catch (error) {
-      console.error("Error fetching alerts:", error);
-      throw error;
-    }
-  }
-
-  async resolveAlert(
-    alertId: string,
-    updateAlertDto: UpdateAlertDto,
-    currentUser: User
-  ): Promise<AlertResponseDto> {
-    try {
-      const alert = await this.alertRepository.findOne({
-        where: { id: alertId },
-      });
-      if (!alert) {
-        throw new Error("Alert not found");
-      }
-
-      alert.status = updateAlertDto.status;
-      alert.note = updateAlertDto.note;
-      alert.resolverId = currentUser.id;
-
-      await this.alertRepository.save(alert);
-      return this.transformToResponseDto(alert);
-    } catch (error) {
-      console.error("Error resolving alert:", error);
-      throw error;
-    }
-  }
-
-  private transformToResponseDto(alert: Alert): AlertResponseDto {
-    return {
-      id: alert.id,
-      status: alert.status,
-      type: alert.type,
-      createdAt: alert.createdAt,
-      room: alert.room
-        ? {
-            id: alert.room.id,
-            name: alert.room.name,
-          }
-        : undefined,
-      asset: alert.asset
-        ? {
-            id: alert.asset.id,
-            name: alert.asset.name,
-            fixedCode: alert.asset.fixedCode,
-            rfid: (alert.asset as FixedAsset)?.rfidTag.rfidId || null,
-          }
-        : undefined,
-      resolver: alert.resolver
-        ? {
-            id: alert.resolver.id,
-            fullName: alert.resolver.fullName,
-            email: alert.resolver.email,
-          }
-        : undefined,
-      note: alert.note ? alert.note : undefined,
-      image: alert.image ? alert.image : undefined,
-      resolvedAt: alert.resolvedAt ? alert.resolvedAt : undefined,
-    };
-  }
-
   async getUserRfidAlerts(rfids: string[]): Promise<UserAlertResponseDto[]> {
     try {
       // Tìm tài khoản đơn vị sử dụng tài sản có RFID trong danh sách rfids trong sổ tài sản
@@ -244,5 +132,116 @@ export class AlertsService {
       console.error("Error getting user RFID alerts:", error);
       throw error;
     }
+  }
+
+  async createManyAlerts(
+    createAlertDtos: CreateAlertDto[]
+  ): Promise<AlertResponseDto[]> {
+    try {
+      const alerts: Alert[] = [];
+      const lstError = [];
+
+      // Lấy danh sách assetId và roomId từ createAlertDtos để truy vấn một lần (tránh query trong vòng lặp)
+      const lstAssetId = createAlertDtos.map((dto) => dto.assetId);
+      const lstRoomId = createAlertDtos.map((dto) => dto.roomId);
+      const assets = await this.assetRepository.findByIds(lstAssetId);
+      const rooms = await this.roomRepository.findByIds(lstRoomId);
+
+      createAlertDtos.map(async (dto, index) => {
+        const { assetId, roomId } = dto;
+        const asset = assets.find((a) => a.id === assetId);
+        const room = rooms.find((r) => r.id === roomId);
+        if (!asset) {
+          lstError.push({ index, message: "Asset not found" });
+        } else if (!room) {
+          lstError.push({ index, message: "Room not found" });
+        } else {
+          const alert = this.alertRepository.create({
+            assetId: asset.id,
+            roomId: room.id,
+            type: AlertType.UNAUTHORIZED_MOVEMENT,
+            status: AlertStatus.PENDING,
+            image: dto.image ? dto.image : undefined,
+            deviceId: dto.deviceId,
+          });
+          alerts.push(alert);
+        }
+      });
+      await this.alertRepository.save(alerts);
+      return alerts.map((alert) => this.transformToResponseDto(alert));
+    } catch (error) {
+      console.error("Error creating multiple alerts:", error);
+      throw error;
+    }
+  }
+
+  async findAll(): Promise<AlertResponseDto[]> {
+    try {
+      const alerts = await this.alertRepository.find({
+        relations: ["asset", "room", "resolver"],
+        order: { createdAt: "DESC" },
+      });
+      return alerts.map((alert) => this.transformToResponseDto(alert));
+    } catch (error) {
+      console.error("Error fetching alerts:", error);
+      throw error;
+    }
+  }
+
+  async resolveAlert(
+    alertId: string,
+    updateAlertDto: UpdateAlertDto,
+    currentUser: User
+  ): Promise<AlertResponseDto> {
+    try {
+      const alert = await this.alertRepository.findOne({
+        where: { id: alertId },
+      });
+      if (!alert) {
+        throw new Error("Alert not found");
+      }
+
+      alert.status = updateAlertDto.status;
+      alert.note = updateAlertDto.note;
+      alert.resolverId = currentUser.id;
+
+      await this.alertRepository.save(alert);
+      return this.transformToResponseDto(alert);
+    } catch (error) {
+      console.error("Error resolving alert:", error);
+      throw error;
+    }
+  }
+
+  private transformToResponseDto(alert: Alert): AlertResponseDto {
+    return {
+      id: alert.id,
+      status: alert.status,
+      type: alert.type,
+      createdAt: alert.createdAt,
+      room: alert.room
+        ? {
+            id: alert.room.id,
+            name: alert.room.name,
+          }
+        : undefined,
+      asset: alert.asset
+        ? {
+            id: alert.asset.id,
+            name: alert.asset.name,
+            fixedCode: alert.asset.fixedCode,
+          }
+        : undefined,
+      resolver: alert.resolver
+        ? {
+            id: alert.resolver.id,
+            fullName: alert.resolver.fullName,
+            email: alert.resolver.email,
+          }
+        : undefined,
+      note: alert.note ? alert.note : undefined,
+      image: alert.image ? alert.image : undefined,
+      resolvedAt: alert.resolvedAt ? alert.resolvedAt : undefined,
+    };
   }
 }
