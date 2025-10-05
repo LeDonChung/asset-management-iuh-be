@@ -17,7 +17,7 @@ String deviceType = "rfid";
 char* ssid = "Ruby tu C13 den C25";
 char* password = "VietnhatC136868";
 
-char* server = "192.168.1.34";
+char* server = "192.168.1.12";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 
@@ -662,7 +662,10 @@ void setup() {
 
   isMotionScan = false;
   isScan = false;
-  isAlert = false;
+  isAlert = true;
+  if(isAlert) {
+    setupSettingAlert();
+  }
 }
 
 void endScan() {
