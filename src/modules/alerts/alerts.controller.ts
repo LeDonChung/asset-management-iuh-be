@@ -21,9 +21,6 @@ export class AlertsController {
     @Post()
     @HttpCode(HttpStatus.CREATED)
     @ApiBody({ type: CreateAlertDto })
-    @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_CREATE_USER)
-    @ApiBearerAuth()
     async createAlert(@Body() createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
         return this.alertsService.create(createAlertDto);
     }
@@ -31,9 +28,6 @@ export class AlertsController {
     @Get()
     @HttpCode(HttpStatus.OK)
     @ApiResponse({ status: 200, type: [AlertResponseDto] })
-    @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_VIEW_USER)
-    @ApiBearerAuth()
     async findAll(): Promise<AlertResponseDto[]> {
         return this.alertsService.findAll();
     }
@@ -41,9 +35,6 @@ export class AlertsController {
     @Post('bulk')
     @HttpCode(HttpStatus.CREATED)
     @ApiBody({ type: [CreateAlertDto] })
-    @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_CREATE_USER)
-    @ApiBearerAuth()
     async createManyAlerts(@Body() createAlertDtos: CreateAlertDto[]): Promise<AlertResponseDto[]> {
         return this.alertsService.createManyAlerts(createAlertDtos);
     }
@@ -53,9 +44,6 @@ export class AlertsController {
     @ApiBody({ type: UpdateAlertDto })
     @ApiParam({ name: 'id', description: 'ID of the alert to resolve' })
     @ApiResponse({ status: 200, type: AlertResponseDto })
-    @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_UPDATE_USER)
-    @ApiBearerAuth()
     async resolveAlert(
         @Param('id') alertId: string,
         @Body() updateAlertDto: UpdateAlertDto,
