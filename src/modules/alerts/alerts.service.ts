@@ -12,6 +12,8 @@ import { AssetBook } from "src/entities/asset-book.entity";
 import { AssetBookItem } from "src/entities/asset-book-item.entity";
 import { RfidTag } from "src/entities/rfid-tag.entity";
 import { UpdateAlertDto } from "./dto/update-alert.dto";
+import { UpdateAlertImageDto } from "./dto/update-alert-image.dto";
+import { FilesService } from "../files/files.service";
 
 @Injectable()
 export class AlertsService {
@@ -29,7 +31,8 @@ export class AlertsService {
     @InjectRepository(AssetBookItem)
     private readonly assetBookItemRepository: Repository<AssetBookItem>,
     @InjectRepository(RfidTag)
-    private readonly rfidTagRepository: Repository<RfidTag>
+    private readonly rfidTagRepository: Repository<RfidTag>,
+    private readonly filesService: FilesService
   ) {}
 
   async create(createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
@@ -64,7 +67,6 @@ export class AlertsService {
         where: { id: savedAlert.id },
         relations: ["asset", "room", "resolver"],
       });
-      console.log("Created alert:", alertResponse);
 
       return this.transformToResponseDto(alertResponse);
     } catch (error) {
@@ -168,7 +170,11 @@ export class AlertsService {
         }
       });
       await this.alertRepository.save(alerts);
-      return alerts.map((alert) => this.transformToResponseDto(alert));
+      const savedAlertData = await this.alertRepository.find({
+        where: { id: In(alerts.map((a) => a.id)) },
+        relations: ["asset", "room", "resolver", "asset.rfidTag"],
+      });
+      return savedAlertData.map((alert) => this.transformToResponseDto(alert));
     } catch (error) {
       console.error("Error creating multiple alerts:", error);
       throw error;
@@ -230,6 +236,10 @@ export class AlertsService {
             id: alert.asset.id,
             name: alert.asset.name,
             fixedCode: alert.asset.fixedCode,
+            rfid:
+              (alert.asset.type === "FIXED_ASSET"
+                ? (alert.asset as FixedAsset).rfidTag?.rfidId
+                : null) || null,
           }
         : undefined,
       resolver: alert.resolver
@@ -244,4 +254,31 @@ export class AlertsService {
       resolvedAt: alert.resolvedAt ? alert.resolvedAt : undefined,
     };
   }
+
+  async updateAlertsImage(file: Express.Multer.File, alertIds: string[]): Promise<void> {
+    try {
+      if (!file || !alertIds || alertIds.length === 0) {
+        throw new Error("Invalid input");
+      }
+      
+      // Upload image using FilesService
+      const uploadResult = await this.filesService.uploadImage(file);
+      const imageUrl = uploadResult.url;
+      
+      if (!imageUrl) {
+        throw new Error("Image upload failed");
+      }
+      
+      // Update alerts with the uploaded image URL
+      await this.alertRepository.update(
+        { id: In(alertIds) },
+        { image: imageUrl }
+      );
+    } catch (error) {
+      console.error("Error updating alert images:", error);
+      throw error;
+    }
+  }
+
+
 }
