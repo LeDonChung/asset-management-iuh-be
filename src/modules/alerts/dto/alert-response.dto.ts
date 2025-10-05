@@ -16,6 +16,8 @@ export class AssetResponseDto {
     name: string;
     @ApiProperty({ description: 'Mã tài sản cố định' })
     fixedCode: string;
+    @ApiProperty({ description: 'Mã RFID của tài sản', example: 'RFID-123456' })
+    rfid: string;
 }
 
 export class UserResponseDto {
