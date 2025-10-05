@@ -664,7 +664,8 @@ void setup() {
   isScan = false;
   isAlert = true;
   if(isAlert) {
-    setupSettingAlert();
+    setupWifi();
+    setupWebSocket();
   }
 }
 
