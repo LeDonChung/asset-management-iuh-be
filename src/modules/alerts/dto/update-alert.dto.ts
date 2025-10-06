@@ -18,6 +18,5 @@ export class UpdateAlertDto {
     })
     @IsString()
     @IsOptional()
-    @IsNotEmpty({ message: 'Note must not be empty if provided' })
-    note: string;
+    note?: string;
 }
