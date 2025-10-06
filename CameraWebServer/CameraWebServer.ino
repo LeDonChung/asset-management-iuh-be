@@ -15,7 +15,7 @@
 // WebSocket Configuration (thay thế BLE)
 // const char* socketServer = "34.158.42.23";
 // const int socketPort = 3001;
-const char* socketServer = "192.168.1.24";
+const char* socketServer = "192.168.1.12";
 const int socketPort = 3001;
 SocketIoClient webSocket;
 
@@ -288,11 +288,9 @@ void loop() {
   // Process WebSocket events
   webSocket.loop();
 
-  static int lastPirValue = LOW;  // ✅ Lưu trạng thái PIR trước đó
   int pirValue = digitalRead(PIR_PIN);
 
-  // ✅ Phát hiện edge: PIR chuyển từ LOW -> HIGH (motion detected)
-  if (pirValue == HIGH && lastPirValue == LOW) {
+  if (pirValue == HIGH) {
     Serial.println("🚨 Phát hiện chuyển động -> Gửi motion signal!");
 
     // Gửi tín hiệu motion qua WebSocket đến Arduino (để bật isMotionScan)
@@ -301,8 +299,6 @@ void loop() {
     Serial.println("⏳ Chờ lệnh chụp ảnh từ server...");
   }
   
-  lastPirValue = pirValue;  // ✅ Cập nhật trạng thái PIR
-
   // Check and reconnect WebSocket if needed
   checkWebSocketConnection();
 }

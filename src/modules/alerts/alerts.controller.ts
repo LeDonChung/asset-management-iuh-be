@@ -50,6 +50,8 @@ export class AlertsController {
     @ApiBody({ type: UpdateAlertDto })
     @ApiParam({ name: 'id', description: 'ID of the alert to resolve' })
     @ApiResponse({ status: 200, type: AlertResponseDto })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
     async resolveAlert(
         @Param('id') alertId: string,
         @Body() updateAlertDto: UpdateAlertDto,
