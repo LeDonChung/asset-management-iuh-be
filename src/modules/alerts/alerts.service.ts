@@ -225,6 +225,7 @@ export class AlertsService {
       status: alert.status,
       type: alert.type,
       createdAt: alert.createdAt,
+      deviceId: alert.deviceId,
       room: alert.room
         ? {
             id: alert.room.id,

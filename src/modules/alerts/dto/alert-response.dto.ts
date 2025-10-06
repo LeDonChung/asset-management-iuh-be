@@ -50,6 +50,10 @@ export class AlertResponseDto {
     @Expose()
     type: AlertType;
 
+    @ApiProperty({ example: "RFID-123456", description: "RFID tag of the asset" })
+    @Expose()
+    deviceId: string;
+
     @ApiProperty({
         example: {
             id: 'uuid-room-id',
