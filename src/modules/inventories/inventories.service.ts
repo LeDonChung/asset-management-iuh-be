@@ -37,6 +37,8 @@ import { SaveTempInventoryDto, AssetInventoryDetail } from "./dto/save-temp-inve
 import { TempInventoryResponseDto } from "./dto/temp-inventory-response.dto";
 import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
 import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-response.dto";
+import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
+import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
 
 @Injectable()
 export class InventoriesService {
@@ -846,6 +848,7 @@ export class InventoriesService {
     }
   }
 
+
   /**
    * Xóa kết quả kiểm kê tạm thời từ Redis
    */
@@ -881,6 +884,177 @@ export class InventoriesService {
       return results;
     } catch (error) {
       throw new BadRequestException(`Không thể lấy danh sách kết quả kiểm kê tạm thời: ${error.message}`);
+    }
+  }
+
+
+
+  /**
+   * Lưu kết quả kiểm kê tạm thời hàng xóm vào Redis
+   */
+  async saveTempAdjacentInventoryResults(
+    saveTempAdjacentDto: SaveTempAdjacentInventoryDto
+  ): Promise<TempAdjacentInventoryResponseDto> {
+    const { roomResults, note, ttlSeconds = 86400 } = saveTempAdjacentDto;
+
+    const savedRooms: any[] = [];
+
+    for (const roomResult of roomResults) {
+      const { roomId, result } = roomResult;
+      
+      // Tạo key cho Redis
+      const redisKey = `temp_adjacent:${roomId}`;
+
+      // Tính toán thống kê cho phòng này
+      const stats = this.calculateAdjacentInventoryStats(result);
+
+      // Tạo dữ liệu để lưu
+      const tempData = {
+        roomId,
+        result,
+        note,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+        totalAssets: result.length,
+        ...stats,
+      };
+
+      try {
+        // Lưu vào Redis với TTL
+        await this.redisService.set(redisKey, tempData, ttlSeconds);
+
+        // Lấy TTL hiện tại
+        const currentTtl = await this.redisService.ttl(redisKey);
+
+        savedRooms.push({
+          ...tempData,
+          ttl: currentTtl,
+        });
+      } catch (error) {
+        throw new BadRequestException(`Không thể lưu kết quả kiểm kê tạm thời cho phòng ${roomId}: ${error.message}`);
+      }
+    }
+
+    // Tính tổng thống kê
+    const totalStats = savedRooms.reduce((total, room) => ({
+      totalRooms: (total.totalRooms || 0) + 1,
+      totalAssets: (total.totalAssets || 0) + room.totalAssets,
+      matchedAssets: (total.matchedAssets || 0) + room.matchedAssets,
+      missingAssets: (total.missingAssets || 0) + room.missingAssets,
+      excessAssets: (total.excessAssets || 0) + room.excessAssets,
+      brokenAssets: (total.brokenAssets || 0) + room.brokenAssets,
+      needsRepairAssets: (total.needsRepairAssets || 0) + room.needsRepairAssets,
+      liquidationProposedAssets: (total.liquidationProposedAssets || 0) + room.liquidationProposedAssets,
+    }), {});
+
+    return {
+      roomResults: savedRooms,
+      note,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+      ...totalStats,
+    };
+  }
+
+  /**
+   * Tính toán thống kê từ kết quả kiểm kê hàng xóm
+   */
+  private calculateAdjacentInventoryStats(results: any[]) {
+    const stats = {
+      matchedAssets: 0,
+      missingAssets: 0,
+      excessAssets: 0,
+      brokenAssets: 0,
+      needsRepairAssets: 0,
+      liquidationProposedAssets: 0,
+    };
+
+    results.forEach((result) => {
+      switch (result.status) {
+        case 'MATCHED':
+          stats.matchedAssets += result.countedQuantity;
+          break;
+        case 'MISSING':
+          stats.missingAssets += result.countedQuantity;
+          break;
+        case 'EXCESS':
+          stats.excessAssets += result.countedQuantity;
+          break;
+        case 'BROKEN':
+          stats.brokenAssets += result.countedQuantity;
+          break;
+        case 'NEEDS_REPAIR':
+          stats.needsRepairAssets += result.countedQuantity;
+          break;
+        case 'LIQUIDATION_PROPOSED':
+          stats.liquidationProposedAssets += result.countedQuantity;
+          break;
+      }
+    });
+
+    return stats;
+  }
+
+  /**
+   * Lấy kết quả kiểm kê tạm thời hàng xóm từ Redis theo roomId
+   */
+  async getTempInventoryAdjacentResults(roomId: string): Promise<TempAdjacentInventoryResponseDto | null> {
+    const redisKey = `temp_adjacent:${roomId}`;
+
+    try {
+      const tempData = await this.redisService.get<TempAdjacentInventoryResponseDto>(redisKey);
+      
+      if (!tempData) {
+        return null;
+      }
+
+      // Lấy TTL hiện tại
+      const currentTtl = await this.redisService.ttl(redisKey);
+
+      return {
+        ...tempData,
+        ttl: currentTtl,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Không thể lấy kết quả kiểm kê tạm thời: ${error.message}`);
+    }
+  }
+
+  /**
+   * Xóa kết quả kiểm kê tạm thời hàng xóm từ Redis
+   */
+  async deleteTempAdjacentInventoryResults(roomId: string): Promise<boolean> {
+    const redisKey = `temp_adjacent:${roomId}`;
+
+    try {
+      return await this.redisService.del(redisKey);
+    } catch (error) {
+      throw new BadRequestException(`Không thể xóa kết quả kiểm kê tạm thời hàng xóm: ${error.message}`);
+    }
+  }
+
+  /**
+   * Lấy tất cả kết quả kiểm kê tạm thời hàng xóm
+   */
+  async getAllTempAdjacentInventoryResults(): Promise<TempAdjacentInventoryResponseDto[]> {
+    try {
+      const keys = await this.redisService.keys('temp_adjacent:*');
+      const results: TempAdjacentInventoryResponseDto[] = [];
+
+      for (const key of keys) {
+        const tempData = await this.redisService.get<TempAdjacentInventoryResponseDto>(key);
+        if (tempData) {
+          const currentTtl = await this.redisService.ttl(key);
+          results.push({
+            ...tempData,
+            ttl: currentTtl,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      throw new BadRequestException(`Không thể lấy danh sách kết quả kiểm kê tạm thời hàng xóm: ${error.message}`);
     }
   }
 
