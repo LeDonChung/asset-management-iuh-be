@@ -15,7 +15,7 @@
 // WebSocket Configuration (thay thế BLE)
 // const char* socketServer = "34.158.42.23";
 // const int socketPort = 3001;
-const char* socketServer = "192.168.1.12";
+const char* socketServer = "192.168.1.30";
 const int socketPort = 3001;
 SocketIoClient webSocket;
 
@@ -103,6 +103,9 @@ bool initCamera() {
     Serial.println("Camera init failed!");
     return false;
   }
+  Serial.print("Camera Ready! Use 'http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("' to connect");
   return true;
 }
 
