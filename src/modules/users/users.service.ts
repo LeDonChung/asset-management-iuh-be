@@ -205,7 +205,7 @@ export class UsersService {
                     updatedAt: FieldType.DATE,
                 },
                 defaultSorting: { field: "createdAt", direction: "DESC" as const },
-                relations: ["roles", "unit"],
+                relations: ["roles", "roles.permissions", "unit"],
             };
 
             // Handle quick filters for backward compatibility
