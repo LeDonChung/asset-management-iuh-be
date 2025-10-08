@@ -43,6 +43,7 @@ import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
 import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-response.dto";
 import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
 import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
+import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
 
 @ApiTags("Inventories")
 @Controller("api/v1/inventories")
@@ -420,24 +421,22 @@ export class InventoriesController {
     return this.inventoriesService.getRoomsInventoryStatus(assignmentId);
   }
 
-  @Get("room-inventory-results/:roomId/:assignmentId")
+  @Get("room-inventory-results/:roomId")
   @ApiOperation({ summary: "Lấy kết quả kiểm kê của một phòng cụ thể" })
   @ApiParam({ name: "roomId", description: "ID của phòng", type: "string" })
-  @ApiParam({ name: "assignmentId", description: "ID của phân công kiểm kê", type: "string" })
   @ApiResponse({
     status: 200,
-    description: "Kết quả kiểm kê của phòng",
-    type: [TempInventoryResponseDto],
+    description: "Kết quả kiểm kê của phòng với phân loại tài sản cố định và công cụ dụng cụ",
+    type: RoomInventoryResultResponseDto,
   })
   @ApiResponse({ status: 404, description: "Không tìm thấy phòng hoặc phân công kiểm kê" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth()
   async getRoomInventoryResults(
-    @Param("roomId") roomId: string,
-    @Param("assignmentId") assignmentId: string
-  ) {
-    return this.inventoriesService.getRoomInventoryResults(roomId, assignmentId);
+    @Param("roomId") roomId: string
+  ): Promise<RoomInventoryResultResponseDto> {
+    return this.inventoriesService.getRoomInventoryResults(roomId);
   }
 
   // === TEMPORARY ADJACENT INVENTORY RESULTS ENDPOINTS ===
