@@ -191,29 +191,64 @@ export class InventoriesService {
   async findAllWithFilter(
     filterDto: InventoryFilterDto
   ): Promise<PaginatedResponseDto<InventorySessionResponseDto>> {
-    // Define inventory-specific configuration
-    const config = {
-      searchFields: ["name", "period"],
-      fieldTypeMap: {
-        name: FieldType.TEXT,
-        period: FieldType.NUMBER,
-        status: FieldType.SELECT,
-        isGlobal: FieldType.BOOLEAN,
-        year: FieldType.NUMBER,
-        startDate: FieldType.DATE,
-        endDate: FieldType.DATE,
-      },
-      defaultSorting: { field: "createdAt", direction: "DESC" as const },
-      relations: ["fileUrls", "inventorySessionUnits"],
-    };
+    try {
+      // Define inventory-specific configuration
+      const config = {
+        searchFields: ["name"],
+        fieldTypeMap: {
+          name: FieldType.TEXT,
+          period: FieldType.NUMBER,
+          status: FieldType.SELECT,
+          isGlobal: FieldType.BOOLEAN,
+          year: FieldType.NUMBER,
+          startDate: FieldType.DATE,
+          endDate: FieldType.DATE,
+        },
+        defaultSorting: { field: "status", direction: "DESC" as const },
+        relations: ["fileUrls", "inventorySessionUnits"],
+      };
 
-    return FilterUtil.getFilteredResults(
-      this.inventorySessionRepository,
-      filterDto,
-      InventorySessionResponseDto,
-      config,
-      "inventory"
-    );
+      // Handle quick filters for backward compatibility
+      if (filterDto.statusFilter || filterDto.yearFilter) {
+        // Add quick filter conditions to the existing conditions
+        const quickFilterConditions = [];
+
+        if (filterDto.statusFilter && filterDto.statusFilter.length > 0) {
+          quickFilterConditions.push({
+            field: "status",
+            fieldType: "select",
+            operator: "in",
+            value: filterDto.statusFilter,
+          });
+        }
+
+        if (filterDto.yearFilter && filterDto.yearFilter.length > 0) {
+          quickFilterConditions.push({
+            field: "year",
+            fieldType: "number",
+            operator: "in",
+            value: filterDto.yearFilter,
+          });
+        }
+
+        // Merge with existing conditions
+        filterDto.conditions = [
+          ...(filterDto.conditions || []),
+          ...quickFilterConditions,
+        ];
+      }
+
+      return FilterUtil.getFilteredResults(
+        this.inventorySessionRepository,
+        filterDto,
+        InventorySessionResponseDto,
+        config,
+        "inventory"
+      );
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
   }
 
   async findOne(id: string): Promise<InventorySessionResponseDto> {
