@@ -87,15 +87,6 @@ pipeline {
                             ssh -i $KEY -o StrictHostKeyChecking=no $USER@$remoteHost << 'EOF'
                             set -e
         
-                            # Tạo thư mục deploy nếu chưa có và clone repository nếu chưa tồn tại
-                            if [ ! -d "${deployDir}" ]; then
-                                git clone -b ${BRANCH_DEPLOY} https://github.com/LeDonChung/asset-management-iuh-be.git ${deployDir}
-                            else
-                                cd ${deployDir}
-                                git fetch origin
-                                git checkout ${BRANCH_DEPLOY}
-                            fi
-        
                             cd ${deployDir}
         
                             # Login Docker Hub
