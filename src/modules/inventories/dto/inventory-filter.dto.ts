@@ -27,11 +27,4 @@ export class InventoryFilterDto extends BaseFilterDto {
   })
   @IsOptional()
   yearFilter?: number[];
-
-  @ApiPropertyOptional({ 
-    description: 'Quick filter by global scope',
-    type: Boolean
-  })
-  @IsOptional()
-  isGlobalFilter?: boolean;
 }

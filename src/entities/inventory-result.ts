@@ -5,6 +5,7 @@ import { InventoryGroupAssignment } from "./inventory-group-assignment";
 import { Asset } from "./asset.entity";
 import { FileUrl } from "./file-url.entity";
 import { Room } from "./room.entity";
+import { Expose } from "class-transformer";
 
 @Entity("inventory_results")
 export class InventoryResult {
@@ -61,9 +62,11 @@ export class InventoryResult {
 
     @ManyToOne(() => Asset, (asset) => asset.inventoryResults)
     @JoinColumn({ name: "assetId" })
+    @Expose()
     asset: Asset;
 
     @ManyToOne(() => Room, (room) => room.inventoryResults)
     @JoinColumn({ name: "roomId" })
+    @Expose()
     room: Room;
 }
