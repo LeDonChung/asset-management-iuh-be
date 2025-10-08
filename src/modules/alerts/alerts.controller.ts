@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards, UseInterceptors, UploadedFile } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiParam, ApiResponse, ApiTags, ApiOperation } from "@nestjs/swagger";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { AlertsService } from "./alerts.service";
 import { CreateAlertDto } from "./dto/create-alert.dto";
@@ -14,6 +14,8 @@ import { UserAlertResponseDto } from "./dto/user-alert-response.dto";
 import { UpdateAlertDto } from "./dto/update-alert.dto";
 import { UpdateAlertImageDto } from "./dto/update-alert-image.dto";
 import { FilesService } from "../files/files.service";
+import { AlertFilterDto } from "./dto/alert-filter.dto";
+import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 
 @ApiTags('Alerts')
 @Controller('api/v1/alerts')
@@ -21,6 +23,26 @@ export class AlertsController {
     constructor(
         private readonly alertsService: AlertsService,
     ) { }
+
+    @Post("filter")
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: "Lấy danh sách cảnh báo với bộ lọc và phân trang",
+        description: "Lọc cảnh báo theo trạng thái, ngày tạo từ-đến, loại cảnh báo với phân trang"
+    })
+    @ApiResponse({
+        status: 200,
+        description: "Danh sách cảnh báo với phân trang",
+        type: PaginatedResponseDto,
+    })
+    @ApiResponse({ status: 500, description: "Lỗi server" })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    async filter(
+        @Body() filterDto: AlertFilterDto
+    ): Promise<PaginatedResponseDto<AlertResponseDto>> {
+        return this.alertsService.findAllWithFilter(filterDto);
+    }
 
 
     @Post()

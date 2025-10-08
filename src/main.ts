@@ -35,7 +35,7 @@ async function bootstrap() {
         "http://localhost:3000",
         "http://localhost:3001", 
         "http://127.0.0.1:3000",
-        "http://172.236.138.143:3000", // Your VPS IP
+        "http://172.236.138.143:3000",
         "https://172.236.138.143:3000",
       ];
       
@@ -45,11 +45,10 @@ async function bootstrap() {
       }
       
       // Check if origin matches allowed origins or contains laztar.com
-      if (allowedOrigins.includes(origin) || origin.includes("laztar.com")) {
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn(`CORS blocked origin: ${origin}`);
-        callback(null, true); // Allow all origins for development
+        callback(null, true);
       }
     },
     credentials: true,

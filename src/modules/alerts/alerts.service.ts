@@ -3,7 +3,14 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Asset, FixedAsset } from "src/entities/asset.entity";
 import { Room } from "src/entities/room.entity";
 import { User } from "src/entities/user.entity";
-import { In, Repository } from "typeorm";
+import {
+  In,
+  Repository,
+  SelectQueryBuilder,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from "typeorm";
 import { CreateAlertDto } from "./dto/create-alert.dto";
 import { AlertResponseDto } from "./dto/alert-response.dto";
 import { Alert, AlertStatus, AlertType } from "src/entities/alert.entity";
@@ -14,6 +21,11 @@ import { RfidTag } from "src/entities/rfid-tag.entity";
 import { UpdateAlertDto } from "./dto/update-alert.dto";
 import { UpdateAlertImageDto } from "./dto/update-alert-image.dto";
 import { FilesService } from "../files/files.service";
+import { AlertFilterDto } from "./dto/alert-filter.dto";
+import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
+import { FieldType } from "src/common/dto/filter.dto";
+import { FilterUtil } from "src/common/utils/filter.util";
+import { UnitResponseDto } from "../units/dto/unit-response.dto";
 
 @Injectable()
 export class AlertsService {
@@ -68,7 +80,7 @@ export class AlertsService {
         relations: ["asset", "room", "resolver"],
       });
 
-      return this.transformToResponseDto(alertResponse);
+      return await this.transformToResponseDto(alertResponse);
     } catch (error) {
       console.error("Error creating alert:", error);
       throw error;
@@ -172,9 +184,11 @@ export class AlertsService {
       await this.alertRepository.save(alerts);
       const savedAlertData = await this.alertRepository.find({
         where: { id: In(alerts.map((a) => a.id)) },
-        relations: ["asset", "room", "resolver", "asset.rfidTag"],
+        relations: ["asset", "room", "resolver"],
       });
-      return savedAlertData.map((alert) => this.transformToResponseDto(alert));
+      
+      const responsePromises = savedAlertData.map((alert) => this.transformToResponseDto(alert));
+      return await Promise.all(responsePromises);
     } catch (error) {
       console.error("Error creating multiple alerts:", error);
       throw error;
@@ -187,9 +201,118 @@ export class AlertsService {
         relations: ["asset", "room", "resolver"],
         order: { createdAt: "DESC" },
       });
-      return alerts.map((alert) => this.transformToResponseDto(alert));
+      
+      const responsePromises = alerts.map((alert) => this.transformToResponseDto(alert));
+      return await Promise.all(responsePromises);
     } catch (error) {
       console.error("Error fetching alerts:", error);
+      throw error;
+    }
+  }
+
+  async findAllWithFilter(
+    filterDto: AlertFilterDto
+  ): Promise<PaginatedResponseDto<AlertResponseDto>> {
+    try {
+      const config = {
+        searchFields: [
+          'deviceId',
+          'note', 
+          'asset.name',
+          'asset.fixedCode',
+          'room.name',
+          'room.code',
+          'room.location'
+        ],
+        fieldTypeMap: {
+          status: FieldType.SELECT,
+          type: FieldType.SELECT,
+          createdAt: FieldType.DATE,
+          assetName: FieldType.TEXT,
+          assetCode: FieldType.TEXT,
+          roomName: FieldType.TEXT,
+          roomCode: FieldType.TEXT,
+          deviceId: FieldType.TEXT,
+        },
+        defaultSorting: { field: "createdAt", direction: "DESC" as const },
+        relations: ["asset", "room", "resolver"],
+      };
+
+      // Handle quick filters for backward compatibility
+      if (filterDto.statusFilter || filterDto.createdFrom || filterDto.createdTo) {
+        // Add quick filter conditions to the existing conditions
+        const quickFilterConditions = [];
+
+        if (filterDto.createdFrom) {
+          quickFilterConditions.push({
+            field: "createdAt",
+            fieldType: "date",
+            operator: "greaterThanOrEqual",
+            value: [filterDto.createdFrom],
+            dateFrom: filterDto.createdFrom,
+          });
+        }
+
+        if (filterDto.createdTo) {
+          quickFilterConditions.push({
+            field: "createdAt",
+            fieldType: "date", 
+            operator: "lessThanOrEqual",
+            value: [filterDto.createdTo],
+            dateTo: filterDto.createdTo,
+          });
+        }
+
+        if (filterDto.statusFilter) {
+          quickFilterConditions.push({
+            field: "status",
+            fieldType: "select",
+            operator: "equals",
+            value: [filterDto.statusFilter],
+          });
+        }
+
+        // Merge with existing conditions
+        filterDto.conditions = [
+          ...(filterDto.conditions || []),
+          ...quickFilterConditions,
+        ];
+      }
+
+      // Build query manually to handle async transformation
+      const queryBuilder = FilterUtil.buildBaseQuery(this.alertRepository, config, "alert");
+      
+      // Apply filters
+      FilterUtil.applyFiltersToQuery(queryBuilder, filterDto, config, "alert");
+
+      // Get pagination settings with defaults
+      const page = filterDto.pagination?.currentPage || 1;
+      const limit = filterDto.pagination?.itemsPerPage || 5;
+      const skip = (page - 1) * limit;
+
+      // Apply pagination
+      queryBuilder.skip(skip).take(limit);
+
+      // Execute query and get count
+      const [entities, total] = await queryBuilder.getManyAndCount();
+
+      // Transform to response DTOs with async support
+      const responsePromises = entities.map((alert) => this.transformToResponseDto(alert));
+      const data = await Promise.all(responsePromises);
+
+      // Calculate pagination metadata
+      const pagination = {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      };
+
+      return new PaginatedResponseDto(data, pagination);
+    } catch (error) {
+      console.error("Error in findAllWithFilter:", error);
       throw error;
     }
   }
@@ -211,15 +334,29 @@ export class AlertsService {
       alert.note = updateAlertDto.note;
       alert.resolverId = currentUser.id;
 
-      await this.alertRepository.save(alert);
-      return this.transformToResponseDto(alert);
+      const savedAlert = await this.alertRepository.save(alert);
+      return await this.transformToResponseDto(savedAlert);
     } catch (error) {
       console.error("Error resolving alert:", error);
       throw error;
     }
   }
 
-  private transformToResponseDto(alert: Alert): AlertResponseDto {
+  private async transformToResponseDto(alert: Alert): Promise<AlertResponseDto> {
+    let rfidId = null;
+
+    // If asset is a FixedAsset, try to get RFID from database
+    if (alert.asset && alert.asset.type === "FIXED_ASSET") {
+      try {
+        const rfidTag = await this.rfidTagRepository.findOne({
+          where: { assetId: alert.asset.id }
+        });
+        rfidId = rfidTag?.rfidId || null;
+      } catch (error) {
+        console.warn(`Could not fetch RFID for asset ${alert.asset.id}:`, error);
+      }
+    }
+
     return {
       id: alert.id,
       status: alert.status,
@@ -237,10 +374,7 @@ export class AlertsService {
             id: alert.asset.id,
             name: alert.asset.name,
             fixedCode: alert.asset.fixedCode,
-            rfid:
-              (alert.asset.type === "FIXED_ASSET"
-                ? (alert.asset as FixedAsset).rfidTag?.rfidId
-                : null) || null,
+            rfid: rfidId,
           }
         : undefined,
       resolver: alert.resolver
@@ -256,20 +390,23 @@ export class AlertsService {
     };
   }
 
-  async updateAlertsImage(file: Express.Multer.File, alertIds: string[]): Promise<void> {
+  async updateAlertsImage(
+    file: Express.Multer.File,
+    alertIds: string[]
+  ): Promise<void> {
     try {
       if (!file || !alertIds || alertIds.length === 0) {
         throw new Error("Invalid input");
       }
-      
+
       // Upload image using FilesService
       const uploadResult = await this.filesService.uploadImage(file);
       const imageUrl = uploadResult.url;
-      
+
       if (!imageUrl) {
         throw new Error("Image upload failed");
       }
-      
+
       // Update alerts with the uploaded image URL
       await this.alertRepository.update(
         { id: In(alertIds) },
@@ -280,6 +417,4 @@ export class AlertsService {
       throw error;
     }
   }
-
-
 }
