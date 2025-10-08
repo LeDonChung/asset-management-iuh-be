@@ -14,6 +14,10 @@ import { User } from "src/entities/user.entity";
 import { UnitStatus } from "src/common/shared/UnitStatus";
 import { UnitType } from "src/common/shared/UnitType";
 import { plainToInstance } from "class-transformer";
+import { UnitFilterDto } from "./dto/unit-filter.dto";
+import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
+import { FieldType } from "src/common/dto/filter.dto";
+import { FilterUtil } from "src/common/utils/filter.util";
 
 @Injectable()
 export class UnitsService {
@@ -100,10 +104,16 @@ export class UnitsService {
     }
   }
 
-  private async validateUnitHierarchy(childType: UnitType, parentType: UnitType): Promise<void> {
+  private async validateUnitHierarchy(
+    childType: UnitType,
+    parentType: UnitType
+  ): Promise<void> {
     // CAMPUS can have ADMIN_DEPT or USER_DEPT as children
     if (parentType === UnitType.CAMPUS) {
-      if (childType !== UnitType.ADMIN_DEPT && childType !== UnitType.USER_DEPT) {
+      if (
+        childType !== UnitType.ADMIN_DEPT &&
+        childType !== UnitType.USER_DEPT
+      ) {
         throw new BadRequestException({
           code: "INVALID_HIERARCHY",
           message: "CAMPUS can only have ADMIN_DEPT or USER_DEPT as children",
@@ -111,7 +121,10 @@ export class UnitsService {
       }
     }
     // ADMIN_DEPT and USER_DEPT cannot have children
-    else if (parentType === UnitType.ADMIN_DEPT || parentType === UnitType.USER_DEPT) {
+    else if (
+      parentType === UnitType.ADMIN_DEPT ||
+      parentType === UnitType.USER_DEPT
+    ) {
       throw new BadRequestException({
         code: "INVALID_HIERARCHY",
         message: "ADMIN_DEPT and USER_DEPT cannot have children",
@@ -132,7 +145,12 @@ export class UnitsService {
   async findRootUnits(): Promise<UnitResponseDto[]> {
     const units = await this.unitRepository.find({
       where: { parentUnitId: null },
-      relations: ["representative", "childUnits", "childUnits.childUnits", "rooms"],
+      relations: [
+        "representative",
+        "childUnits",
+        "childUnits.childUnits",
+        "rooms",
+      ],
       order: { createdAt: "DESC" },
     });
     return plainToInstance(UnitResponseDto, units, {
@@ -143,13 +161,13 @@ export class UnitsService {
   async findByType(type: UnitType): Promise<UnitResponseDto[]> {
     try {
       const units = await this.unitRepository.find({
-      where: { type },
-      relations: ["representative", "rooms"],
-      order: { createdAt: "DESC" },
-    });
-    return plainToInstance(UnitResponseDto, units, {
-      excludeExtraneousValues: true,
-    });
+        where: { type },
+        relations: ["representative", "rooms"],
+        order: { createdAt: "DESC" },
+      });
+      return plainToInstance(UnitResponseDto, units, {
+        excludeExtraneousValues: true,
+      });
     } catch (error) {
       console.error("Error fetching units by type:", error);
       throw error;
@@ -299,5 +317,61 @@ export class UnitsService {
     return plainToInstance(UnitResponseDto, unit, {
       excludeExtraneousValues: true,
     });
+  }
+
+  async findAllWithFilter(
+    filterDto: UnitFilterDto
+  ): Promise<PaginatedResponseDto<UnitResponseDto>> {
+    try {
+      const config = {
+        searchFields: ["name"],
+        fieldTypeMap: {
+          name: FieldType.TEXT,
+        },
+        defaultSorting: { field: "createdAt", direction: "DESC" as const },
+        relations: [],
+      };
+
+      // Handle quick filters for backward compatibility
+      if (filterDto.statusFilter || filterDto.unitTypeFilter) {
+        // Add quick filter conditions to the existing conditions
+        const quickFilterConditions = [];
+
+        if (filterDto.unitTypeFilter) {
+          quickFilterConditions.push({
+            field: "type",
+            fieldType: "select",
+            operator: "equals",
+            value: filterDto.unitTypeFilter,
+          });
+        }
+
+        if (filterDto.statusFilter) {
+          quickFilterConditions.push({
+            field: "status",
+            fieldType: "select",
+            operator: "equals",
+            value: filterDto.statusFilter,
+          });
+        }
+
+        // Merge with existing conditions
+        filterDto.conditions = [
+          ...(filterDto.conditions || []),
+          ...quickFilterConditions,
+        ];
+      }
+
+      return FilterUtil.getFilteredResults(
+        this.unitRepository,
+        filterDto,
+        UnitResponseDto,
+        config,
+        "unit"
+      );
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
   }
 }

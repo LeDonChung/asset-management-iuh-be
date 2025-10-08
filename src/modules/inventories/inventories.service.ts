@@ -37,6 +37,10 @@ import { SaveTempInventoryDto, AssetInventoryDetail } from "./dto/save-temp-inve
 import { TempInventoryResponseDto } from "./dto/temp-inventory-response.dto";
 import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
 import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-response.dto";
+import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
+import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
+import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
+import { InventoryResultResponseDto } from "./dto/inventory-result-response.dto";
 
 @Injectable()
 export class InventoriesService {
@@ -189,29 +193,64 @@ export class InventoriesService {
   async findAllWithFilter(
     filterDto: InventoryFilterDto
   ): Promise<PaginatedResponseDto<InventorySessionResponseDto>> {
-    // Define inventory-specific configuration
-    const config = {
-      searchFields: ["name", "period"],
-      fieldTypeMap: {
-        name: FieldType.TEXT,
-        period: FieldType.NUMBER,
-        status: FieldType.SELECT,
-        isGlobal: FieldType.BOOLEAN,
-        year: FieldType.NUMBER,
-        startDate: FieldType.DATE,
-        endDate: FieldType.DATE,
-      },
-      defaultSorting: { field: "createdAt", direction: "DESC" as const },
-      relations: ["fileUrls", "inventorySessionUnits"],
-    };
+    try {
+      // Define inventory-specific configuration
+      const config = {
+        searchFields: ["name"],
+        fieldTypeMap: {
+          name: FieldType.TEXT,
+          period: FieldType.NUMBER,
+          status: FieldType.SELECT,
+          isGlobal: FieldType.BOOLEAN,
+          year: FieldType.NUMBER,
+          startDate: FieldType.DATE,
+          endDate: FieldType.DATE,
+        },
+        defaultSorting: { field: "status", direction: "DESC" as const },
+        relations: ["fileUrls", "inventorySessionUnits"],
+      };
 
-    return FilterUtil.getFilteredResults(
-      this.inventorySessionRepository,
-      filterDto,
-      InventorySessionResponseDto,
-      config,
-      "inventory"
-    );
+      // Handle quick filters for backward compatibility
+      if (filterDto.statusFilter || filterDto.yearFilter) {
+        // Add quick filter conditions to the existing conditions
+        const quickFilterConditions = [];
+
+        if (filterDto.statusFilter && filterDto.statusFilter.length > 0) {
+          quickFilterConditions.push({
+            field: "status",
+            fieldType: "select",
+            operator: "in",
+            value: filterDto.statusFilter,
+          });
+        }
+
+        if (filterDto.yearFilter && filterDto.yearFilter.length > 0) {
+          quickFilterConditions.push({
+            field: "year",
+            fieldType: "number",
+            operator: "in",
+            value: filterDto.yearFilter,
+          });
+        }
+
+        // Merge with existing conditions
+        filterDto.conditions = [
+          ...(filterDto.conditions || []),
+          ...quickFilterConditions,
+        ];
+      }
+
+      return FilterUtil.getFilteredResults(
+        this.inventorySessionRepository,
+        filterDto,
+        InventorySessionResponseDto,
+        config,
+        "inventory"
+      );
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
   }
 
   async findOne(id: string): Promise<InventorySessionResponseDto> {
@@ -846,6 +885,7 @@ export class InventoriesService {
     }
   }
 
+
   /**
    * Xóa kết quả kiểm kê tạm thời từ Redis
    */
@@ -881,6 +921,177 @@ export class InventoriesService {
       return results;
     } catch (error) {
       throw new BadRequestException(`Không thể lấy danh sách kết quả kiểm kê tạm thời: ${error.message}`);
+    }
+  }
+
+
+
+  /**
+   * Lưu kết quả kiểm kê tạm thời hàng xóm vào Redis
+   */
+  async saveTempAdjacentInventoryResults(
+    saveTempAdjacentDto: SaveTempAdjacentInventoryDto
+  ): Promise<TempAdjacentInventoryResponseDto> {
+    const { roomResults, note, ttlSeconds = 86400 } = saveTempAdjacentDto;
+
+    const savedRooms: any[] = [];
+
+    for (const roomResult of roomResults) {
+      const { roomId, result } = roomResult;
+      
+      // Tạo key cho Redis
+      const redisKey = `temp_adjacent:${roomId}`;
+
+      // Tính toán thống kê cho phòng này
+      const stats = this.calculateAdjacentInventoryStats(result);
+
+      // Tạo dữ liệu để lưu
+      const tempData = {
+        roomId,
+        result,
+        note,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+        totalAssets: result.length,
+        ...stats,
+      };
+
+      try {
+        // Lưu vào Redis với TTL
+        await this.redisService.set(redisKey, tempData, ttlSeconds);
+
+        // Lấy TTL hiện tại
+        const currentTtl = await this.redisService.ttl(redisKey);
+
+        savedRooms.push({
+          ...tempData,
+          ttl: currentTtl,
+        });
+      } catch (error) {
+        throw new BadRequestException(`Không thể lưu kết quả kiểm kê tạm thời cho phòng ${roomId}: ${error.message}`);
+      }
+    }
+
+    // Tính tổng thống kê
+    const totalStats = savedRooms.reduce((total, room) => ({
+      totalRooms: (total.totalRooms || 0) + 1,
+      totalAssets: (total.totalAssets || 0) + room.totalAssets,
+      matchedAssets: (total.matchedAssets || 0) + room.matchedAssets,
+      missingAssets: (total.missingAssets || 0) + room.missingAssets,
+      excessAssets: (total.excessAssets || 0) + room.excessAssets,
+      brokenAssets: (total.brokenAssets || 0) + room.brokenAssets,
+      needsRepairAssets: (total.needsRepairAssets || 0) + room.needsRepairAssets,
+      liquidationProposedAssets: (total.liquidationProposedAssets || 0) + room.liquidationProposedAssets,
+    }), {});
+
+    return {
+      roomResults: savedRooms,
+      note,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+      ...totalStats,
+    };
+  }
+
+  /**
+   * Tính toán thống kê từ kết quả kiểm kê hàng xóm
+   */
+  private calculateAdjacentInventoryStats(results: any[]) {
+    const stats = {
+      matchedAssets: 0,
+      missingAssets: 0,
+      excessAssets: 0,
+      brokenAssets: 0,
+      needsRepairAssets: 0,
+      liquidationProposedAssets: 0,
+    };
+
+    results.forEach((result) => {
+      switch (result.status) {
+        case 'MATCHED':
+          stats.matchedAssets += result.countedQuantity;
+          break;
+        case 'MISSING':
+          stats.missingAssets += result.countedQuantity;
+          break;
+        case 'EXCESS':
+          stats.excessAssets += result.countedQuantity;
+          break;
+        case 'BROKEN':
+          stats.brokenAssets += result.countedQuantity;
+          break;
+        case 'NEEDS_REPAIR':
+          stats.needsRepairAssets += result.countedQuantity;
+          break;
+        case 'LIQUIDATION_PROPOSED':
+          stats.liquidationProposedAssets += result.countedQuantity;
+          break;
+      }
+    });
+
+    return stats;
+  }
+
+  /**
+   * Lấy kết quả kiểm kê tạm thời hàng xóm từ Redis theo roomId
+   */
+  async getTempInventoryAdjacentResults(roomId: string): Promise<TempAdjacentInventoryResponseDto | null> {
+    const redisKey = `temp_adjacent:${roomId}`;
+
+    try {
+      const tempData = await this.redisService.get<TempAdjacentInventoryResponseDto>(redisKey);
+      
+      if (!tempData) {
+        return null;
+      }
+
+      // Lấy TTL hiện tại
+      const currentTtl = await this.redisService.ttl(redisKey);
+
+      return {
+        ...tempData,
+        ttl: currentTtl,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Không thể lấy kết quả kiểm kê tạm thời: ${error.message}`);
+    }
+  }
+
+  /**
+   * Xóa kết quả kiểm kê tạm thời hàng xóm từ Redis
+   */
+  async deleteTempAdjacentInventoryResults(roomId: string): Promise<boolean> {
+    const redisKey = `temp_adjacent:${roomId}`;
+
+    try {
+      return await this.redisService.del(redisKey);
+    } catch (error) {
+      throw new BadRequestException(`Không thể xóa kết quả kiểm kê tạm thời hàng xóm: ${error.message}`);
+    }
+  }
+
+  /**
+   * Lấy tất cả kết quả kiểm kê tạm thời hàng xóm
+   */
+  async getAllTempAdjacentInventoryResults(): Promise<TempAdjacentInventoryResponseDto[]> {
+    try {
+      const keys = await this.redisService.keys('temp_adjacent:*');
+      const results: TempAdjacentInventoryResponseDto[] = [];
+
+      for (const key of keys) {
+        const tempData = await this.redisService.get<TempAdjacentInventoryResponseDto>(key);
+        if (tempData) {
+          const currentTtl = await this.redisService.ttl(key);
+          results.push({
+            ...tempData,
+            ttl: currentTtl,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      throw new BadRequestException(`Không thể lấy danh sách kết quả kiểm kê tạm thời hàng xóm: ${error.message}`);
     }
   }
 
@@ -1079,39 +1290,91 @@ export class InventoriesService {
     }));
   }
 
-  async getRoomInventoryResults(roomId: string, assignmentId: string) {
+  async getRoomInventoryResults(roomId: string): Promise<RoomInventoryResultResponseDto> {
     // Lấy kết quả kiểm kê đã submit cho phòng này
     const results = await this.inventoryResultRepository.find({
       where: { 
         roomId: roomId
       },
-      relations: ['asset', 'assignment', 'fileUrls']
+      relations: ['asset', 'asset.rfidTag', 'assignment', 'fileUrls', 'room']
     });
 
-    console.log('Raw results from database:', JSON.stringify(results, null, 2));
 
-    // Chuyển đổi sang format TempInventoryResponseDto
-    const mappedResults = results.map(result => {
-      console.log(`Result ${result.id} fileUrls:`, result.fileUrls);
-      return {
-        id: result.id,
-        assignmentId: result.assignmentId,
-        assetId: result.assetId,
-        systemQuantity: result.systemQuantity,
-        countedQuantity: result.countedQuantity,
-        scanMethod: result.scanMethod,
-        status: result.status,
-        imageUrls: result.fileUrls?.map(file => file.url) || [],
-        note: result.note,
-        createdAt: result.createdAt,
-        asset: result.asset,
-        roomId: result.roomId,
-        isSubmitted: true
-      };
+    // Chuyển đổi sang DTO
+    const inventoryResultDtos = plainToInstance(InventoryResultResponseDto, results, {
+      excludeExtraneousValues: true,
     });
 
-    console.log('Mapped results:', JSON.stringify(mappedResults, null, 2));
-    return mappedResults;
+    // Phân loại theo loại tài sản
+    const fixedAssets = inventoryResultDtos.filter(result => 
+      result.asset?.type === 'FIXED_ASSET'
+    );
+    
+    const toolsEquipment = inventoryResultDtos.filter(result => 
+      result.asset?.type === 'TOOLS_EQUIPMENT'
+    );
+
+    // Tính thống kê
+    const calculateStats = (items: InventoryResultResponseDto[]) => {
+      return items.reduce((stats, item) => {
+        stats.totalAssets += item.countedQuantity;
+        
+        switch (item.status) {
+          case 'MATCHED':
+            stats.matchedAssets += item.countedQuantity;
+            break;
+          case 'MISSING':
+            stats.missingAssets += item.countedQuantity;
+            break;
+          case 'EXCESS':
+            stats.excessAssets += item.countedQuantity;
+            break;
+          case 'BROKEN':
+            stats.brokenAssets += item.countedQuantity;
+            break;
+          case 'NEEDS_REPAIR':
+            stats.needsRepairAssets += item.countedQuantity;
+            break;
+          case 'LIQUIDATION_PROPOSED':
+            stats.liquidationProposedAssets += item.countedQuantity;
+            break;
+        }
+        
+        return stats;
+      }, {
+        totalAssets: 0,
+        matchedAssets: 0,
+        missingAssets: 0,
+        excessAssets: 0,
+        brokenAssets: 0,
+        needsRepairAssets: 0,
+        liquidationProposedAssets: 0,
+      });
+    };
+
+    const fixedAssetStats = calculateStats(fixedAssets);
+    const toolsStats = calculateStats(toolsEquipment);
+
+    const response: RoomInventoryResultResponseDto = {
+      roomId,
+      fixedAssets,
+      toolsEquipment,
+      summary: {
+        totalAssets: fixedAssets.length + toolsEquipment.length,
+        totalFixedAssets: fixedAssets.length,
+        totalToolsEquipment: toolsEquipment.length,
+        matchedAssets: fixedAssetStats.matchedAssets + toolsStats.matchedAssets,
+        missingAssets: fixedAssetStats.missingAssets + toolsStats.missingAssets,
+        excessAssets: fixedAssetStats.excessAssets + toolsStats.excessAssets,
+        brokenAssets: fixedAssetStats.brokenAssets + toolsStats.brokenAssets,
+        needsRepairAssets: fixedAssetStats.needsRepairAssets + toolsStats.needsRepairAssets,
+        liquidationProposedAssets: fixedAssetStats.liquidationProposedAssets + toolsStats.liquidationProposedAssets,
+      }
+    };
+
+    return plainToInstance(RoomInventoryResultResponseDto, response, {
+      excludeExtraneousValues: true,
+    });
   }
 
 }
