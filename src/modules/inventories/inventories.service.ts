@@ -39,6 +39,8 @@ import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
 import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-response.dto";
 import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
 import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
+import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
+import { InventoryResultResponseDto } from "./dto/inventory-result-response.dto";
 
 @Injectable()
 export class InventoriesService {
@@ -1288,39 +1290,91 @@ export class InventoriesService {
     }));
   }
 
-  async getRoomInventoryResults(roomId: string, assignmentId: string) {
+  async getRoomInventoryResults(roomId: string): Promise<RoomInventoryResultResponseDto> {
     // Lấy kết quả kiểm kê đã submit cho phòng này
     const results = await this.inventoryResultRepository.find({
       where: { 
         roomId: roomId
       },
-      relations: ['asset', 'assignment', 'fileUrls']
+      relations: ['asset', 'asset.rfidTag', 'assignment', 'fileUrls', 'room']
     });
 
-    console.log('Raw results from database:', JSON.stringify(results, null, 2));
 
-    // Chuyển đổi sang format TempInventoryResponseDto
-    const mappedResults = results.map(result => {
-      console.log(`Result ${result.id} fileUrls:`, result.fileUrls);
-      return {
-        id: result.id,
-        assignmentId: result.assignmentId,
-        assetId: result.assetId,
-        systemQuantity: result.systemQuantity,
-        countedQuantity: result.countedQuantity,
-        scanMethod: result.scanMethod,
-        status: result.status,
-        imageUrls: result.fileUrls?.map(file => file.url) || [],
-        note: result.note,
-        createdAt: result.createdAt,
-        asset: result.asset,
-        roomId: result.roomId,
-        isSubmitted: true
-      };
+    // Chuyển đổi sang DTO
+    const inventoryResultDtos = plainToInstance(InventoryResultResponseDto, results, {
+      excludeExtraneousValues: true,
     });
 
-    console.log('Mapped results:', JSON.stringify(mappedResults, null, 2));
-    return mappedResults;
+    // Phân loại theo loại tài sản
+    const fixedAssets = inventoryResultDtos.filter(result => 
+      result.asset?.type === 'FIXED_ASSET'
+    );
+    
+    const toolsEquipment = inventoryResultDtos.filter(result => 
+      result.asset?.type === 'TOOLS_EQUIPMENT'
+    );
+
+    // Tính thống kê
+    const calculateStats = (items: InventoryResultResponseDto[]) => {
+      return items.reduce((stats, item) => {
+        stats.totalAssets += item.countedQuantity;
+        
+        switch (item.status) {
+          case 'MATCHED':
+            stats.matchedAssets += item.countedQuantity;
+            break;
+          case 'MISSING':
+            stats.missingAssets += item.countedQuantity;
+            break;
+          case 'EXCESS':
+            stats.excessAssets += item.countedQuantity;
+            break;
+          case 'BROKEN':
+            stats.brokenAssets += item.countedQuantity;
+            break;
+          case 'NEEDS_REPAIR':
+            stats.needsRepairAssets += item.countedQuantity;
+            break;
+          case 'LIQUIDATION_PROPOSED':
+            stats.liquidationProposedAssets += item.countedQuantity;
+            break;
+        }
+        
+        return stats;
+      }, {
+        totalAssets: 0,
+        matchedAssets: 0,
+        missingAssets: 0,
+        excessAssets: 0,
+        brokenAssets: 0,
+        needsRepairAssets: 0,
+        liquidationProposedAssets: 0,
+      });
+    };
+
+    const fixedAssetStats = calculateStats(fixedAssets);
+    const toolsStats = calculateStats(toolsEquipment);
+
+    const response: RoomInventoryResultResponseDto = {
+      roomId,
+      fixedAssets,
+      toolsEquipment,
+      summary: {
+        totalAssets: fixedAssets.length + toolsEquipment.length,
+        totalFixedAssets: fixedAssets.length,
+        totalToolsEquipment: toolsEquipment.length,
+        matchedAssets: fixedAssetStats.matchedAssets + toolsStats.matchedAssets,
+        missingAssets: fixedAssetStats.missingAssets + toolsStats.missingAssets,
+        excessAssets: fixedAssetStats.excessAssets + toolsStats.excessAssets,
+        brokenAssets: fixedAssetStats.brokenAssets + toolsStats.brokenAssets,
+        needsRepairAssets: fixedAssetStats.needsRepairAssets + toolsStats.needsRepairAssets,
+        liquidationProposedAssets: fixedAssetStats.liquidationProposedAssets + toolsStats.liquidationProposedAssets,
+      }
+    };
+
+    return plainToInstance(RoomInventoryResultResponseDto, response, {
+      excludeExtraneousValues: true,
+    });
   }
 
 }
