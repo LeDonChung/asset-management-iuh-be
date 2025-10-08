@@ -94,7 +94,6 @@ pipeline {
                                 cd ${deployDir}
                                 git fetch origin
                                 git checkout ${BRANCH_DEPLOY}
-                                git pull origin ${BRANCH_DEPLOY}
                             fi
         
                             cd ${deployDir}
