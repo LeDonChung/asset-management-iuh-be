@@ -10,6 +10,10 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { errorResponse } from 'src/common/helpers/error-response';
 import { ERR_EXISTS, NOT_FOUND } from 'src/common/utils/error-type-response';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserFilterDto } from './dto/user-filter.dto';
+import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
+import { FieldType } from 'src/common/dto/filter.dto';
+import { FilterUtil } from 'src/common/utils/filter.util';
 
 @Injectable()
 export class UsersService {
@@ -75,6 +79,9 @@ export class UsersService {
                 user.roles = roles;
             }
 
+            user.createdAt = new Date();
+            user.updatedAt = new Date();
+            
             const savedUser = await this.userRepository.save(user);
 
             return this.transformToResponseDto(savedUser);
@@ -165,6 +172,9 @@ export class UsersService {
                 user.roles = [];
             }
         }
+
+        user.updatedAt = new Date();
+
         const updatedUser = await this.userRepository.save(user);
         return this.transformToResponseDto(updatedUser);
     }
@@ -176,6 +186,69 @@ export class UsersService {
         });
 
         return users.map(this.transformToResponseDto);
+    }
+
+    async findWithPagination(filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
+        try {
+            // Define user-specific configuration
+            const config = {
+                searchFields: ["username", "fullName", "email"],
+                fieldTypeMap: {
+                    username: FieldType.TEXT,
+                    fullName: FieldType.TEXT,
+                    email: FieldType.TEXT,
+                    status: FieldType.SELECT,
+                    unitId: FieldType.SELECT,
+                    phoneNumber: FieldType.TEXT,
+                    birthDate: FieldType.DATE,
+                    createdAt: FieldType.DATE,
+                    updatedAt: FieldType.DATE,
+                },
+                defaultSorting: { field: "createdAt", direction: "DESC" as const },
+                relations: ["roles", "unit"],
+            };
+
+            // Handle quick filters for backward compatibility
+            if (filterDto.unitFilter || filterDto.statusFilter) {
+                // Add quick filter conditions to the existing conditions
+                const quickFilterConditions = [];
+
+                if (filterDto.unitFilter) {
+                    quickFilterConditions.push({
+                        field: 'unitId',
+                        fieldType: 'select',
+                        operator: 'equals',
+                        value: [filterDto.unitFilter]
+                    });
+                }
+
+                if (filterDto.statusFilter) {
+                    quickFilterConditions.push({
+                        field: 'status',
+                        fieldType: 'select',
+                        operator: 'equals',
+                        value: [filterDto.statusFilter]
+                    });
+                }
+
+                // Merge with existing conditions
+                filterDto.conditions = [
+                    ...(filterDto.conditions || []),
+                    ...quickFilterConditions
+                ];
+            }
+
+            return FilterUtil.getFilteredResults(
+                this.userRepository,
+                filterDto,
+                UserResponseDto,
+                config,
+                "user"
+            );
+        } catch (error) {
+            console.error('Error finding users with pagination:', error);
+            throw error;
+        }
     }
 
     private transformToResponseDto(user: User): UserResponseDto {
@@ -210,7 +283,7 @@ export class UsersService {
     async findAllUserInventory(): Promise<UserResponseDto[]> {
         try {
             const inventoryRoleCodes = ["INVENTORY_COMMITTEE_HEAD", "INVENTORY_COMMITTEE_VICE_HEAD", "INVENTORY_COMMITTEE_SECRETARY", "INVENTORY_COMMITTEE_MEMBER", "INVENTORY_COMMITTEE_CHIEF_SECRETARY"];
-            
+
             const users = await this.userRepository
                 .createQueryBuilder('user')
                 .leftJoinAndSelect('user.roles', 'role')
@@ -218,7 +291,7 @@ export class UsersService {
                 .andWhere('role.code IN (:...roleCodes)', { roleCodes: inventoryRoleCodes })
                 .orderBy('user.createdAt', 'DESC')
                 .getMany();
-    
+
             return users.map(this.transformToResponseDto);
         } catch (error) {
             console.error('Error finding all user inventory:', error);
@@ -239,10 +312,10 @@ export class UsersService {
     async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
         try {
             const inventoryRoleCodes = [
-                "INVENTORY_COMMITTEE_HEAD", 
-                "INVENTORY_COMMITTEE_VICE_HEAD", 
-                "INVENTORY_COMMITTEE_SECRETARY", 
-                "INVENTORY_COMMITTEE_MEMBER", 
+                "INVENTORY_COMMITTEE_HEAD",
+                "INVENTORY_COMMITTEE_VICE_HEAD",
+                "INVENTORY_COMMITTEE_SECRETARY",
+                "INVENTORY_COMMITTEE_MEMBER",
                 "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
                 "INVENTORY_SUB_HEAD",
                 "INVENTORY_SUB_SECRETARY",
@@ -251,7 +324,7 @@ export class UsersService {
                 "INVENTORY_GROUP_MEMBER",
                 "INVENTORY_SUB_MEMBER"
             ];
-            
+
             const users = await this.userRepository
                 .createQueryBuilder('user')
                 .leftJoinAndSelect('user.roles', 'role')
@@ -265,6 +338,79 @@ export class UsersService {
             return users.map(this.transformToResponseDto);
         } catch (error) {
             console.error('Error finding all inventory committee users:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * findById
+     * @description Tìm user theo ID
+     * @param id ID user
+     * @returns Thông tin user
+     */
+    async findById(id: string): Promise<UserResponseDto> {
+        try {
+            const user = await this.userRepository.findOne({
+                where: { id, status: UserStatus.ACTIVE },
+                relations: ['roles', 'unit'],
+            });
+            if (!user) throw new Error('User not found');
+            return this.transformToResponseDto(user);
+        } catch (error) {
+            console.error('Error finding user by ID:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * lockAccountUser
+     * @description Khóa tài khoản user (cập nhật status thành LOCKED)
+     * @param id ID user
+     * @returns true nếu khóa thành công, false nếu không tìm thấy user
+     */
+    async updateStatus(id: string, status: UserStatus): Promise<boolean> {
+        try {
+            const user = await this.userRepository.findOne({ where: { id } });
+            if (!user) {
+                throw new NotFoundException(errorResponse(NOT_FOUND, `User not found`));
+            }
+
+            const result = await this.userRepository.update(user.id, { status, updatedAt: new Date() });
+
+            if (result.affected && result.affected > 0) {
+                return true;
+            } else {
+                throw new Error('Failed to update user status');
+            }
+        } catch (error) {
+            console.error('Error updating user status:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * deletedUser
+     * @description Xóa mềm user (cập nhật deletedAt và status thành DELETED)
+     * @param id ID user
+     * @returns true nếu xóa thành công, false nếu không tìm thấy user
+     */
+    async deletedUser(id: string): Promise<boolean> {
+        try {
+            const user = await this.userRepository.findOne({ where: { id } });
+            if (!user) {
+                throw new NotFoundException(errorResponse(NOT_FOUND, `User not found`));
+            }
+            await this.userRepository.update(user.id, { status: UserStatus.DELETED });
+
+            const result = await this.userRepository.softDelete(user.id);
+
+            if (result.affected && result.affected > 0) {
+                return true;
+            } else {
+                throw new Error('Failed to delete user');
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
             throw error;
         }
     }

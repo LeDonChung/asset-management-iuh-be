@@ -19,6 +19,7 @@ import { InventorySubModule } from './modules/inventory-sub/inventory-sub.module
 import { InventoryGroupModule } from './modules/inventory-group/inventory-group.module';
 import { AssetBooksModule } from './modules/asset-books/asset-books.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 
 @Module({
   imports: [
@@ -31,17 +32,17 @@ import { RedisModule } from './modules/redis/redis.module';
       {
         name: "short",
         ttl: 1000, // 1 second
-        limit: 3, // 3 requests per second
+        limit: 10000, // 3 requests per second
       },
       {
         name: "medium",
         ttl: 10000, // 10 seconds
-        limit: 20, // 20 requests per 10 seconds
+        limit: 10000, // 20 requests per 10 seconds
       },
       {
         name: "long",
         ttl: 60000, // 1 minute
-        limit: 100, // 100 requests per minute
+        limit: 10000, // 100 requests per minute
       },
     ]),
     PermissionsModule,
@@ -59,6 +60,7 @@ import { RedisModule } from './modules/redis/redis.module';
     InventoryGroupModule,
     AssetBooksModule,
     RedisModule,
+    AlertsModule,
   ],
   controllers: [],
   providers: [
