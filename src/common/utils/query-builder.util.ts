@@ -24,8 +24,8 @@ export class QueryBuilderUtil {
           return;
         }
 
-        const paramKey = `${condition.field}_${index}`;
-        const fieldPath = `${entityAlias}.${condition.field}`;
+        const paramKey = `${condition.field.replace('.', '_')}_${index}`;
+        const fieldPath = condition.field.includes('.') ? condition.field : `${entityAlias}.${condition.field}`;
 
         switch (condition.operator) {
           case FilterOperator.EQUALS:
@@ -193,7 +193,7 @@ export class QueryBuilderUtil {
         return;
       }
 
-      const fieldPath = `${entityAlias}.${sortConfig.field}`;
+      const fieldPath = sortConfig.field.includes('.') ? sortConfig.field : `${entityAlias}.${sortConfig.field}`;
       const direction = sortConfig.direction?.toUpperCase() as 'ASC' | 'DESC' || 'ASC';
 
       if (index === 0) {
@@ -221,8 +221,8 @@ export class QueryBuilderUtil {
 
     queryBuilder.andWhere(new Brackets(qb => {
       searchFields.forEach((field, index) => {
-        const fieldPath = `${entityAlias}.${field}`;
-        const paramKey = `globalSearch_${field}`;
+        const fieldPath = field.includes('.') ? field : `${entityAlias}.${field}`;
+        const paramKey = `globalSearch_${field.replace('.', '_')}`;
         
         if (index === 0) {
           qb.where(`${fieldPath} ILIKE :${paramKey}`, {
