@@ -40,9 +40,7 @@ services:
 
   # NestJS Application
   app:
-    build:
-      context: ledonchung/asset-management-iuh-be:latest
-      dockerfile: Dockerfile
+    image: ledonchung/asset-management-iuh-be:latest
     container_name: asset-management-backend
     restart: unless-stopped
     ports:
