@@ -86,7 +86,16 @@ pipeline {
                         sh """
                             ssh -i $KEY -o StrictHostKeyChecking=no $USER@$remoteHost << 'EOF'
                             set -e
-        
+
+                            # Tạo thư mục deploy nếu chưa có và clone repository nếu chưa tồn tại
+                            if [ ! -d "${deployDir}" ]; then
+                                git clone -b ${BRANCH_DEPLOY} https://github.com/LeDonChung/asset-management-iuh-be.git ${deployDir}
+                            else
+                                cd ${deployDir}
+                                git fetch origin
+                                git checkout ${BRANCH_DEPLOY}
+                            fi
+
                             cd ${deployDir}
         
                             # Login Docker Hub
@@ -103,14 +112,7 @@ pipeline {
         
                             # Start services (PostgreSQL, Redis, và Backend)
                             docker-compose -f docker-compose.yml --env-file .env up -d
-        
-                            # Đợi database khởi động và chạy migrations
-                            echo "⏳ Waiting for database to be ready..."
-                            sleep 30
                             
-                            # Chạy database migrations (nếu có)
-                            docker-compose exec -T app pnpm run migration:run || echo "⚠️ No migrations to run"
-        
                             # Show running containers
                             docker-compose ps
         
