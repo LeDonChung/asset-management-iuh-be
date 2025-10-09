@@ -204,7 +204,7 @@ export class AssetsController {
       "Bad request - Invalid file format, data, or quantity limit exceeded",
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_IMPORT_ASSET)
+  @Permissions(PermissionConstants.PERM_CREATE_ASSET)
   @ApiBearerAuth()
   async importFromExcel(
     @UploadedFile() file: Express.Multer.File,
