@@ -32,7 +32,6 @@ export class UsersController {
     @HttpCode(HttpStatus.OK)
     @ApiResponse({ status: 200, type: [UserResponseDto] })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_VIEW_USER)
     @ApiBearerAuth()
     async findAll(): Promise<UserResponseDto[]> {
         return this.usersService.findAll();
@@ -77,6 +76,7 @@ export class UsersController {
     @HttpCode(HttpStatus.OK)
     @ApiBody({ type: UpdateUserDto })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @Permissions(PermissionConstants.PERM_UPDATE_USER)
     @ApiBearerAuth()
     async updateUser(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
         return this.usersService.update(id, updateUserDto);
@@ -95,7 +95,6 @@ export class UsersController {
     })
     @ApiResponse({ status: 500, description: 'Lỗi server' })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_VIEW_USER)
     @ApiBearerAuth()
     async findWithPagination(@Body() filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
         return this.usersService.findWithPagination(filterDto);
@@ -107,7 +106,6 @@ export class UsersController {
     @ApiResponse({ status: 200, type: UserResponseDto })
     @ApiParam({ name: 'id', description: 'User ID' })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_VIEW_USER)
     @ApiBearerAuth()
     async findOne(@Param('id') id: string): Promise<UserResponseDto> {
         return this.usersService.findById(id);
@@ -132,7 +130,7 @@ export class UsersController {
     @ApiResponse({ status: 204, description: 'User deleted successfully' })
     @ApiParam({ name: 'id', description: 'User ID' })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
-    @Permissions(PermissionConstants.PERM_UPDATE_USER)
+    @Permissions(PermissionConstants.PERM_REMOVE_USER)
     @ApiBearerAuth()
     async remove(@Param('id') id: string): Promise<boolean> {
         return this.usersService.deletedUser(id);

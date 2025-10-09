@@ -282,62 +282,62 @@ private async seedUnits() {
         name: "Quản lý người dùng",
         permissions: [
           {
-            name: "Tạo người dùng",
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_USER,
+          },
+          {
+            name: "Tạo",
             code: PermissionConstants.PERM_CREATE_USER,
           },
           {
-            name: "Chỉnh sửa người dùng",
+            name: "Cập nhật",
             code: PermissionConstants.PERM_UPDATE_USER,
           },
           {
-            name: "Xóa người dùng",
+            name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_USER,
-          },
-          {
-            name: "Xem người dùng",
-            code: PermissionConstants.PERM_VIEW_USER,
-          },
+          }
         ],
       },
       {
         name: "Quản lý vai trò",
         permissions: [
           {
-            name: "Tạo vai trò",
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_ROLE,
+          },
+          {
+            name: "Tạo",
             code: PermissionConstants.PERM_CREATE_ROLE,
           },
           {
-            name: "Chỉnh sửa vai trò",
+            name: "Cập nhật",
             code: PermissionConstants.PERM_UPDATE_ROLE,
           },
           {
-            name: "Xóa vai trò",
+            name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_ROLE,
-          },
-          {
-            name: "Xem vai trò",
-            code: PermissionConstants.PERM_VIEW_ROLE,
-          },
+          }
         ],
       },
       {
         name: "Quản lý thể loại",
         permissions: [
           {
-            name: "Tạo thể loại",
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_CATEGORY,
+          },
+          {
+            name: "Tạo",
             code: PermissionConstants.PERM_CREATE_CATEGORY,
           },
           {
-            name: "Chỉnh sửa thể loại",
+            name: "Cập nhật",
             code: PermissionConstants.PERM_UPDATE_CATEGORY,
           },
           {
-            name: "Xóa thể loại",
+            name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_CATEGORY,
-          },
-          {
-            name: "Xem thể loại",
-            code: PermissionConstants.PERM_VIEW_CATEGORY,
           },
         ],
       },
@@ -345,169 +345,73 @@ private async seedUnits() {
         name: "Quản lý đơn vị",
         permissions: [
           {
-            name: "Tạo đơn vị",
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_UNIT,
+          },
+          {
+            name: "Tạo",
             code: PermissionConstants.PERM_CREATE_UNIT,
           },
           {
-            name: "Chỉnh sửa đơn vị",
+            name: "Cập nhật",
             code: PermissionConstants.PERM_UPDATE_UNIT,
           },
           {
-            name: "Xóa đơn vị",
+            name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_UNIT,
-          },
-          {
-            name: "Xem đơn vị",
-            code: PermissionConstants.PERM_VIEW_UNIT,
-          },
-        ],
-      },
-      {
-        name: "Quản lý phòng",
-        permissions: [
-          {
-            name: "Tạo phòng",
-            code: PermissionConstants.PERM_CREATE_ROOM,
-          },
-          {
-            name: "Chỉnh sửa phòng",
-            code: PermissionConstants.PERM_UPDATE_ROOM,
-          },
-          {
-            name: "Xóa phòng",
-            code: PermissionConstants.PERM_REMOVE_ROOM,
-          },
-          {
-            name: "Xem phòng",
-            code: PermissionConstants.PERM_VIEW_ROOM,
-          },
+          }
         ],
       },
       {
         name: "Quản lý tài sản",
         permissions: [
           {
-            name: "Chỉnh sửa tài sản",
-            code: PermissionConstants.PERM_UPDATE_ASSET,
-          },
-          {
-            name: "Xóa tài sản",
-            code: PermissionConstants.PERM_REMOVE_ASSET,
-          },
-          {
-            name: "Xem tài sản",
+            name: "Xem",
             code: PermissionConstants.PERM_VIEW_ASSET,
           },
           {
-            name: "Định danh tài sản",
-            code: PermissionConstants.PERM_IDENTIFY_ASSET,
+            name: "Tạo",
+            code: PermissionConstants.PERM_CREATE_ASSET,
           },
           {
-            name: "Cập nhật RFID",
-            code: PermissionConstants.PERM_UPDATE_RFID,
+            name: "Chỉnh sửa",
+            code: PermissionConstants.PERM_UPDATE_ASSET,
           },
           {
-            name: "Xóa RFID",
-            code: PermissionConstants.PERM_REMOVE_RFID,
-          },
-          {
-            name: "Nhập khẩu tài sản",
-            code: PermissionConstants.PERM_IMPORT_ASSET,
-          },
+            name: "Xóa",
+            code: PermissionConstants.PERM_REMOVE_ASSET,
+          }
         ],
       },
       {
         name: "Quản lý kiểm kê",
         permissions: [
           {
-            name: "Tạo kỳ kiểm kê",
+            name: "Tạo",
             code: PermissionConstants.PERM_CREATE_INVENTORY,
           },
           {
-            name: "Chỉnh sửa kỳ kiểm kê",
+            name: "Chỉnh sửa",
             code: PermissionConstants.PERM_UPDATE_INVENTORY,
           },
           {
-            name: "Xóa kỳ kiểm kê",
+            name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_INVENTORY,
           },
           {
-            name: "Xem kỳ kiểm kê",
+            name: "Xem kết quả kiểm kê",
+            code: PermissionConstants.PERM_VIEW_RESULT_INVENTORY,
+          },
+          {
+            name: "Xem",
             code: PermissionConstants.PERM_VIEW_INVENTORY,
           },
+          {
+            name: "Thực hiện kiểm kê",
+            code: PermissionConstants.PERM_PERFORM_INVENTORY,
+          }
         ],
-      },
-      {
-        name: "Quản lý nhóm kiểm kê",
-        permissions: [
-          {
-            name: "Tạo nhóm kiểm kê",
-            code: PermissionConstants.PERM_CREATE_INVENTORY_GROUP,
-          },
-          {
-            name: "Chỉnh sửa nhóm kiểm kê",
-            code: PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          },
-          {
-            name: "Xóa nhóm kiểm kê",
-            code: PermissionConstants.PERM_REMOVE_INVENTORY_GROUP,
-          },
-          {
-            name: "Xem nhóm kiểm kê",
-            code: PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          },
-          {
-            name: "Phân công nhóm kiểm kê",
-            code: PermissionConstants.PERM_ASSIGN_INVENTORY_GROUP,
-          },
-          {
-            name: "Quản lý thành viên nhóm",
-            code: PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
-          },
-        ],
-      },
-      {
-        name: "Quản lý tiểu ban kiểm kê",
-        permissions: [
-          {
-            name: "Tạo tiểu ban kiểm kê",
-            code: PermissionConstants.PERM_CREATE_INVENTORY_SUB,
-          },
-          {
-            name: "Chỉnh sửa tiểu ban kiểm kê",
-            code: PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
-          },
-          {
-            name: "Xóa tiểu ban kiểm kê",
-            code: PermissionConstants.PERM_REMOVE_INVENTORY_SUB,
-          },
-          {
-            name: "Xem tiểu ban kiểm kê",
-            code: PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          },
-          {
-            name: "Quản lý thành viên tiểu ban",
-            code: PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
-          },
-        ],
-      },
-      {
-        name: "Quản lý ban kiểm kê",
-        permissions: [
-          {
-            name: "Phê duyệt kết quả kiểm kê",
-            code: PermissionConstants.PERM_APPROVE_INVENTORY_RESULT,
-          },
-          {
-            name: "Xem xét báo cáo kiểm kê",
-            code: PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
-          },
-          {
-            name: "Hoàn thiện kiểm kê",
-            code: PermissionConstants.PERM_FINALIZE_INVENTORY,
-          },
-        ],
-      },
+      }
     ];
     for (const managerPermissionData of managerPermissions) {
       let managerPermission = await this.managerPermissionRepository.findOne({
@@ -555,7 +459,6 @@ private async seedUnits() {
       const permissions = await this.permissionRepository.find();
       adminRole.permissions = permissions;
       await this.roleRepository.save(adminRole);
-      this.logger.log("Created ADMIN role");
     } else {
       // Ensure ADMIN role has all permissions
       const permissions = await this.permissionRepository.find();
@@ -571,151 +474,29 @@ private async seedUnits() {
   private async createInventoryRoles() {
     const inventoryRoles = [
       {
-        name: "Trưởng ban kiểm kê",
+        name: "Ban kiểm kê",
         code: "INVENTORY_COMMITTEE_HEAD",
         permissions: [
+          PermissionConstants.PERM_PERFORM_INVENTORY,
           PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_CREATE_INVENTORY,
-          PermissionConstants.PERM_UPDATE_INVENTORY,
-          PermissionConstants.PERM_REMOVE_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_CREATE_INVENTORY_SUB,
-          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
-          PermissionConstants.PERM_REMOVE_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          PermissionConstants.PERM_CREATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_REMOVE_INVENTORY_GROUP,
-          PermissionConstants.PERM_APPROVE_INVENTORY_RESULT,
-          PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
-          PermissionConstants.PERM_FINALIZE_INVENTORY,
-          PermissionConstants.PERM_ASSIGN_INVENTORY_GROUP,
-          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
-          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+          PermissionConstants.PERM_VIEW_RESULT_INVENTORY,
         ],
       },
       {
-        name: "Phó trưởng ban kiểm kê",
-        code: "INVENTORY_COMMITTEE_VICE_HEAD",
+        name: "Thành viên kiểm kê",
+        code: "INVENTORY_COMMITTEE_MEMBER",
         permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
+          PermissionConstants.PERM_PERFORM_INVENTORY,
         ],
       },
       {
-        name: "Thư ký ban kiểm kê",
+        name: "Thư ký kiểm kê",
         code: "INVENTORY_COMMITTEE_SECRETARY",
         permissions: [
           PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_UPDATE_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_REVIEW_INVENTORY_REPORT,
-          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
-          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
+          PermissionConstants.PERM_VIEW_RESULT_INVENTORY,
         ],
-      },
-      {
-        name: "Ủy viên ban kiểm kê",
-        code: "INVENTORY_COMMITTEE_MEMBER",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-        ],
-      },
-      {
-        name: "Thư ký tổng hợp ban kiểm kê",
-        code: "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-        ],
-      },
-      {
-        name: "Trưởng tiểu ban kiểm kê",
-        code: "INVENTORY_SUB_HEAD",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          PermissionConstants.PERM_CREATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_REMOVE_INVENTORY_GROUP,
-          PermissionConstants.PERM_ASSIGN_INVENTORY_GROUP,
-          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
-          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
-          PermissionConstants.PERM_VIEW_ASSET,
-          PermissionConstants.PERM_IDENTIFY_ASSET,
-        ],
-      },
-      {
-        name: "Thư ký tiểu ban kiểm kê",
-        code: "INVENTORY_SUB_SECRETARY",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_UPDATE_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
-          PermissionConstants.PERM_MANAGE_SUB_MEMBERS,
-          PermissionConstants.PERM_VIEW_ASSET,
-          PermissionConstants.PERM_IDENTIFY_ASSET,
-        ],
-      },
-      {
-        name: "Thành viên tiểu ban kiểm kê",
-        code: "INVENTORY_SUB_MEMBER",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-        ],
-      },
-      {
-        name: "Trưởng nhóm kiểm kê",
-        code: "INVENTORY_GROUP_HEAD",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_MANAGE_GROUP_MEMBERS,
-          PermissionConstants.PERM_VIEW_ASSET,
-          PermissionConstants.PERM_UPDATE_ASSET,
-          PermissionConstants.PERM_IDENTIFY_ASSET,
-          PermissionConstants.PERM_UPDATE_RFID,
-        ],
-      },
-      {
-        name: "Thư ký nhóm kiểm kê",
-        code: "INVENTORY_GROUP_SECRETARY",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-          PermissionConstants.PERM_UPDATE_INVENTORY_GROUP,
-          PermissionConstants.PERM_VIEW_ASSET,
-          PermissionConstants.PERM_UPDATE_ASSET,
-          PermissionConstants.PERM_IDENTIFY_ASSET,
-          PermissionConstants.PERM_UPDATE_RFID,
-        ],
-      },
-      {
-        name: "Thành viên nhóm kiểm kê",
-        code: "INVENTORY_GROUP_MEMBER",
-        permissions: [
-          PermissionConstants.PERM_VIEW_INVENTORY,
-          PermissionConstants.PERM_VIEW_INVENTORY_SUB,
-          PermissionConstants.PERM_VIEW_INVENTORY_GROUP,
-        ],
-      },
+      }
     ];
 
     for (const roleData of inventoryRoles) {
@@ -776,78 +557,187 @@ private async seedUnits() {
 
   private async seedInventoryUsers() {
     const inventoryUsers = [
+      // Ban kiểm kê chính
       {
-        username: "truongban_kiemke",
-        fullName: "Nguyễn Văn Trưởng",
-        email: "truongban.kiemke@iuh.edu.vn",
+        username: "nguyen_xuan_hong",
+        fullName: "Nguyễn Xuân Hồng",
+        email: "nguyenxuanhong@iuh.edu.vn",
         roleCode: "INVENTORY_COMMITTEE_HEAD",
       },
       {
-        username: "thuky_ban_kiemke",
-        fullName: "Trần Thị Thư",
-        email: "thuky.ban.kiemke@iuh.edu.vn",
+        username: "nguyen_quy_tuan",
+        fullName: "Nguyễn Quý Tuấn",
+        email: "nguyenquytuan@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "pham_thi_que_minh",
+        fullName: "Phạm Thị Quế Minh",
+        email: "phamthiqueminh@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "nguyen_truong_thi",
+        fullName: "Nguyễn Trường Thi",
+        email: "nguyentruongthi@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "tran_thanh_hai",
+        fullName: "Trần Thanh Hải",
+        email: "tranthanhai@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "nguyen_thi_ha",
+        fullName: "Nguyễn Thị Hà",
+        email: "nguyenthiha@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "pham_viet_hung",
+        fullName: "Phạm Việt Hùng",
+        email: "phamviethung@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "pham_thi_thuy_trang",
+        fullName: "Phạm Thị Thúy Trang",
+        email: "phamthithuytrang@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      {
+        username: "dang_ich_hai",
+        fullName: "Đặng Ích Hải",
+        email: "dangichai@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_HEAD",
+      },
+      
+      // Tiểu ban 1: Công nghệ (CN Cơ khí, CN Động lực, CN May thời trang)
+      {
+        username: "diep_bao_tri",
+        fullName: "Điệp Bảo Trí",
+        email: "diepbaotri@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
+      },
+      {
+        username: "hoang_kim_phuoc",
+        fullName: "Hoàng Kim Phước",
+        email: "hoangkimphuoc@iuh.edu.vn",
         roleCode: "INVENTORY_COMMITTEE_SECRETARY",
       },
+
+      // Tiểu ban 2: Công nghệ (CN Điện, CN Điện tử, CN TT, CN Nhiệt - Lạnh)
       {
-        username: "truong_tieuban_1",
-        fullName: "Lê Văn Minh",
-        email: "truong.tieuban1@iuh.edu.vn",
-        roleCode: "INVENTORY_SUB_HEAD",
+        username: "nguyen_ngoc_son",
+        fullName: "Nguyễn Ngọc Sơn",
+        email: "nguyenngocson@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "thuky_tieuban_1",
-        fullName: "Phạm Thị Lan",
-        email: "thuky.tieuban1@iuh.edu.vn",
-        roleCode: "INVENTORY_SUB_SECRETARY",
+        username: "dao_thi_hong_hanh",
+        fullName: "Đào Thị Hồng Hạnh",
+        email: "daothihonghanh@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 3: Công nghệ (CN Hóa học, Viện CNSH&TP, Viện KHCN&QLMT, Viện Tài chính – Kế toán)
+      {
+        username: "nguyen_huu_trung",
+        fullName: "Nguyễn Hữu Trung",
+        email: "nguyenhuutrung@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "truong_tieuban_2",
-        fullName: "Hoàng Văn Đức",
-        email: "truong.tieuban2@iuh.edu.vn",
-        roleCode: "INVENTORY_SUB_HEAD",
+        username: "nao_thanh_an",
+        fullName: "Nào Thanh An",
+        email: "naothanhan@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 4: Khối Kinh tế
+      {
+        username: "hoang_xanh",
+        fullName: "Hoàng Xanh",
+        email: "hoangxanh@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "thuky_tieuban_2",
-        fullName: "Võ Thị Hương",
-        email: "thuky.tieuban2@iuh.edu.vn",
-        roleCode: "INVENTORY_SUB_SECRETARY",
+        username: "dam_thanh_tan",
+        fullName: "Đàm Thanh Tấn",
+        email: "damthanhtan@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 5: Khối Phòng, Ban
+      {
+        username: "nguyen_thi_mai_phuong",
+        fullName: "Nguyễn Thị Mai Phương",
+        email: "nguyenthimaiphuong@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "truong_nhom_1",
-        fullName: "Đặng Văn Hùng",
-        email: "truong.nhom1@iuh.edu.vn",
-        roleCode: "INVENTORY_GROUP_HEAD",
+        username: "lam_anh_thu",
+        fullName: "Lâm Anh Thư",
+        email: "lamanhthu@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 6: Thư viện, Nhà Xuất Bản
+      {
+        username: "mai_thi_tam",
+        fullName: "Mai Thị Tâm",
+        email: "maithitam@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "thuky_nhom_1",
-        fullName: "Ngô Thị Mai",
-        email: "thuky.nhom1@iuh.edu.vn",
-        roleCode: "INVENTORY_GROUP_SECRETARY",
+        username: "pham_ngan_trang",
+        fullName: "Phạm Ngân Trang",
+        email: "phamnhantrang@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 7: Nhà đất
+      {
+        username: "dinh_hong_nam",
+        fullName: "Đinh Hồng Nam",
+        email: "dinhhongnam@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "truong_nhom_2",
-        fullName: "Bùi Văn Tài",
-        email: "truong.nhom2@iuh.edu.vn",
-        roleCode: "INVENTORY_GROUP_HEAD",
+        username: "dang_vu_khoa",
+        fullName: "Đặng Vũ Khoa",
+        email: "dangvukhoa@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 2 (Cơ sở 2)
+      {
+        username: "le_duy_tho",
+        fullName: "Lê Duy Thọ",
+        email: "leduytho@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "thuky_nhom_2",
-        fullName: "Lý Thị Nga",
-        email: "thuky.nhom2@iuh.edu.vn",
-        roleCode: "INVENTORY_GROUP_SECRETARY",
+        username: "pham_thi_my_thuan",
+        fullName: "Phạm Thị Mỹ Thuận",
+        email: "phamthimythuan@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      },
+
+      // Tiểu ban 3 (Cơ sở 3)
+      {
+        username: "pham_thai_hoa",
+        fullName: "Phạm Thái Hòa",
+        email: "phamthaihoa@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_MEMBER",
       },
       {
-        username: "truong_nhom_3",
-        fullName: "Phan Văn Long",
-        email: "truong.nhom3@iuh.edu.vn",
-        roleCode: "INVENTORY_GROUP_HEAD",
-      },
-      {
-        username: "thuky_nhom_3",
-        fullName: "Đỗ Thị Yến",
-        email: "thuky.nhom3@iuh.edu.vn",
-        roleCode: "INVENTORY_GROUP_SECRETARY",
-      },
+        username: "phan_anh_tu",
+        fullName: "Phan Anh Tú",
+        email: "phananhtu@iuh.edu.vn",
+        roleCode: "INVENTORY_COMMITTEE_SECRETARY",
+      }
     ];
 
     const defaultPassword = "Inventory@123";
