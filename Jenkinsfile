@@ -41,7 +41,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -f Dockerfile -t ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ."
+                    sh "docker build -f Dockerfile -t ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} ."
                     sh "docker tag ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER} ${DOCKER_HUB_REPO}/${APP_NAME}:latest"
                 }
             }
@@ -94,6 +94,13 @@ pipeline {
                                 cd ${deployDir}
                                 git fetch origin
                                 git checkout ${BRANCH_DEPLOY}
+                                
+                                # Reset any local changes to avoid conflicts
+                                git reset --hard HEAD
+                                git clean -fd
+                                
+                                # Pull latest changes
+                                git pull origin ${BRANCH_DEPLOY}
                             fi
 
                             cd ${deployDir}
@@ -110,11 +117,54 @@ pipeline {
                             # Update docker-compose để sử dụng image mới
                             sed -i "s|image: ${DOCKER_HUB_REPO}/${APP_NAME}:.*|image: ${DOCKER_HUB_REPO}/${APP_NAME}:${env.BUILD_NUMBER}|g" docker-compose.yml
         
-                            # Start services (PostgreSQL, Redis, và Backend)
-                            docker-compose -f docker-compose.yml --env-file .env up -d
+                            # Stop existing containers and remove old containers
+                            docker-compose -f docker-compose.yml --env-file .env down --remove-orphans
                             
-                            # Show running containers
+                            # Remove old images
+                            docker rmi \$(docker images ${DOCKER_HUB_REPO}/${APP_NAME} -q) 2>/dev/null || true
+                            
+                            # Start services (PostgreSQL, Redis, và Backend) with force recreate
+                            docker-compose -f docker-compose.yml --env-file .env up -d --force-recreate
+                            
+                            # Wait for services to be ready
+                            sleep 15
+                            
+                            # Show running containers with image info
                             docker-compose ps
+                            echo "=== Verification: Container is using the correct image ==="
+                            docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | grep asset-management-backend
+                            
+                            # Verify the application is responding
+                            echo "=== Verification: Application health check ==="
+                            sleep 10  # Give more time for the app to start
+                            
+                            # Check if container is running
+                            if docker ps | grep -q "asset-management-backend"; then
+                                echo "✅ Backend container is running"
+                                
+                                # Test health endpoint
+                                if curl -f http://localhost:3000/health; then
+                                    echo "✅ Backend health check passed"
+                                    
+                                    # Check API status
+                                    echo "=== API Status Verification ==="
+                                    curl -s http://localhost:3000/api/status | head -n 5 || echo "API status endpoint not available"
+                                else
+                                    echo "❌ Backend health check failed"
+                                fi
+                            else
+                                echo "❌ Backend container is not running"
+                                docker logs asset-management-backend || true
+                            fi
+                            
+                            # Check database connection
+                            echo "=== Database Connection Check ==="
+                            if docker ps | grep -q "asset-management-db"; then
+                                echo "✅ Database container is running"
+                            else
+                                echo "❌ Database container is not running"
+                                docker logs asset-management-db || true
+                            fi
         
                             # Cleanup old images
                             docker image prune -f
@@ -146,6 +196,7 @@ EOF
             echo "📊 Swagger documentation available at http://${PRODUCTION_HOST}:3000/api"
             echo "🗄️ Database: PostgreSQL running on port 5432"
             echo "🚀 Redis: Cache server running on port 6379"
+            echo "🔢 Build Number: ${env.BUILD_NUMBER}"
         }
         failure {
             echo "❌ Backend deployment failed! Please check the logs."
