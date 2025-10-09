@@ -56,7 +56,6 @@ export class CategoriesController {
     type: CategoryResponseDto,
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_CATEGORY)
   @ApiBearerAuth()
   async findOne(@Param("id") id: string): Promise<CategoryResponseDto> {
     return await this.categoriesService.findOne(id);
@@ -70,7 +69,6 @@ export class CategoriesController {
     type: [CategoryResponseDto],
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_CATEGORY)
   @ApiBearerAuth()
   async findAll(): Promise<CategoryResponseDto[]> {
     return await this.categoriesService.findAll();
