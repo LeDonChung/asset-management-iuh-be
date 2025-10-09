@@ -13,10 +13,10 @@
 
 
 // WebSocket Configuration (thay thế BLE)
-// const char* socketServer = "34.158.42.23";
-// const int socketPort = 3001;
-const char* socketServer = "192.168.1.30";
+const char* socketServer = "34.158.42.23";
 const int socketPort = 3001;
+// const char* socketServer = "192.168.1.30";
+// const int socketPort = 3001;
 SocketIoClient webSocket;
 
 // Camera config (ESP32-CAM AI-Thinker)
