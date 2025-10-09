@@ -128,7 +128,6 @@ export class UnitsController {
   })
   @ApiResponse({ status: 500, description: "Internal server error" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findByType(@Param("type") type: UnitType): Promise<UnitResponseDto[]> {
     return this.unitsService.findByType(type);
@@ -194,6 +193,9 @@ export class UnitsController {
     status: 204,
     description: "Unit deleted successfully",
   })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_REMOVE_UNIT)
+  @ApiBearerAuth()
   async remove(@Param("id") id: string): Promise<void> {
     return this.unitsService.remove(id);
   }
