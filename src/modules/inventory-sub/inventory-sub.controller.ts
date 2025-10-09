@@ -47,7 +47,7 @@ export class InventorySubController {
   @ApiResponse({ status: 409, description: "Cơ sở đã có tiểu ban" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_CREATE_INVENTORY_SUB)
+  @Permissions(PermissionConstants.PERM_CREATE_INVENTORY)
   @ApiBearerAuth()
   async create(
     @Body() createInventorySubDto: CreateInventorySubDto,
@@ -67,7 +67,6 @@ export class InventorySubController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_SUB)
   @ApiBearerAuth()
   async findAll(
     @Query('sessionId') sessionId?: string,
@@ -87,7 +86,6 @@ export class InventorySubController {
   @ApiResponse({ status: 404, description: "Không tìm thấy tiểu ban" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_SUB)
   @ApiBearerAuth()
   async findOne(@Param('id') id: string): Promise<InventorySubResponseDto> {
     return this.inventorySubService.findOne(id);
@@ -105,7 +103,7 @@ export class InventorySubController {
   @ApiResponse({ status: 404, description: "Không tìm thấy tiểu ban" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY_SUB)
+  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY)
   @ApiBearerAuth()
   async update(
     @Param('id') id: string,
@@ -124,7 +122,7 @@ export class InventorySubController {
   @ApiResponse({ status: 400, description: "Không thể xóa tiểu ban đang hoạt động" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_REMOVE_INVENTORY_SUB)
+  @Permissions(PermissionConstants.PERM_REMOVE_INVENTORY)
   @ApiBearerAuth()
   async remove(@Param('id') id: string): Promise<void> {
     return this.inventorySubService.remove(id);
@@ -141,7 +139,6 @@ export class InventorySubController {
   @ApiResponse({ status: 404, description: "Không tìm thấy tiểu ban" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_SUB)
   @ApiBearerAuth()
   async findBySessionUnit(@Param('sessionUnitId') sessionUnitId: string): Promise<InventorySubResponseDto> {
     return this.inventorySubService.findBySessionUnit(sessionUnitId);

@@ -77,7 +77,6 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
   async getAssignedMembersInSession(
     @Param("id") inventorySessionId: string,
@@ -118,7 +117,6 @@ export class InventoriesController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
   async findAll(@Body() filterDto: InventoryFilterDto): Promise<PaginatedResponseDto<InventorySessionResponseDto>> {
     return this.inventoriesService.findAllWithFilter(filterDto);
@@ -133,7 +131,6 @@ export class InventoriesController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
   async findAllSimple(): Promise<InventorySessionResponseDto[]> {
     return this.inventoriesService.findAll();
@@ -150,7 +147,6 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
   async findOne(@Param("id") id: string): Promise<InventorySessionResponseDto> {
     return this.inventoriesService.findOne(id);
@@ -241,7 +237,6 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
   async getMembers(
     @Param("id") inventorySessionId: string
@@ -303,7 +298,6 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
   @ApiBearerAuth()
   async getMembersByRole(
     @Param("id") inventorySessionId: string,
@@ -324,6 +318,7 @@ export class InventoriesController {
   @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async saveTempInventoryResults(
     @Body() saveTempInventoryDto: SaveTempInventoryDto
@@ -342,6 +337,7 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy kết quả kiểm kê tạm thời" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async getTempInventoryResults(
     @Param("roomId") roomId: string
@@ -356,6 +352,7 @@ export class InventoriesController {
   @ApiResponse({ status: 204, description: "Kết quả kiểm kê tạm thời được xóa thành công" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async deleteTempInventoryResults(@Param("roomId") roomId: string): Promise<void> {
     await this.inventoriesService.deleteTempInventoryResults(roomId);
@@ -370,6 +367,7 @@ export class InventoriesController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async getAllTempInventoryResults(): Promise<TempInventoryResponseDto[]> {
     return this.inventoriesService.getAllTempInventoryResults();
@@ -388,6 +386,7 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy phân công kiểm kê hoặc tài sản" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async submitInventoryResult(
     @Body() submitDto: SubmitInventoryResultDto,
@@ -451,6 +450,7 @@ export class InventoriesController {
   @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async saveTempAdjacentInventoryResults(
     @Body() saveTempAdjacentDto: SaveTempAdjacentInventoryDto
@@ -469,6 +469,7 @@ export class InventoriesController {
   @ApiResponse({ status: 404, description: "Không tìm thấy kết quả kiểm kê tạm thời tài sản hàng xóm" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async getTempAdjacentInventoryResults(
     @Param("roomId") roomId: string
@@ -483,6 +484,7 @@ export class InventoriesController {
   @ApiResponse({ status: 204, description: "Kết quả kiểm kê tạm thời tài sản hàng xóm được xóa thành công" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async deleteTempAdjacentInventoryResults(@Param("roomId") roomId: string): Promise<void> {
     await this.inventoriesService.deleteTempAdjacentInventoryResults(roomId);
@@ -497,6 +499,7 @@ export class InventoriesController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
   @ApiBearerAuth()
   async getAllTempAdjacentInventoryResults(): Promise<TempAdjacentInventoryResponseDto[]> {
     return this.inventoriesService.getAllTempAdjacentInventoryResults();
