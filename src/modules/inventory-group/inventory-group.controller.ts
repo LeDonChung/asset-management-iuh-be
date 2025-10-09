@@ -46,7 +46,7 @@ export class InventoryGroupController {
   @ApiResponse({ status: 404, description: "Không tìm thấy tiểu ban hoặc đơn vị" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_CREATE_INVENTORY_GROUP)
+  @Permissions(PermissionConstants.PERM_CREATE_INVENTORY)
   @ApiBearerAuth()
   async create(
     @Body() createInventoryGroupDto: CreateInventoryGroupDto,
@@ -66,7 +66,6 @@ export class InventoryGroupController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_GROUP)
   @ApiBearerAuth()
   async findAll(
     @Query('subId') subId?: string,
@@ -86,7 +85,6 @@ export class InventoryGroupController {
   @ApiResponse({ status: 404, description: "Không tìm thấy nhóm" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_GROUP)
   @ApiBearerAuth()
   async findOne(@Param('id') id: string): Promise<InventoryGroupResponseDto> {
     return this.inventoryGroupService.findOne(id);
@@ -104,7 +102,7 @@ export class InventoryGroupController {
   @ApiResponse({ status: 404, description: "Không tìm thấy nhóm" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY_GROUP)
+  @Permissions(PermissionConstants.PERM_UPDATE_INVENTORY)
   @ApiBearerAuth()
   async update(
     @Param('id') id: string,
@@ -123,7 +121,7 @@ export class InventoryGroupController {
   @ApiResponse({ status: 400, description: "Không thể xóa nhóm đang hoạt động" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_REMOVE_INVENTORY_GROUP)
+  @Permissions(PermissionConstants.PERM_REMOVE_INVENTORY)
   @ApiBearerAuth()
   async remove(@Param('id') id: string): Promise<void> {
     return this.inventoryGroupService.remove(id);
@@ -140,7 +138,6 @@ export class InventoryGroupController {
   @ApiResponse({ status: 404, description: "Không tìm thấy tiểu ban" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_GROUP)
   @ApiBearerAuth()
   async findBySub(@Param('subId') subId: string): Promise<InventoryGroupResponseDto[]> {
     return this.inventoryGroupService.findBySub(subId);
@@ -157,7 +154,6 @@ export class InventoryGroupController {
   @ApiResponse({ status: 404, description: "Không tìm thấy nhóm" })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY_GROUP)
   @ApiBearerAuth()
   async getAssignments(@Param('id') id: string): Promise<InventoryGroupResponseDto> {
     return this.inventoryGroupService.findOne(id);
