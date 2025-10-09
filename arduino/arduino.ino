@@ -17,7 +17,7 @@ String deviceType = "rfid";
 char* ssid = "Ruby tu C13 den C25";
 char* password = "VietnhatC136868";
 
-char* server = "192.168.1.30";
+char* server = "34.158.42.23";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 
