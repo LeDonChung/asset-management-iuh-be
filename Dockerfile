@@ -1,6 +1,10 @@
 # Use the official Node.js 20 LTS Alpine image for smaller size
 FROM node:20-alpine AS base
 
+# Add build argument for build number
+ARG BUILD_NUMBER=unknown
+ENV BUILD_NUMBER=${BUILD_NUMBER}
+
 # Set working directory
 WORKDIR /app
 
