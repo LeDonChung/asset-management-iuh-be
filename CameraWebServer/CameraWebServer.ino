@@ -6,6 +6,9 @@
 #include <ArduinoJson.h>
 #include <base64.h>
 
+// Forward declaration for camera server function from app_httpd.cpp
+void startCameraServer();
+
 // =================== CẤU HÌNH =====================
 #define PIR_PIN 15              // Chân PIR
 #define WIFI_SSID "Ruby tu C13 den C25"
@@ -13,10 +16,10 @@
 
 
 // WebSocket Configuration (thay thế BLE)
-// const char* socketServer = "34.158.42.23";
-// const int socketPort = 3001;
-const char* socketServer = "192.168.1.30";
+const char* socketServer = "34.158.42.23";
 const int socketPort = 3001;
+// const char* socketServer = "192.168.1.30";
+// const int socketPort = 3001;
 SocketIoClient webSocket;
 
 // Camera config (ESP32-CAM AI-Thinker)
@@ -108,6 +111,8 @@ bool initCamera() {
   Serial.println("' to connect");
   return true;
 }
+
+// =================== IMAGE CAPTURE AND SOCKET FUNCTIONS =====================
 
 
 // Các hàm HTTP upload cũ đã được thay thế bằng Socket communication
@@ -280,10 +285,18 @@ void setup() {
     while (true) delay(100);
   }
 
+  // Start camera web server
+  startCameraServer();
+
   // Khởi tạo WebSocket thay vì BLE
   setupWebSocket();
 
   Serial.println("Hệ thống sẵn sàng");
+  Serial.println("==================================");
+  Serial.printf("📹 Camera Stream: http://%s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("📸 Single Capture: http://%s/capture\n", WiFi.localIP().toString().c_str());
+  Serial.printf("🔗 Socket Server: %s:%d\n", socketServer, socketPort);
+  Serial.println("==================================");
 }
 
 
@@ -292,6 +305,7 @@ void loop() {
   webSocket.loop();
 
   int pirValue = digitalRead(PIR_PIN);
+  Serial.printf("PIR Value: %d\n", pirValue);
 
   if (pirValue == HIGH) {
     Serial.println("🚨 Phát hiện chuyển động -> Gửi motion signal!");
@@ -300,8 +314,12 @@ void loop() {
     sendCommandStartMotionScan();
 
     Serial.println("⏳ Chờ lệnh chụp ảnh từ server...");
+
+    
   }
-  
+
+  // Delay 200 milliseconds
+  delay(200);
   // Check and reconnect WebSocket if needed
   checkWebSocketConnection();
 }
