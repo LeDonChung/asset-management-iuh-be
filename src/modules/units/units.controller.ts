@@ -32,11 +32,16 @@ import { PermissionConstants } from "src/common/utils/permission.constant";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import { UnitFilterDto } from "./dto/unit-filter.dto";
+import { RoomsService } from "../rooms/rooms.service";
+import { RoomResponseDto } from "../rooms/dto/room-response.dto";
 
 @ApiTags("Units")
 @Controller("api/v1/units")
 export class UnitsController {
-  constructor(private readonly unitsService: UnitsService) {}
+  constructor(
+    private readonly unitsService: UnitsService,
+    private readonly roomsService: RoomsService
+  ) {}
 
   @Post("filter")
   @ApiOperation({
@@ -54,6 +59,24 @@ export class UnitsController {
     @Body() filterDto: UnitFilterDto
   ): Promise<PaginatedResponseDto<UnitResponseDto>> {
     return this.unitsService.findAllWithFilter(filterDto);
+  }
+
+  @Get(":id/rooms")
+  @ApiOperation({ summary: "Get all rooms of a unit" })
+  @ApiParam({ name: "id", description: "Unit UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "List of rooms retrieved successfully",
+    type: [RoomResponseDto],
+  })
+  @ApiResponse({ status: 404, description: "Unit not found" })
+  @ApiResponse({ status: 500, description: "Internal server error" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async findRoomsByUnitId(
+    @Param("id") unitId: string
+  ): Promise<RoomResponseDto[]> {
+    return this.roomsService.findByUnitId(unitId);
   }
 
   @Get(":parentId/children")
@@ -132,6 +155,7 @@ export class UnitsController {
   async findByType(@Param("type") type: UnitType): Promise<UnitResponseDto[]> {
     return this.unitsService.findByType(type);
   }
+
 
   @Get("campuses")
   @ApiOperation({ summary: "Get all campuses" })

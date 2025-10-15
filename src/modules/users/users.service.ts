@@ -205,20 +205,21 @@ export class UsersService {
                     updatedAt: FieldType.DATE,
                 },
                 defaultSorting: { field: "createdAt", direction: "DESC" as const },
-                relations: ["roles", "unit"],
+                relations: ["unit"],
             };
 
-            // Handle quick filters for backward compatibility
             if (filterDto.unitFilter || filterDto.statusFilter) {
-                // Add quick filter conditions to the existing conditions
                 const quickFilterConditions = [];
 
+                // campus filter
                 if (filterDto.unitFilter) {
+                    const allUnitIds = await this.getAllChildUnitIds(filterDto.unitFilter);
+                    
                     quickFilterConditions.push({
                         field: 'unitId',
                         fieldType: 'select',
-                        operator: 'equals',
-                        value: [filterDto.unitFilter]
+                        operator: 'in',
+                        value: allUnitIds
                     });
                 }
 
@@ -238,17 +239,81 @@ export class UsersService {
                 ];
             }
 
-            return FilterUtil.getFilteredResults(
+            const result = await FilterUtil.getFilteredResults(
                 this.userRepository,
                 filterDto,
                 UserResponseDto,
                 config,
                 "user"
             );
+
+            if (result.data && result.data.length > 0) {
+                const userIds = result.data.map((user: any) => user.id);
+                const usersWithRoles = await this.userRepository.find({
+                    where: { id: In(userIds) },
+                    relations: ['roles', 'roles.permissions'],
+                });
+
+                const rolesMap = new Map(
+                    usersWithRoles.map(user => [
+                        user.id, 
+                        user.roles?.map(role => ({
+                            id: role.id,
+                            name: role.name,
+                            code: role.code,
+                            permissions: role.permissions?.map(permission => ({
+                                id: permission.id,
+                                name: permission.name,
+                                code: permission.code,
+                            })) ?? [],
+                            createdAt: role.createdAt,
+                            updatedAt: role.updatedAt,
+                        })) ?? []
+                    ])
+                );
+
+                result.data = result.data.map((user: any) => ({
+                    ...user,
+                    roles: rolesMap.get(user.id) || []
+                }));
+            }
+
+            return result;
         } catch (error) {
             console.error('Error finding users with pagination:', error);
             throw error;
         }
+    }
+
+    /**
+     * Get all child unit IDs recursively including the root unit itself
+     * @param rootUnitId The root unit ID to start from
+     * @returns Array of all unit IDs in the hierarchy
+     */
+    private async getAllChildUnitIds(rootUnitId: string): Promise<string[]> {
+        const unitIds = new Set<string>();
+        
+        // Add the root unit itself
+        unitIds.add(rootUnitId);
+        
+        // Recursive function to get all children
+        const getChildrenRecursively = async (unitId: string) => {
+            const childUnits = await this.unitRepository.find({
+                where: { parentUnitId: unitId },
+                select: ['id']
+            });
+            
+            for (const child of childUnits) {
+                if (!unitIds.has(child.id)) {
+                    unitIds.add(child.id);
+                    // Recursively get children of this child
+                    await getChildrenRecursively(child.id);
+                }
+            }
+        };
+        
+        await getChildrenRecursively(rootUnitId);
+        return Array.from(unitIds);
     }
 
     private transformToResponseDto(user: User): UserResponseDto {
@@ -338,6 +403,29 @@ export class UsersService {
             return users.map(this.transformToResponseDto);
         } catch (error) {
             console.error('Error finding all inventory committee users:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Lấy tất cả users chưa thuộc unit nào
+     * @description Trả về danh sách users có unitId là null hoặc undefined
+     * @returns Danh sách users chưa thuộc unit nào
+     */
+    async findUsersWithoutUnit(): Promise<UserResponseDto[]> {
+        try {
+            const users = await this.userRepository.find({
+                where: [
+                    { unitId: null, status: UserStatus.ACTIVE },
+                    { unit: null, status: UserStatus.ACTIVE }
+                ],
+                relations: ['roles', 'roles.permissions'],
+                order: { fullName: 'ASC' }
+            });
+
+            return users.map(this.transformToResponseDto);
+        } catch (error) {
+            console.error('Error finding users without unit:', error);
             throw error;
         }
     }
