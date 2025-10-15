@@ -13,6 +13,7 @@ import { UnitType } from "src/common/shared/UnitType";
 import { Unit } from "src/entities/unit.entity";
 import { Room } from "src/entities/room.entity";
 import { RoomStatus } from "src/common/shared/RoomStatus";
+import { RoleBase } from "src/common/utils/role.enum";
 
 @Injectable()
 export class SeedingService implements OnModuleInit {
@@ -445,28 +446,25 @@ private async seedUnits() {
   }
 
   private async seedRoles() {
-    // Create ADMIN role
-    let adminRole = await this.roleRepository.findOne({
-      where: { code: "ADMIN" },
-      relations: ["permissions"],
-    });
-
-    if (!adminRole) {
-      adminRole = this.roleRepository.create({
-        name: "Quản trị viên",
-        code: "ADMIN",
+    const roleBase = [RoleBase.ADMIN, RoleBase.USER_DEPT, RoleBase.ADMIN_DEPT];
+    for (const roleCode of roleBase) {
+      let role = await this.roleRepository.findOne({
+        where: { code: roleCode },
       });
-      const permissions = await this.permissionRepository.find();
-      adminRole.permissions = permissions;
-      await this.roleRepository.save(adminRole);
-    } else {
-      // Ensure ADMIN role has all permissions
-      const permissions = await this.permissionRepository.find();
-      adminRole.permissions = permissions;
-      await this.roleRepository.save(adminRole);
-      this.logger.log("Updated ADMIN role with all permissions");
+      if (!role) {
+        var roleCreate = this.roleRepository.create({
+          name: roleCode === RoleBase.ADMIN ? "Quản trị viên" : roleCode === RoleBase.USER_DEPT ? "Trưởng đơn vị sử dụng" : "Trưởng phòng quản trị",
+          code: roleCode,
+        });
+        if(roleCode === RoleBase.ADMIN) {
+          const permissions = await this.permissionRepository.find();
+          roleCreate.permissions = permissions;
+        }
+        roleCreate = await this.roleRepository.save(roleCreate);
+        
+      }
     }
-
+    
     // Create inventory committee roles
     await this.createInventoryRoles();
   }
@@ -740,7 +738,7 @@ private async seedUnits() {
       }
     ];
 
-    const defaultPassword = "Inventory@123";
+    const defaultPassword = "Admin@123";
     const hashedPassword = await bcrypt.hash(defaultPassword, 12);
 
     for (const userData of inventoryUsers) {
