@@ -22,6 +22,10 @@ export class RoomResponseDto {
   floor: string;
 
   @Expose()
+  @ApiProperty({ description: 'Room name' })
+  name?: string;
+
+  @Expose()
   @ApiProperty({ description: 'Room number' })
   roomNumber: string;
 
