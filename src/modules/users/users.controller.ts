@@ -37,6 +37,7 @@ export class UsersController {
         return this.usersService.findAll();
     }
 
+
     @Get('inventory')
     @HttpCode(HttpStatus.OK)
     @ApiResponse({ status: 200, type: [UserResponseDto] })
@@ -61,6 +62,23 @@ export class UsersController {
     @ApiBearerAuth()
     async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
         return this.usersService.findAllInventoryCommitteeUsers();
+    }
+
+    @Get('without-unit')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ 
+        summary: 'Lấy tất cả users chưa thuộc unit nào',
+        description: 'Trả về danh sách users có unitId là null hoặc undefined' 
+    })
+    @ApiResponse({ 
+        status: 200, 
+        type: [UserResponseDto],
+        description: 'Danh sách users chưa thuộc unit nào'
+    })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    async findUsersWithoutUnit(): Promise<UserResponseDto[]> {
+        return this.usersService.findUsersWithoutUnit();
     }
 
     /**
@@ -135,4 +153,6 @@ export class UsersController {
     async remove(@Param('id') id: string): Promise<boolean> {
         return this.usersService.deletedUser(id);
     }
+
+
 }

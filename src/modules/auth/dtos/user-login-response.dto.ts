@@ -17,4 +17,6 @@ export class UserLoginResponse {
   roles: string[];
   @ApiProperty({ example: "true", description: "Is the user active?" })
   permissions: string[];
+  @ApiProperty({ example: "1", description: "Unit ID" })
+  unitId: string;
 }

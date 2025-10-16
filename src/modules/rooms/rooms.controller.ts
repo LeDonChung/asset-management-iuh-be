@@ -9,6 +9,8 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Query,
+  Put,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -27,6 +29,8 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "src/entities/user.entity";
+import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
+import { RoomFilterDto } from "./dto/room-filter.dto";
 
 @ApiTags("Rooms")
 @Controller("api/v1/rooms")
@@ -41,7 +45,7 @@ export class RoomsController {
     type: RoomResponseDto,
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_CREATE_UNIT)
+  @Permissions(PermissionConstants.PERM_UPDATE_UNIT)
   @ApiBearerAuth()
   async create(
     @Body() createRoomDto: CreateRoomDto,
@@ -63,6 +67,40 @@ export class RoomsController {
     return this.roomsService.findAll();
   }
 
+  @Get("suggestions")
+  @ApiOperation({ summary: "Get room suggestions based on building and floor" })
+  @ApiResponse({
+    status: 200,
+    description: "Room suggestions retrieved successfully",
+    type: [RoomResponseDto],
+  })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async getRoomSuggestions(
+    @Query("building") building?: string,
+    @Query("floor") floor?: string,
+    @Query("excludeUnitId") excludeUnitId?: string
+  ): Promise<RoomResponseDto[]> {
+    return this.roomsService.getRoomSuggestions(building, floor, excludeUnitId);
+  }
+
+  @Post("unit/:id/filter")
+  @ApiOperation({ summary: "Filter and paginate rooms for a specific unit" })
+  @ApiParam({ name: "id", description: "Unit ID" })
+  @ApiResponse({
+    status: 200,
+    description: "Rooms filtered and retrieved successfully",
+    type: PaginatedResponseDto<RoomResponseDto>,
+  })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async filterByUnitId(
+    @Param("id") unitId: string, 
+    @Body() filterDto: RoomFilterDto
+  ): Promise<PaginatedResponseDto<RoomResponseDto>> {
+    return this.roomsService.filterByUnitId(unitId, filterDto);
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Get room by ID" })
   @ApiParam({ name: "id", description: "Room ID" })
@@ -77,7 +115,7 @@ export class RoomsController {
     return this.roomsService.findOne(id);
   }
 
-  @Patch(":id")
+  @Put(":id")
   @ApiOperation({ summary: "Update room by ID" })
   @ApiParam({ name: "id", description: "Room ID" })
   @ApiResponse({
@@ -100,7 +138,7 @@ export class RoomsController {
   @ApiOperation({ summary: "Delete room by ID (soft delete)" })
   @ApiParam({ name: "id", description: "Room ID" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_REMOVE_UNIT)
+  @Permissions(PermissionConstants.PERM_UPDATE_UNIT)
   @ApiBearerAuth()
   async remove(@Param("id") id: string): Promise<void> {
     return this.roomsService.remove(id);
