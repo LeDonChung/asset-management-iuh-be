@@ -3,5 +3,6 @@ export interface JwtPayload {
   email: string;
   roles: string[];
   permissions: string[];
-  fullName: string;
+  fullName: string; 
+  unitId: string;
 }
