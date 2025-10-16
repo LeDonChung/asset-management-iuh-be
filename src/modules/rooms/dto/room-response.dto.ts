@@ -3,6 +3,7 @@ import { Expose, Type } from 'class-transformer';
 import { RoomStatus } from 'src/common/shared/RoomStatus';
 import { Unit } from 'src/entities/unit.entity';
 import { User } from 'src/entities/user.entity';
+import { UserResponseDto } from 'src/modules/users/dto/user-response.dto';
 
 export class RoomResponseDto {
   @Expose()
@@ -11,15 +12,15 @@ export class RoomResponseDto {
 
   @Expose()
   @ApiProperty({ description: 'Building name' })
-  building: string;
+  building?: string;
 
   @Expose()
   @ApiProperty({ description: 'Room code' })
-  roomCode: string;
+  roomCode?: string;
 
   @Expose()
   @ApiProperty({ description: 'Floor number' })
-  floor: string;
+  floor?: string;
 
   @Expose()
   @ApiProperty({ description: 'Room name' })
@@ -27,11 +28,11 @@ export class RoomResponseDto {
 
   @Expose()
   @ApiProperty({ description: 'Room number' })
-  roomNumber: string;
+  roomNumber?: string;
 
   @Expose()
   @ApiProperty({ description: 'Room status', enum: RoomStatus })
-  status: RoomStatus;
+  status?: RoomStatus;
 
   @Expose()
   @ApiPropertyOptional({ description: 'Unit ID' })
@@ -49,10 +50,10 @@ export class RoomResponseDto {
 
   @Expose()
   @ApiProperty({ description: 'Creation date' })
-  createdAt: Date;
+  createdAt?: Date;
 
   @Expose()
   @Type(() => User)
   @ApiPropertyOptional({ description: 'Created by user' })
-  createdBy?: User;
+  createdBy?: UserResponseDto;
 }
