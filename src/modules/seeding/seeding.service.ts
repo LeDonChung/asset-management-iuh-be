@@ -385,6 +385,19 @@ private async seedUnits() {
         ],
       },
       {
+        name: "Quản lý cảnh báo",
+        permissions: [
+          {
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_ALERT,
+          },
+          {
+            name: "Xử lý",
+            code: PermissionConstants.PERM_RESOLVE_ALERT,
+          }
+        ],
+      },
+      {
         name: "Quản lý kiểm kê",
         permissions: [
           {
