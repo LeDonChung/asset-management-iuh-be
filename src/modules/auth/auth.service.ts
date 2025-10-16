@@ -41,6 +41,7 @@ export class AuthService {
                 email: user.email,
                 roles: roles,
                 fullName: user.fullName,
+                unitId: user.unitId,
                 permissions: permissions,
             };
 
@@ -53,7 +54,8 @@ export class AuthService {
                 permissions: permissions,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
-                birthDate: user.birthDate
+                birthDate: user.birthDate,
+                unitId: user.unitId,
             }
         
             return { user: userLogin, token };

@@ -38,6 +38,7 @@ export class AuthController {
                         id: { type: 'string' },
                         email: { type: 'string' },
                         name: { type: 'string' },
+                        unitId: { type: 'string' },
                         roles: { type: 'array', items: { type: 'string' } },
                     },
                 },
