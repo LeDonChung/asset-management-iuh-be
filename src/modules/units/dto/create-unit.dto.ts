@@ -19,12 +19,10 @@ export class CreateUnitDto {
 
   @ApiPropertyOptional({ description: 'Phone number' })
   @IsOptional()
-  @IsPhoneNumber('VN')
   phone?: string;
 
   @ApiPropertyOptional({ description: 'Email address' })
   @IsOptional()
-  @IsEmail()
   email?: string;
 
   @ApiProperty({ enum: UnitType, description: 'Unit type' })
@@ -33,7 +31,6 @@ export class CreateUnitDto {
 
   @ApiPropertyOptional({ description: 'Representative user ID' })
   @IsOptional()
-  @IsUUID()
   representativeId?: string;
 
   @ApiPropertyOptional({ description: 'Parent unit ID (null for root campus)' })

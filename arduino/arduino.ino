@@ -24,7 +24,7 @@ SocketIoClient webSocket;
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "4ac93e15-5e46-4ea5-ba51-ad8c6a48a262";
+String roomId = "7b54d540-c47c-4cdb-817d-949ce5a1d527";
 
 #define RXD2 16
 #define TXD2 17
