@@ -45,7 +45,7 @@ export class RoomsController {
     type: RoomResponseDto,
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_CREATE_UNIT)
+  @Permissions(PermissionConstants.PERM_UPDATE_UNIT)
   @ApiBearerAuth()
   async create(
     @Body() createRoomDto: CreateRoomDto,
@@ -138,7 +138,7 @@ export class RoomsController {
   @ApiOperation({ summary: "Delete room by ID (soft delete)" })
   @ApiParam({ name: "id", description: "Room ID" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_REMOVE_UNIT)
+  @Permissions(PermissionConstants.PERM_UPDATE_UNIT)
   @ApiBearerAuth()
   async remove(@Param("id") id: string): Promise<void> {
     return this.roomsService.remove(id);
