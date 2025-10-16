@@ -37,9 +37,11 @@ export class UnitsService {
     currentUser?: User
   ): Promise<UnitResponseDto> {
     try {
+      let representative: User | undefined;
+
       // Validate representative if provided
       if (createUnitDto.representativeId) {
-        const representative = await this.userRepository.findOne({
+        representative = await this.userRepository.findOne({
           where: { id: createUnitDto.representativeId },
         });
         if (!representative) {
@@ -91,12 +93,18 @@ export class UnitsService {
       const unit = this.unitRepository.create({
         ...createUnitDto,
         unitCode,
-        users: [currentUser],
         createdBy: currentUser,
         status: createUnitDto.status || UnitStatus.ACTIVE,
       });
 
       const savedUnit = await this.unitRepository.save(unit);
+
+      // Update representative's unitId if representative is provided
+      if (representative) {
+        representative.unitId = savedUnit.id;
+        await this.userRepository.save(representative);
+      }
+
       return this.findOne(savedUnit.id);
     } catch (error) {
       console.error("Error creating unit:", error);
@@ -162,7 +170,7 @@ export class UnitsService {
     try {
       const units = await this.unitRepository.find({
         where: { type },
-        relations: ["representative", "rooms"],
+        relations: ["childUnits"],
         order: { createdAt: "DESC" },
       });
       return plainToInstance(UnitResponseDto, units, {
@@ -228,7 +236,7 @@ export class UnitsService {
   ): Promise<UnitResponseDto> {
     const unit = await this.unitRepository.findOne({
       where: { id },
-      relations: ["parentUnit"],
+      relations: ["parentUnit", "representative"],
     });
 
     if (!unit) {
@@ -238,12 +246,15 @@ export class UnitsService {
       });
     }
 
+    let newRepresentative: User | undefined;
+    const oldRepresentative = unit.representative;
+
     // Validate representative if provided
     if (updateUnitDto.representativeId) {
-      const representative = await this.userRepository.findOne({
+      newRepresentative = await this.userRepository.findOne({
         where: { id: updateUnitDto.representativeId },
       });
-      if (!representative) {
+      if (!newRepresentative) {
         throw new BadRequestException({
           code: "USER_NOT_FOUND",
           message: "Representative user not found",
@@ -289,6 +300,21 @@ export class UnitsService {
 
     Object.assign(unit, updateUnitDto);
     const updatedUnit = await this.unitRepository.save(unit);
+
+    // Handle representative changes
+    if (updateUnitDto.representativeId !== undefined) {
+      // Remove old representative's unit association
+      if (oldRepresentative && oldRepresentative.id !== updateUnitDto.representativeId) {
+        oldRepresentative.unitId = null;
+        await this.userRepository.save(oldRepresentative);
+      }
+
+      // Set new representative's unit association
+      if (newRepresentative) {
+        newRepresentative.unitId = updatedUnit.id;
+        await this.userRepository.save(newRepresentative);
+      }
+    }
 
     return this.findOne(updatedUnit.id);
   }
