@@ -29,7 +29,7 @@ export class PermissionHelperService {
     }
 
     // Kiểm tra xem có thuộc phòng quản trị không
-    if (user.unit && user.unit.type === UnitType.ADMIN_DEPT) {
+    if (user.roles?.some(role => role.code === RoleBase.ADMIN_DEPT)) {
       return true;
     }
 
@@ -38,6 +38,14 @@ export class PermissionHelperService {
 
   isAdminDeptUser(user: User): boolean {
     return user.roles?.some(role => role.code === RoleBase.ADMIN_DEPT);
+  }
+
+  isUserDeptUser(user: User): boolean {
+    return user.roles?.some(role => role.code === RoleBase.USER_DEPT);
+  }
+
+  isAdmin(user: User): boolean {
+    return user.roles?.some(role => role.code === RoleBase.ADMIN);
   }
 
   /**
@@ -68,7 +76,7 @@ export class PermissionHelperService {
   }
 
   /**
-   * Lấy tất cả unit IDs trong campus
+   * Lấy tất cả unit IDs trong campus bao gồm cả campus chính
    */
   private async getCampusUnitIds(currentUnit: Unit): Promise<string[]> {
     let campusUnit: Unit;
@@ -91,7 +99,7 @@ export class PermissionHelperService {
       }
     }
 
-    // Lấy tất cả child units của campus
+    // Lấy tất cả units trong campus bao gồm cả campus chính
     const allUnitsInCampus = await this.unitRepository.find({
       where: [
         { id: campusUnit.id }, // Campus chính

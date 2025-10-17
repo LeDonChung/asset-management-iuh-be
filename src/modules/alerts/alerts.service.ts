@@ -26,6 +26,9 @@ import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import { FieldType } from "src/common/dto/filter.dto";
 import { FilterUtil } from "src/common/utils/filter.util";
 import { UnitResponseDto } from "../units/dto/unit-response.dto";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
+import { RoleBase } from "src/common/utils/role.enum";
+import { Unit } from "src/entities/unit.entity";
 
 @Injectable()
 export class AlertsService {
@@ -44,7 +47,10 @@ export class AlertsService {
     private readonly assetBookItemRepository: Repository<AssetBookItem>,
     @InjectRepository(RfidTag)
     private readonly rfidTagRepository: Repository<RfidTag>,
-    private readonly filesService: FilesService
+    @InjectRepository(Unit)
+    private readonly unitRepository: Repository<Unit>,
+    private readonly filesService: FilesService,
+    private readonly permissionHelperService: PermissionHelperService
   ) {}
 
   async create(createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
@@ -211,7 +217,8 @@ export class AlertsService {
   }
 
   async findAllWithFilter(
-    filterDto: AlertFilterDto
+    filterDto: AlertFilterDto,
+    currentUser: User
   ): Promise<PaginatedResponseDto<AlertResponseDto>> {
     try {
       const config = {
@@ -285,6 +292,9 @@ export class AlertsService {
       // Apply filters
       FilterUtil.applyFiltersToQuery(queryBuilder, filterDto, config, "alert");
 
+      // Apply role-based filtering
+      await this.applyRoleBasedFiltering(queryBuilder, currentUser);
+
       // Get pagination settings with defaults
       const page = filterDto.pagination?.currentPage || 1;
       const limit = filterDto.pagination?.itemsPerPage || 5;
@@ -315,6 +325,83 @@ export class AlertsService {
       console.error("Error in findAllWithFilter:", error);
       throw error;
     }
+  }
+
+  /**
+   * Apply role-based filtering to the query builder
+   * @param queryBuilder Query builder instance
+   * @param currentUser Current user
+   */
+  private async applyRoleBasedFiltering(
+    queryBuilder: SelectQueryBuilder<Alert>,
+    currentUser: User
+  ): Promise<void> {
+    // Load user with roles if not already loaded
+    const userWithRoles = await this.userRepository.findOne({
+      where: { id: currentUser.id },
+      relations: ['roles', 'unit']
+    });
+
+    if (!userWithRoles || !userWithRoles.roles) {
+      return;
+    }
+
+    const roleCodes = userWithRoles.roles.map(role => role.code);
+
+    // Admin có thể thấy tất cả alerts
+    if (roleCodes.includes(RoleBase.ADMIN)) {
+      return; // Không thêm điều kiện gì, thấy tất cả
+    }
+
+    // Admin Dept chỉ thấy alerts của các assets thuộc đơn vị trong cơ sở của mình
+    if (roleCodes.includes(RoleBase.ADMIN_DEPT)) {
+      if (userWithRoles.unitId) {
+        // Lấy tất cả unit IDs thuộc campus này (bao gồm cả campus và tất cả children)
+        const allUnitIds = await this.getAllChildUnitIds(userWithRoles.unitId);
+        
+        // Sử dụng alias 'asset' đã có từ relations config
+        queryBuilder
+          .leftJoin('asset.currentRoom', 'assetRoom')
+          .leftJoin('assetRoom.unit', 'roomUnit')
+          .andWhere('roomUnit.id IN (:...unitIds)', { unitIds: allUnitIds });
+      }
+      return;
+    }
+
+    // User Dept chỉ thấy alerts của assets thuộc đơn vị của mình
+    if (roleCodes.includes(RoleBase.USER_DEPT)) {
+      if (userWithRoles.unitId) {
+        // Sử dụng alias 'asset' đã có từ relations config
+        queryBuilder
+          .leftJoin('asset.currentRoom', 'assetRoom')
+          .leftJoin('assetRoom.unit', 'roomUnit')
+          .andWhere('roomUnit.id = :unitId', { unitId: userWithRoles.unitId });
+      }
+      return;
+    }
+  }
+
+  /**
+   * Get all child unit IDs for a given campus ID
+   * @param campusId Campus ID
+   * @returns Array of unit IDs including campus and all children
+   */
+  private async getAllChildUnitIds(campusId: string): Promise<string[]> {
+    const campus = await this.unitRepository.findOne({
+      where: { id: campusId },
+      relations: ['childUnits']
+    });
+
+    if (!campus) {
+      return [campusId];
+    }
+
+    const unitIds = [campusId];
+    if (campus.childUnits) {
+      unitIds.push(...campus.childUnits.map(unit => unit.id));
+    }
+
+    return unitIds;
   }
 
   async resolveAlert(
