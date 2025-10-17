@@ -1,3 +1,4 @@
+import { Role } from './../../entities/role.entity';
 import {
     Injectable,
     NotFoundException,
@@ -5,16 +6,18 @@ import {
     BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, Not, Repository } from "typeorm";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
-import { Role } from "../../entities/role.entity";
 import { Permission } from "../../entities/permission.entity";
 import { RoleResponseDto } from "./dto/role-response.dto";
 import { errorResponse } from "src/common/helpers/error-response";
 import { CommonUtils } from "src/common/utils/common.utils";
 import { ROLE_CODE_PREFIX } from "src/common/utils/constants";
 import { ERR_EXISTS, NOT_FOUND } from "src/common/utils/error-type-response";
+import { RoleBase } from "src/common/utils/role.enum";
+import { User } from "src/entities/user.entity";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
 
 @Injectable()
 export class RolesService {
@@ -23,7 +26,8 @@ export class RolesService {
         @InjectRepository(Role)
         private readonly roleRepository: Repository<Role>,
         @InjectRepository(Permission)
-        private readonly permissionRepository: Repository<Permission>
+        private readonly permissionRepository: Repository<Permission>,
+        private permissionHelper: PermissionHelperService
     ) { }
 
     /**
@@ -84,11 +88,28 @@ export class RolesService {
     /**
      * findAll
      * @description Lấy tất cả các vai trò cùng với các quyền liên quan
+     * @param user User hiện tại để kiểm tra quyền
      * @returns Danh sách các vai trò dưới dạng RoleResponseDto[]
      */
-    async findAll(): Promise<RoleResponseDto[]> {
+    async findAll(
+        user: User
+    ): Promise<RoleResponseDto[]> {
         try {
+            // Xác định các role cần loại bỏ dựa trên quyền của user
+            let excludedRoles: string[] = [RoleBase.ADMIN];
+
+            // Nếu là adminDept thì bỏ cả adminDept
+            if (this.permissionHelper.isAdminDeptUser(user)) {
+                excludedRoles.push(RoleBase.ADMIN_DEPT);
+            }
+
+            // Nếu là userDept thì bỏ cả admin và adminDept
+            if (this.permissionHelper.isUserDeptUser(user)) {
+                excludedRoles = [RoleBase.ADMIN, RoleBase.ADMIN_DEPT, RoleBase.USER_DEPT];
+            }
+
             const roles = await this.roleRepository.find({
+                where: { code: Not(In(excludedRoles)) },
                 relations: ["permissions"],
                 order: { createdAt: "DESC" },
             });
@@ -148,6 +169,12 @@ export class RolesService {
                 throw new NotFoundException(errorResponse(NOT_FOUND, `Role not found`));
             }
 
+            // if (role.isProtected) {
+            //     throw new BadRequestException(
+            //         errorResponse(ERR_EXISTS, `Cannot modify a protected role`)
+            //     );
+            // }
+
             if (updateRoleDto.name && updateRoleDto.name !== role.name) {
                 const existingRole = await this.roleRepository.findOne({
                     where: { name: updateRoleDto.name },
@@ -206,6 +233,12 @@ export class RolesService {
             where: { id },
         });
 
+        if (role.isProtected) {
+            throw new BadRequestException(
+                errorResponse(ERR_EXISTS, `Cannot modify a protected role`)
+            );
+        }
+
         if (!role) {
             throw new NotFoundException(
                 errorResponse(NOT_FOUND, `Role with ID ${id} not found`)
@@ -252,6 +285,7 @@ export class RolesService {
             id: role.id,
             name: role.name,
             code: role.code,
+            isProtected: role.isProtected,
             permissions:
                 role.permissions?.map((permission) => ({
                     id: permission.id,

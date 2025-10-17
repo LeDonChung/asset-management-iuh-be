@@ -515,6 +515,7 @@ export class SeedingService implements OnModuleInit {
                 ? "Trưởng đơn vị sử dụng"
                 : "Trưởng phòng quản trị",
           code: roleCode,
+          isProtected: true,
         });
         if (roleCode === RoleBase.ADMIN) {
           const permissions = await this.permissionRepository.find();
@@ -564,6 +565,7 @@ export class SeedingService implements OnModuleInit {
         role = this.roleRepository.create({
           name: roleData.name,
           code: roleData.code,
+          isProtected: true,
         });
 
         const permissions = await this.permissionRepository.find({

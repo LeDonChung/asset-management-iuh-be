@@ -54,11 +54,13 @@ export class UnitsController {
   })
   @ApiResponse({ status: 500, description: "Lỗi server" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async filter(
-    @Body() filterDto: UnitFilterDto
+    @Body() filterDto: UnitFilterDto,
+    @CurrentUser() currentUser: User
   ): Promise<PaginatedResponseDto<UnitResponseDto>> {
-    return this.unitsService.findAllWithFilter(filterDto);
+    return this.unitsService.findAllWithFilter(filterDto, currentUser);
   }
 
   @Get(":id/rooms")
@@ -90,6 +92,7 @@ export class UnitsController {
   @ApiResponse({ status: 404, description: "Parent unit not found" })
   @ApiResponse({ status: 500, description: "Internal server error" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findChildren(
     @Param("parentId") parentId: string
@@ -122,9 +125,10 @@ export class UnitsController {
     type: [UnitResponseDto],
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
-  async findAll(): Promise<UnitResponseDto[]> {
-    return this.unitsService.findAll();
+  async findAll(@CurrentUser() currentUser: User): Promise<UnitResponseDto[]> {
+    return this.unitsService.findAll(currentUser);
   }
 
   @Get("root")
@@ -136,6 +140,7 @@ export class UnitsController {
   })
   @ApiResponse({ status: 500, description: "Internal server error" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findRootUnits(): Promise<UnitResponseDto[]> {
     return this.unitsService.findRootUnits();
@@ -151,6 +156,7 @@ export class UnitsController {
   })
   @ApiResponse({ status: 500, description: "Internal server error" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findByType(@Param("type") type: UnitType): Promise<UnitResponseDto[]> {
     return this.unitsService.findByType(type);
@@ -165,6 +171,7 @@ export class UnitsController {
     type: [UnitResponseDto],
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findCampus(): Promise<UnitResponseDto[]> {
     try {
@@ -184,6 +191,7 @@ export class UnitsController {
     type: UnitResponseDto,
   })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_UNIT)
   @ApiBearerAuth()
   async findOne(
     @Param("id", ParseUUIDPipe) id: string
