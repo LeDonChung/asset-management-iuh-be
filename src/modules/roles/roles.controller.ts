@@ -28,6 +28,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { User } from "src/entities/user.entity";
 
 @ApiTags("Roles")
 @Controller("api/v1/roles")
@@ -52,8 +54,10 @@ export class RolesController {
   @ApiResponse({ status: 200, type: [RoleResponseDto] })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth()
-  async findAll(): Promise<RoleResponseDto[]> {
-    return this.rolesService.findAll();
+  async findAll(
+    @CurrentUser() user: User
+  ): Promise<RoleResponseDto[]> {
+    return this.rolesService.findAll(user);
   }
 
   @Get("inventory")
