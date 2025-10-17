@@ -75,16 +75,35 @@ export class FilterUtil {
 
     // Add relations if configured
     if (config.relations) {
+      const joinedRelations = new Set<string>();
+      
       config.relations.forEach(relation => {
         const relationParts = relation.split('.');
         if (relationParts.length === 1) {
-          queryBuilder.leftJoinAndSelect(`${alias}.${relation}`, relation);
+          // Simple relation like 'user'
+          if (!joinedRelations.has(relation)) {
+            queryBuilder.leftJoinAndSelect(`${alias}.${relation}`, relation);
+            joinedRelations.add(relation);
+          }
         } else {
-          // Handle nested relations like 'user.profile'
-          const baseRelation = relationParts[0];
-          const nestedRelation = relationParts.slice(1).join('.');
-          queryBuilder.leftJoinAndSelect(`${alias}.${baseRelation}`, baseRelation);
-          queryBuilder.leftJoinAndSelect(`${baseRelation}.${nestedRelation}`, relationParts[relationParts.length - 1]);
+          // Nested relations like 'user.profile' or 'items.asset'
+          let currentAlias = alias;
+          let currentPath = '';
+          
+          for (let i = 0; i < relationParts.length; i++) {
+            const relationPart = relationParts[i];
+            const fullPath = currentPath ? `${currentPath}.${relationPart}` : relationPart;
+            
+            if (!joinedRelations.has(fullPath)) {
+              const relationAlias = relationParts.slice(0, i + 1).join('_');
+              queryBuilder.leftJoinAndSelect(`${currentAlias}.${relationPart}`, relationAlias);
+              joinedRelations.add(fullPath);
+              currentAlias = relationAlias;
+            } else {
+              currentAlias = relationParts.slice(0, i + 1).join('_');
+            }
+            currentPath = fullPath;
+          }
         }
       });
     }
