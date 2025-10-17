@@ -39,9 +39,10 @@ export class AlertsController {
     @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiBearerAuth()
     async filter(
-        @Body() filterDto: AlertFilterDto
+        @Body() filterDto: AlertFilterDto,
+        @CurrentUser() user: User
     ): Promise<PaginatedResponseDto<AlertResponseDto>> {
-        return this.alertsService.findAllWithFilter(filterDto);
+        return this.alertsService.findAllWithFilter(filterDto, user);
     }
 
 
@@ -74,6 +75,7 @@ export class AlertsController {
     @ApiResponse({ status: 200, type: AlertResponseDto })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiBearerAuth()
+    @Permissions(PermissionConstants.PERM_RESOLVE_ALERT)
     async resolveAlert(
         @Param('id') alertId: string,
         @Body() updateAlertDto: UpdateAlertDto,
