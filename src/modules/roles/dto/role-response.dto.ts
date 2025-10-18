@@ -29,4 +29,8 @@ export class RoleResponseDto {
     @Expose()
     @Type(() => PermissionResponseDto)
     permissions?: PermissionResponseDto[];
+
+    @ApiProperty({ example: true })
+    @Expose()
+    isProtected?: boolean;
 }

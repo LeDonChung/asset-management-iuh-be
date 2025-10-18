@@ -10,7 +10,8 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PermissionConstants } from 'src/common/utils/permission.constant';
 import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
-import { UserStatus } from 'src/entities/user.entity';
+import { User, UserStatus } from 'src/entities/user.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Users')
 @Controller('api/v1/users')
@@ -114,8 +115,8 @@ export class UsersController {
     @ApiResponse({ status: 500, description: 'Lỗi server' })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiBearerAuth()
-    async findWithPagination(@Body() filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
-        return this.usersService.findWithPagination(filterDto);
+    async findWithPagination(@Body() filterDto: UserFilterDto, @CurrentUser() currentUser: User): Promise<PaginatedResponseDto<UserResponseDto>> {
+        return this.usersService.findWithPagination(filterDto, currentUser);
     }
 
     @Get(':id')

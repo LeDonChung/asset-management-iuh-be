@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { AssetBooksService } from './asset-books.service';
 import { CreateAssetBookDto } from './dto/create-asset-book.dto';
-import { AssetBook } from 'src/entities/asset-book.entity';
 import { ApiBody, ApiQuery, ApiResponse, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AssetBookResponseDto } from './dto/asset-book-response.dto';
 import { AssetType } from 'src/common/shared/AssetType';
@@ -21,6 +20,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from 'src/entities/user.entity';
 import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
 import { AssetResponseDto } from '../assets/dto/asset-response.dto';
+import { LiquidationProposedFilterDto } from './dto/liquidation-proposed-filter.dto';
+import { LiquidationProposedInventoryResultDto } from './dto/liquidation-proposed-inventory-result.dto';
 
 @ApiTags('Asset Books')
 @ApiBearerAuth()
@@ -100,6 +101,22 @@ export class AssetBooksController {
     @Body() filterDto: AssetBookFilterDto
   ): Promise<PaginatedResponseDto<AssetResponseDto>> {
     return await this.assetBooksService.getAssetsFromAssetBooks(filterDto);
+  }
+
+  @Post('liquidation-proposed/filter')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Lấy danh sách tài sản được đề xuất thanh lý từ kết quả kiểm kê',
+    type: PaginatedResponseDto<LiquidationProposedInventoryResultDto>
+  })
+  @ApiBody({ type: LiquidationProposedFilterDto })
+  async findLiquidationProposedAssets(
+    @Body() filterDto: LiquidationProposedFilterDto,
+    @CurrentUser() currentUser: User
+  ): Promise<PaginatedResponseDto<LiquidationProposedInventoryResultDto>> {
+    return await this.assetBooksService.findLiquidationProposedAssets(filterDto, currentUser);
   }
 
   @Get(':id')
