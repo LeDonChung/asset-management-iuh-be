@@ -50,3 +50,8 @@ export class AssetBookResponseDto {
     @ApiProperty({ description: 'Asset Types', type: [AssetTypeResponse] })
     assetTypes: AssetTypeResponse[];
 }
+
+export class AssetItemResponseDto  extends AssetResponseDto{
+    @ApiProperty({ description: 'Note' })
+    note: string;
+}

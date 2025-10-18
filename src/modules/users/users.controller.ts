@@ -10,7 +10,8 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PermissionConstants } from 'src/common/utils/permission.constant';
 import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
-import { UserStatus } from 'src/entities/user.entity';
+import { User, UserStatus } from 'src/entities/user.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Users')
 @Controller('api/v1/users')
@@ -37,6 +38,7 @@ export class UsersController {
         return this.usersService.findAll();
     }
 
+
     @Get('inventory')
     @HttpCode(HttpStatus.OK)
     @ApiResponse({ status: 200, type: [UserResponseDto] })
@@ -61,6 +63,23 @@ export class UsersController {
     @ApiBearerAuth()
     async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
         return this.usersService.findAllInventoryCommitteeUsers();
+    }
+
+    @Get('without-unit')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ 
+        summary: 'Lấy tất cả users chưa thuộc unit nào',
+        description: 'Trả về danh sách users có unitId là null hoặc undefined' 
+    })
+    @ApiResponse({ 
+        status: 200, 
+        type: [UserResponseDto],
+        description: 'Danh sách users chưa thuộc unit nào'
+    })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    async findUsersWithoutUnit(): Promise<UserResponseDto[]> {
+        return this.usersService.findUsersWithoutUnit();
     }
 
     /**
@@ -96,8 +115,8 @@ export class UsersController {
     @ApiResponse({ status: 500, description: 'Lỗi server' })
     @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiBearerAuth()
-    async findWithPagination(@Body() filterDto: UserFilterDto): Promise<PaginatedResponseDto<UserResponseDto>> {
-        return this.usersService.findWithPagination(filterDto);
+    async findWithPagination(@Body() filterDto: UserFilterDto, @CurrentUser() currentUser: User): Promise<PaginatedResponseDto<UserResponseDto>> {
+        return this.usersService.findWithPagination(filterDto, currentUser);
     }
 
     @Get(':id')
@@ -135,4 +154,6 @@ export class UsersController {
     async remove(@Param('id') id: string): Promise<boolean> {
         return this.usersService.deletedUser(id);
     }
+
+
 }
