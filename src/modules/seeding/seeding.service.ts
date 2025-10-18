@@ -99,183 +99,188 @@ export class SeedingService implements OnModuleInit {
   async generateUnitCode(): Promise<number> {
     const count = await this.unitRepository.count();
     return count + 1;
-}
+  }
 
-private async generateRoomCode(
+  private async generateRoomCode(
     building: string,
     floor: string,
     roomNumber: string,
     unitId?: string
-): Promise<string> {
+  ): Promise<string> {
     const buildingPart = building.toUpperCase();
     const floorPart = floor.padStart(2, "0");
     const roomNumberPart = roomNumber.padStart(2, "0");
     const unit = await this.unitRepository.findOne({
-        where: { id: unitId },
+      where: { id: unitId },
     });
     return `${unit?.unitCode ?? ""}${buildingPart}${floorPart}.${roomNumberPart}`;
-}
+  }
 
-private async seedUnits() {
+  private async seedUnits() {
     // Create three units type Campus
     const unitsCampus = [
-        {
-            name: "Đại học Công nghiệp Thành phố Hồ Chí Minh",
-            type: UnitType.CAMPUS,
-        },
-        {
-            name: "Cơ sở Thanh Hóa",
-            type: UnitType.CAMPUS,
-        },
-        {
-            name: "Cơ sở Phạm Văn Chiêu",
-            type: UnitType.CAMPUS,
-        },
+      {
+        name: "Đại học Công nghiệp Thành phố Hồ Chí Minh",
+        type: UnitType.CAMPUS,
+      },
+      {
+        name: "Cơ sở Thanh Hóa",
+        type: UnitType.CAMPUS,
+      },
+      {
+        name: "Cơ sở Phạm Văn Chiêu",
+        type: UnitType.CAMPUS,
+      },
     ];
 
     const unitsCampusCreated = [];
     for (const unit of unitsCampus) {
-        let unitFind = await this.unitRepository.findOne({
-            where: { name: unit.name },
-        });
-        if (!unitFind) {
-            const unitCreate = this.unitRepository.create(unit);
-            unitCreate.unitCode = await this.generateUnitCode();
-            const value = await this.unitRepository.save(unitCreate);
-            unitsCampusCreated.push(value);
-        } else {
-            return;
-        }
+      let unitFind = await this.unitRepository.findOne({
+        where: { name: unit.name },
+      });
+      if (!unitFind) {
+        const unitCreate = this.unitRepository.create(unit);
+        unitCreate.unitCode = await this.generateUnitCode();
+        const value = await this.unitRepository.save(unitCreate);
+        unitsCampusCreated.push(value);
+      } else {
+        return;
+      }
     }
 
     const unitsUserDept = [
-        {
-            name: "Khoa Công nghệ thông tin",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Cơ khí",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Động Lực",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Công nghệ May thời trang",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Công nghệ Điện",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Công nghệ Điện tử",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Công nghệ Nhiệt - lạnh",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Khoa Công nghệ Hóa học",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Viện CNSH&TP",
-            type: UnitType.USER_DEPT,
-        },
-        {
-            name: "Viện KHCN&QLMT",
-            type: UnitType.USER_DEPT,
-        }
+      {
+        name: "Khoa Công nghệ thông tin",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Cơ khí",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Động Lực",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Công nghệ May thời trang",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Công nghệ Điện",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Công nghệ Điện tử",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Công nghệ Nhiệt - lạnh",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Khoa Công nghệ Hóa học",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Viện CNSH&TP",
+        type: UnitType.USER_DEPT,
+      },
+      {
+        name: "Viện KHCN&QLMT",
+        type: UnitType.USER_DEPT,
+      },
     ];
 
     const unitsUserDeptCreated = [];
     for (const unit of unitsCampusCreated) {
-        for (const unitUserDept of unitsUserDept) {
-            let unitFind = await this.unitRepository.findOne({
-                where: { name: unitUserDept.name, parentUnit: { id: unit.id } },
-            });
-            if (!unitFind) {
-                const unitCreate = this.unitRepository.create(unitUserDept);
-                unitCreate.unitCode = await this.generateUnitCode();
-                unitCreate.parentUnit = unit;
-                const value = await this.unitRepository.save(unitCreate);
-                unitsUserDeptCreated.push(value);
-            } else {
-                unitsUserDeptCreated.push(unitFind);
-            }
+      for (const unitUserDept of unitsUserDept) {
+        let unitFind = await this.unitRepository.findOne({
+          where: { name: unitUserDept.name, parentUnit: { id: unit.id } },
+        });
+        if (!unitFind) {
+          const unitCreate = this.unitRepository.create(unitUserDept);
+          unitCreate.unitCode = await this.generateUnitCode();
+          unitCreate.parentUnit = unit;
+          const value = await this.unitRepository.save(unitCreate);
+          unitsUserDeptCreated.push(value);
+        } else {
+          unitsUserDeptCreated.push(unitFind);
         }
+      }
     }
 
     // Define building, floor, and room structure
-    const buildings = ['A', 'B']; // Each department gets 2 buildings
-    const floors = ['1', '2', '3', '4', '5']; // 5 floors per building
-    const roomNumbers = ['01', '02', '03', '04', '05']; // 5 rooms per floor
+    const buildings = ["A", "B"]; // Each department gets 2 buildings
+    const floors = ["1", "2", "3", "4", "5"]; // 5 floors per building
+    const roomNumbers = ["01", "02", "03", "04", "05"]; // 5 rooms per floor
 
     // Create rooms for each department in each campus
     for (const campus of unitsCampusCreated) {
-        for (const dept of unitsUserDeptCreated.filter(d => d.parentUnit.id === campus.id)) {
-            for (const building of buildings) {
-                for (const floor of floors) {
-                    const roomsCreated = []; // Track rooms on this floor for adjacent room assignment
-                    for (let i = 0; i < roomNumbers.length; i++) {
-                        const roomNumber = roomNumbers[i];
-                        const floorPart = floor.padStart(2, "0");
-                        const roomCreate = this.roomRepository.create({
-                            name: `${building}${floorPart}.${roomNumber}`,
-                            building,
-                            floor,
-                            roomNumber,
-                            status: RoomStatus.ACTIVE,
-                            unit: dept,
-                            adjacentRooms: [],
-                        });
+      for (const dept of unitsUserDeptCreated.filter(
+        (d) => d.parentUnit.id === campus.id
+      )) {
+        for (const building of buildings) {
+          for (const floor of floors) {
+            const roomsCreated = []; // Track rooms on this floor for adjacent room assignment
+            for (let i = 0; i < roomNumbers.length; i++) {
+              const roomNumber = roomNumbers[i];
+              const floorPart = floor.padStart(2, "0");
+              const roomCreate = this.roomRepository.create({
+                name: `${building}${floorPart}.${roomNumber}`,
+                building,
+                floor,
+                roomNumber,
+                status: RoomStatus.ACTIVE,
+                unit: dept,
+                adjacentRooms: [],
+              });
 
-                        // Generate unique room code
-                        roomCreate.roomCode = await this.generateRoomCode(
-                            building,
-                            floor,
-                            roomNumber,
-                            dept.id
-                        );
+              // Generate unique room code
+              roomCreate.roomCode = await this.generateRoomCode(
+                building,
+                floor,
+                roomNumber,
+                dept.id
+              );
 
-                        // Save the room first to ensure it exists in the database
-                        const savedRoom = await this.roomRepository.save(roomCreate);
-                        roomsCreated.push(savedRoom);
-                    }
-
-                    // Assign adjacent rooms (after all rooms on the floor are saved)
-                    for (let i = 0; i < roomsCreated.length; i++) {
-                        const room = roomsCreated[i];
-                        room.adjacentRooms = [];
-
-                        // Add previous room as adjacent (if it exists)
-                        if (i > 0) {
-                            room.adjacentRooms.push(roomsCreated[i - 1]);
-                        }
-                        // Add next room as adjacent (if it exists)
-                        if (i < roomsCreated.length - 1) {
-                            room.adjacentRooms.push(roomsCreated[i + 1]);
-                        }
-
-                        // Save the room with updated adjacent rooms
-                        await this.roomRepository.save(room);
-
-                        // Update adjacent rooms to include this room
-                        if (room.adjacentRooms.length > 0) {
-                            for (const adjRoom of room.adjacentRooms) {
-                                adjRoom.adjacentRooms = [...(adjRoom.adjacentRooms ?? []), room];
-                                await this.roomRepository.save(adjRoom);
-                            }
-                        }
-                    }
-                }
+              // Save the room first to ensure it exists in the database
+              const savedRoom = await this.roomRepository.save(roomCreate);
+              roomsCreated.push(savedRoom);
             }
+
+            // Assign adjacent rooms (after all rooms on the floor are saved)
+            for (let i = 0; i < roomsCreated.length; i++) {
+              const room = roomsCreated[i];
+              room.adjacentRooms = [];
+
+              // Add previous room as adjacent (if it exists)
+              if (i > 0) {
+                room.adjacentRooms.push(roomsCreated[i - 1]);
+              }
+              // Add next room as adjacent (if it exists)
+              if (i < roomsCreated.length - 1) {
+                room.adjacentRooms.push(roomsCreated[i + 1]);
+              }
+
+              // Save the room with updated adjacent rooms
+              await this.roomRepository.save(room);
+
+              // Update adjacent rooms to include this room
+              if (room.adjacentRooms.length > 0) {
+                for (const adjRoom of room.adjacentRooms) {
+                  adjRoom.adjacentRooms = [
+                    ...(adjRoom.adjacentRooms ?? []),
+                    room,
+                  ];
+                  await this.roomRepository.save(adjRoom);
+                }
+              }
+            }
+          }
         }
+      }
     }
-}
+  }
 
   private async seedPermissions() {
     const managerPermissions = [
@@ -297,7 +302,7 @@ private async seedUnits() {
           {
             name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_USER,
-          }
+          },
         ],
       },
       {
@@ -318,7 +323,7 @@ private async seedUnits() {
           {
             name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_ROLE,
-          }
+          },
         ],
       },
       {
@@ -360,7 +365,7 @@ private async seedUnits() {
           {
             name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_UNIT,
-          }
+          },
         ],
       },
       {
@@ -381,7 +386,7 @@ private async seedUnits() {
           {
             name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_ASSET,
-          }
+          },
         ],
       },
       {
@@ -394,7 +399,7 @@ private async seedUnits() {
           {
             name: "Xử lý",
             code: PermissionConstants.PERM_RESOLVE_ALERT,
-          }
+          },
         ],
       },
       {
@@ -423,9 +428,46 @@ private async seedUnits() {
           {
             name: "Thực hiện kiểm kê",
             code: PermissionConstants.PERM_PERFORM_INVENTORY,
-          }
+          },
         ],
-      }
+      },
+      {
+        name: "Quản lý thanh lý",
+        permissions: [
+          {
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_LIQUIDATION,
+          },
+          {
+            name: "Tạo",
+            code: PermissionConstants.PERM_CREATE_LIQUIDATION,
+          },
+          {
+            name: "Phê duyệt",
+            code: PermissionConstants.PERM_APPROVE_LIQUIDATION,
+          },
+          {
+            name: "Từ chối",
+            code: PermissionConstants.PERM_REJECT_LIQUIDATION,
+          },
+          {
+            name: "Hoàn thành đề xuất",
+            code: PermissionConstants.PERM_FINALIZED_LIQUIDATION,
+          },
+          {
+            name: "Cập nhật",
+            code: PermissionConstants.PERM_UPDATE_LIQUIDATION,
+          },
+          {
+            name: "Xóa",
+            code: PermissionConstants.PERM_REMOVE_LIQUIDATION,
+          },
+          {
+            name: "Đề xuất thanh lý",
+            code: PermissionConstants.PERM_PROPOSED_LIQUIDATION,
+          },
+        ],
+      },
     ];
     for (const managerPermissionData of managerPermissions) {
       let managerPermission = await this.managerPermissionRepository.findOne({
@@ -466,18 +508,23 @@ private async seedUnits() {
       });
       if (!role) {
         var roleCreate = this.roleRepository.create({
-          name: roleCode === RoleBase.ADMIN ? "Quản trị viên" : roleCode === RoleBase.USER_DEPT ? "Trưởng đơn vị sử dụng" : "Trưởng phòng quản trị",
+          name:
+            roleCode === RoleBase.ADMIN
+              ? "Quản trị viên"
+              : roleCode === RoleBase.USER_DEPT
+                ? "Trưởng đơn vị sử dụng"
+                : "Trưởng phòng quản trị",
           code: roleCode,
+          isProtected: true,
         });
-        if(roleCode === RoleBase.ADMIN) {
+        if (roleCode === RoleBase.ADMIN) {
           const permissions = await this.permissionRepository.find();
           roleCreate.permissions = permissions;
         }
         roleCreate = await this.roleRepository.save(roleCreate);
-        
       }
     }
-    
+
     // Create inventory committee roles
     await this.createInventoryRoles();
   }
@@ -496,9 +543,7 @@ private async seedUnits() {
       {
         name: "Thành viên kiểm kê",
         code: "INVENTORY_COMMITTEE_MEMBER",
-        permissions: [
-          PermissionConstants.PERM_PERFORM_INVENTORY,
-        ],
+        permissions: [PermissionConstants.PERM_PERFORM_INVENTORY],
       },
       {
         name: "Thư ký kiểm kê",
@@ -507,7 +552,7 @@ private async seedUnits() {
           PermissionConstants.PERM_VIEW_INVENTORY,
           PermissionConstants.PERM_VIEW_RESULT_INVENTORY,
         ],
-      }
+      },
     ];
 
     for (const roleData of inventoryRoles) {
@@ -520,6 +565,7 @@ private async seedUnits() {
         role = this.roleRepository.create({
           name: roleData.name,
           code: roleData.code,
+          isProtected: true,
         });
 
         const permissions = await this.permissionRepository.find({
@@ -623,7 +669,7 @@ private async seedUnits() {
         email: "dangichai@iuh.edu.vn",
         roleCode: "INVENTORY_COMMITTEE_HEAD",
       },
-      
+
       // Tiểu ban 1: Công nghệ (CN Cơ khí, CN Động lực, CN May thời trang)
       {
         username: "diep_bao_tri",
@@ -748,7 +794,7 @@ private async seedUnits() {
         fullName: "Phan Anh Tú",
         email: "phananhtu@iuh.edu.vn",
         roleCode: "INVENTORY_COMMITTEE_SECRETARY",
-      }
+      },
     ];
 
     const defaultPassword = "Admin@123";

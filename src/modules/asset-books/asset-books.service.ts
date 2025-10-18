@@ -23,8 +23,16 @@ import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
 import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import { AssetBookFilterDto } from "./dto/asset-book-filter.dto";
 import { AssetResponseDto } from "../assets/dto/asset-response.dto";
-import { FieldType } from "src/common/dto/filter.dto";
+import { FieldType, FilterOperator } from "src/common/dto/filter.dto";
 import { FilterUtil } from "src/common/utils/filter.util";
+import { InventoryResult } from "src/entities/inventory-result";
+import { InventoryResultStatus } from "src/common/shared/InventoryResultStatus";
+import { LiquidationProposedFilterDto } from "./dto/liquidation-proposed-filter.dto";
+import { LiquidationProposedInventoryResultDto } from "./dto/liquidation-proposed-inventory-result.dto";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
+import { User } from "src/entities/user.entity";
+import { plainToInstance } from "class-transformer";
+import { InventorySession } from "src/entities/inventory-session.entity";
 
 @Injectable()
 export class AssetBooksService {
@@ -67,7 +75,12 @@ export class AssetBooksService {
     private readonly assetRepository: Repository<Asset>,
     @InjectRepository(AssetBookItem)
     private readonly assetBookItemRepository: Repository<AssetBookItem>,
-    private readonly dataSource: DataSource
+    @InjectRepository(InventoryResult)
+    private readonly inventoryResultRepository: Repository<InventoryResult>,
+    @InjectRepository(InventorySession)
+    private readonly inventorySessionRepository: Repository<InventorySession>,
+    private readonly dataSource: DataSource,
+    private readonly permissionHelper: PermissionHelperService
   ) {}
 
   async createFromUnitId(unitId: string): Promise<AssetBookResponseDto> {
@@ -562,6 +575,211 @@ export class AssetBooksService {
         prevPage: page > 1 ? page - 1 : null,
         firstPage: 1,
         lastPage: Math.ceil(total / limit),
+      };
+
+      return new PaginatedResponseDto(data, pagination);
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
+  }
+
+  /**
+   * Lấy danh sách tài sản được đề xuất thanh lý từ inventory results
+   * Chỉ lấy những tài sản trong đơn vị mà user có quyền truy cập
+   */
+  async findLiquidationProposedAssets(
+    filterDto: LiquidationProposedFilterDto,
+    currentUser: User
+  ): Promise<PaginatedResponseDto<LiquidationProposedInventoryResultDto>> {
+    try {
+      // Get the latest inventory session first
+      const latestInventorySession = await this.inventorySessionRepository
+        .createQueryBuilder('session')
+        .orderBy('session.year', 'DESC')
+        .addOrderBy('session.createdAt', 'DESC')
+        .getOne();
+
+      if (!latestInventorySession) {
+        // Return empty result if no inventory session exists
+        return new PaginatedResponseDto([], {
+          page: 1,
+          limit: filterDto.pagination?.itemsPerPage || 20,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        });
+      }
+
+      // Get accessible unit IDs for current user
+      const unitAccessFilter = await this.permissionHelper.createUnitAccessFilter(currentUser);
+      
+      // Check if user has no access to any units
+      if (unitAccessFilter.value.includes("00000000-0000-0000-0000-000000000000")) {
+        return new PaginatedResponseDto([], {
+          page: 1,
+          limit: filterDto.pagination?.itemsPerPage || 20,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        });
+      }
+
+      // Build custom query with proper joins and filters
+      let queryBuilder = this.inventoryResultRepository
+        .createQueryBuilder('inventoryResult')
+        .leftJoinAndSelect('inventoryResult.asset', 'asset')
+        .leftJoinAndSelect('asset.category', 'category')
+        .leftJoinAndSelect('asset.currentRoom', 'currentRoom')
+        .leftJoinAndSelect('currentRoom.unit', 'unit')
+        .leftJoinAndSelect('inventoryResult.room', 'room')
+        .leftJoinAndSelect('inventoryResult.fileUrls', 'fileUrls')
+        .leftJoinAndSelect('inventoryResult.assignment', 'assignment')
+        .leftJoinAndSelect('assignment.group', 'group')
+        .leftJoinAndSelect('group.subInventory', 'subInventory')
+        .leftJoinAndSelect('subInventory.inventorySessionUnit', 'inventorySessionUnit')
+        .leftJoinAndSelect('inventorySessionUnit.inventorySession', 'inventorySession')
+        .where('inventoryResult.status = :status', { status: InventoryResultStatus.LIQUIDATION_PROPOSED })
+        .andWhere('inventorySession.id = :sessionId', { sessionId: latestInventorySession.id });
+
+      // Apply unit access filter
+      if (unitAccessFilter.operator === "in") {
+        queryBuilder = queryBuilder.andWhere('currentRoom.unitId IN (:...unitIds)', { unitIds: unitAccessFilter.value });
+      } else {
+        queryBuilder = queryBuilder.andWhere('currentRoom.unitId = :unitId', { unitId: unitAccessFilter.value[0] });
+      }
+
+      // Apply optional filters
+      if (filterDto.roomId) {
+        // Check if user has access to this specific room's unit
+        const accessibleUnitIds = await this.permissionHelper.getAccessibleUnitIds(currentUser);
+        
+        const room = await this.dataSource.manager.findOne(Room, {
+          where: { id: filterDto.roomId },
+          relations: ['unit']
+        });
+        
+        if (room && accessibleUnitIds.includes(room.unitId)) {
+          queryBuilder = queryBuilder.andWhere('inventoryResult.roomId = :roomId', { roomId: filterDto.roomId });
+        } else {
+          // If user doesn't have access to this room's unit, return empty result
+          return new PaginatedResponseDto([], {
+            page: 1,
+            limit: filterDto.pagination?.itemsPerPage || 20,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          });
+        }
+      }
+
+      if (filterDto.assetType) {
+        queryBuilder = queryBuilder.andWhere('asset.type = :assetType', { assetType: filterDto.assetType });
+      }
+
+      // Apply search filter
+      if (filterDto.search) {
+        queryBuilder = queryBuilder.andWhere(
+          '(asset.name ILIKE :search OR asset.assetCode ILIKE :search OR asset.serialNumber ILIKE :search OR room.name ILIKE :search OR room.code ILIKE :search)',
+          { search: `%${filterDto.search}%` }
+        );
+      }
+
+      // Apply sorting if provided
+      if (filterDto.sorting && filterDto.sorting.length > 0) {
+        // Sort by priority first
+        const sortedConfigs = [...filterDto.sorting].sort((a, b) => (a.priority || 0) - (b.priority || 0));
+        
+        sortedConfigs.forEach((sortConfig, index) => {
+          if (!sortConfig.field) return;
+          
+          // Map frontend field names to backend field paths
+          let fieldPath = sortConfig.field;
+          switch (sortConfig.field) {
+            case 'asset.name':
+              fieldPath = 'asset.name';
+              break;
+            case 'asset.fixedCode':
+              fieldPath = 'asset.fixedCode';
+              break;
+            case 'asset.ktCode':
+              fieldPath = 'asset.ktCode';
+              break;
+            case 'room.code':
+              fieldPath = 'room.roomCode';
+              break;
+            case 'systemQuantity':
+              fieldPath = 'inventoryResult.systemQuantity';
+              break;
+            case 'countedQuantity':
+              fieldPath = 'inventoryResult.countedQuantity';
+              break;
+            default:
+              fieldPath = `inventoryResult.${sortConfig.field}`;
+              break;
+          }
+
+          const direction = sortConfig.direction?.toUpperCase() as 'ASC' | 'DESC' || 'ASC';
+          
+          if (index === 0) {
+            queryBuilder = queryBuilder.orderBy(fieldPath, direction);
+          } else {
+            queryBuilder = queryBuilder.addOrderBy(fieldPath, direction);
+          }
+        });
+      } else {
+        // Default sorting
+        queryBuilder = queryBuilder.orderBy('inventoryResult.createdAt', 'DESC');
+      }
+
+      // Apply pagination
+      const page = filterDto.pagination?.currentPage || 1;
+      const limit = filterDto.pagination?.itemsPerPage || 20;
+      const skip = (page - 1) * limit;
+
+      queryBuilder = queryBuilder
+        .skip(skip)
+        .take(limit);
+
+      // Execute query
+      const [results, total] = await queryBuilder.getManyAndCount();
+
+      // Transform to response DTOs using class-transformer
+      const transformedResults = results.map(result => ({
+        ...result,
+        room: result.room ? {
+          id: result.room.id,
+          name: result.room.name,
+          code: result.room.roomCode
+        } : undefined,
+        inventorySession: result.assignment?.group?.subInventory?.inventorySessionUnit?.inventorySession ? {
+          id: result.assignment.group.subInventory.inventorySessionUnit.inventorySession.id,
+          name: result.assignment.group.subInventory.inventorySessionUnit.inventorySession.name,
+          year: result.assignment.group.subInventory.inventorySessionUnit.inventorySession.year
+        } : undefined,
+        fileUrls: result.fileUrls?.map(fileUrl => ({
+          id: fileUrl.id,
+          url: fileUrl.url,
+          createdAt: fileUrl.createdAt
+        })) || [],
+        assignment: undefined // Remove assignment from response
+      }));
+
+      const data = plainToInstance(LiquidationProposedInventoryResultDto, transformedResults, {
+        excludeExtraneousValues: true,
+      }) as LiquidationProposedInventoryResultDto[];
+
+      // Calculate pagination metadata
+      const pagination = {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
       };
 
       return new PaginatedResponseDto(data, pagination);
