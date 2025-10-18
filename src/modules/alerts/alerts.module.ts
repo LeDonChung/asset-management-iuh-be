@@ -11,6 +11,8 @@ import { RfidTag } from "src/entities/rfid-tag.entity";
 import { AssetBookItem } from "src/entities/asset-book-item.entity";
 import { MulterModule } from "@nestjs/platform-express";
 import { FilesModule } from "../files/files.module";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
+import { Unit } from "src/entities/unit.entity";
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { FilesModule } from "../files/files.module";
       AssetBook,
       AssetBookItem,
       RfidTag,
+      Unit
     ]),
     MulterModule.register({
       limits: {
@@ -31,7 +34,7 @@ import { FilesModule } from "../files/files.module";
     FilesModule,
   ],
   controllers: [AlertsController],
-  providers: [AlertsService],
+  providers: [AlertsService, PermissionHelperService],
   exports: [AlertsService],
 })
 export class AlertsModule {}

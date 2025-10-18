@@ -8,6 +8,9 @@ import { Unit } from 'src/entities/unit.entity';
 import { Asset, FixedAsset } from 'src/entities/asset.entity';
 import { Room } from 'src/entities/room.entity';
 import { RfidTag } from 'src/entities/rfid-tag.entity';
+import { InventoryResult } from 'src/entities/inventory-result';
+import { InventorySession } from 'src/entities/inventory-session.entity';
+import { PermissionHelperService } from 'src/common/services/permission-helper.service';
 
 @Module({
   imports: [
@@ -19,11 +22,12 @@ import { RfidTag } from 'src/entities/rfid-tag.entity';
       Room,
       RfidTag,
       FixedAsset,
-
+      InventoryResult,
+      InventorySession,
     ]),
   ],
   controllers: [AssetBooksController],
-  providers: [AssetBooksService],
+  providers: [AssetBooksService, PermissionHelperService],
   exports: [AssetBooksService],
 })
 export class AssetBooksModule {}
