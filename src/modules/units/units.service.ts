@@ -18,6 +18,7 @@ import { UnitFilterDto } from "./dto/unit-filter.dto";
 import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import { FieldType } from "src/common/dto/filter.dto";
 import { FilterUtil } from "src/common/utils/filter.util";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
 
 @Injectable()
 export class UnitsService {
@@ -25,12 +26,38 @@ export class UnitsService {
     @InjectRepository(Unit)
     private readonly unitRepository: Repository<Unit>,
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>
+    private readonly userRepository: Repository<User>,
+    private permissionHelper: PermissionHelperService
   ) {}
 
   async generateUnitCode(): Promise<number> {
     const count = await this.unitRepository.count();
     return count + 1;
+  }
+
+  private async getAllChildUnitIds(campusId: string): Promise<string[]> {
+    try {
+      // Lấy campus và tất cả children của nó
+      const campus = await this.unitRepository.findOne({
+        where: { id: campusId },
+        relations: ["childUnits"],
+      });
+
+      if (!campus) {
+        return [campusId]; // Fallback: chỉ trả về campus ID
+      }
+
+      // Trả về campus ID và tất cả child unit IDs
+      const allIds = [campusId];
+      if (campus.childUnits && campus.childUnits.length > 0) {
+        allIds.push(...campus.childUnits.map(child => child.id));
+      }
+
+      return allIds;
+    } catch (error) {
+      console.error("Error getting child unit IDs:", error);
+      return [campusId]; // Fallback: chỉ trả về campus ID
+    }
   }
   async create(
     createUnitDto: CreateUnitDto,
@@ -140,11 +167,48 @@ export class UnitsService {
     }
   }
 
-  async findAll(): Promise<UnitResponseDto[]> {
-    const units = await this.unitRepository.find({
-      relations: ["representative", "parentUnit", "childUnits", "rooms"],
-      order: { createdAt: "DESC" },
-    });
+  async findAll(currentUser?: User): Promise<UnitResponseDto[]> {
+    let queryBuilder = this.unitRepository.createQueryBuilder("unit")
+      .leftJoinAndSelect("unit.representative", "representative")
+      .leftJoinAndSelect("unit.parentUnit", "parentUnit")
+      .leftJoinAndSelect("unit.childUnits", "childUnits")
+      .leftJoinAndSelect("unit.rooms", "rooms")
+      .orderBy("unit.createdAt", "DESC");
+
+    // Áp dụng rule phân quyền nếu có currentUser
+    if (currentUser) {
+      if (this.permissionHelper.isAdmin(currentUser)) {
+        // Admin: Có thể xem tất cả units - không cần thêm điều kiện
+      } else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+        // AdminDept: unitId chính là campus ID, xem được tất cả units thuộc cơ sở này
+        if (currentUser.unitId) {
+          // Lấy tất cả unit IDs thuộc campus này (bao gồm campus và children)
+          const allUnitIds = await this.getAllChildUnitIds(currentUser.unitId);
+          if (allUnitIds.length > 0) {
+            queryBuilder = queryBuilder.andWhere("unit.id IN (:...unitIds)", { unitIds: allUnitIds });
+          } else {
+            // Fallback: chỉ xem campus của mình
+            queryBuilder = queryBuilder.andWhere("unit.id = :unitId", { unitId: currentUser.unitId });
+          }
+        } else {
+          // Nếu không có unitId, trả về empty
+          queryBuilder = queryBuilder.andWhere("1 = 0");
+        }
+      } else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+        // UserDept: Chỉ xem được unit của mình
+        if (currentUser.unitId) {
+          queryBuilder = queryBuilder.andWhere("unit.id = :unitId", { unitId: currentUser.unitId });
+        } else {
+          // Nếu không có unitId, trả về empty
+          queryBuilder = queryBuilder.andWhere("1 = 0");
+        }
+      } else {
+        // Người dùng không có role phù hợp - không được xem gì
+        queryBuilder = queryBuilder.andWhere("1 = 0");
+      }
+    }
+
+    const units = await queryBuilder.getMany();
     return plainToInstance(UnitResponseDto, units, {
       excludeExtraneousValues: true,
     });
@@ -346,7 +410,8 @@ export class UnitsService {
   }
 
   async findAllWithFilter(
-    filterDto: UnitFilterDto
+    filterDto: UnitFilterDto,
+    currentUser: User
   ): Promise<PaginatedResponseDto<UnitResponseDto>> {
     try {
       const config = {
@@ -387,6 +452,75 @@ export class UnitsService {
           ...quickFilterConditions,
         ];
       }
+
+      // Áp dụng rule phân quyền bắt buộc
+      const permissionConditions = [];
+
+      if (this.permissionHelper.isAdmin(currentUser)) {
+        // Admin: Có thể xem tất cả units - không cần thêm điều kiện
+      } else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+        // AdminDept: unitId chính là campus ID, xem được tất cả units thuộc cơ sở này
+        if (currentUser.unitId) {
+          // Lấy tất cả unit IDs thuộc campus này (bao gồm campus và children)
+          const allUnitIds = await this.getAllChildUnitIds(currentUser.unitId);
+          if (allUnitIds.length > 0) {
+            permissionConditions.push({
+              field: "id",
+              fieldType: "select",
+              operator: allUnitIds.length === 1 ? "equals" : "in",
+              value: allUnitIds,
+            });
+          } else {
+            // Fallback: chỉ xem campus của mình
+            permissionConditions.push({
+              field: "id",
+              fieldType: "select",
+              operator: "equals",
+              value: currentUser.unitId,
+            });
+          }
+        } else {
+          // Nếu không có unitId, trả về condition không thể match
+          permissionConditions.push({
+            field: "id",
+            fieldType: "select",
+            operator: "equals",
+            value: "00000000-0000-0000-0000-000000000000", // UUID null không thể match
+          });
+        }
+      } else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+        // UserDept: Chỉ xem được unit của mình
+        if (currentUser.unitId) {
+          permissionConditions.push({
+            field: "id",
+            fieldType: "select",
+            operator: "equals",
+            value: currentUser.unitId,
+          });
+        } else {
+          // Nếu không có unitId, trả về condition không thể match
+          permissionConditions.push({
+            field: "id",
+            fieldType: "select",
+            operator: "equals",
+            value: "00000000-0000-0000-0000-000000000000", // UUID null không thể match
+          });
+        }
+      } else {
+        // Người dùng không có role phù hợp - không được xem gì
+        permissionConditions.push({
+          field: "id",
+          fieldType: "select",
+          operator: "equals",
+          value: "00000000-0000-0000-0000-000000000000", // UUID null không thể match
+        });
+      }
+
+      // Merge permission conditions với existing conditions
+      filterDto.conditions = [
+        ...(filterDto.conditions || []),
+        ...permissionConditions,
+      ];
 
       return FilterUtil.getFilteredResults(
         this.unitRepository,

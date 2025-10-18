@@ -6,11 +6,12 @@ import { Unit } from 'src/entities/unit.entity';
 import { User } from 'src/entities/user.entity';
 import { Room } from 'src/entities/room.entity';
 import { RoomsService } from '../rooms/rooms.service';
+import { PermissionHelperService } from 'src/common/services/permission-helper.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Unit, User, Room])],
   controllers: [UnitsController],
-  providers: [UnitsService, RoomsService],
+  providers: [UnitsService, RoomsService, PermissionHelperService],
   exports: [UnitsService],
 })
 export class UnitsModule {}
