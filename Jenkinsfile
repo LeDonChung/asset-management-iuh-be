@@ -201,7 +201,7 @@ EOF
         }
 
         failure {
-            echo "❌ Backend deployment failed! Please check the logs."
+            echo "Backend deployment failed! Please check the logs."
         }
     }
 }
