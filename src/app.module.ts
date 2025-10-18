@@ -20,6 +20,7 @@ import { InventoryGroupModule } from './modules/inventory-group/inventory-group.
 import { AssetBooksModule } from './modules/asset-books/asset-books.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
+import { LiquidationsModule } from './liquidations/liquidations.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { AlertsModule } from './modules/alerts/alerts.module';
     AssetBooksModule,
     RedisModule,
     AlertsModule,
+    LiquidationsModule,
   ],
   controllers: [],
   providers: [
