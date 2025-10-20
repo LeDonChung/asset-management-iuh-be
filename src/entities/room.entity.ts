@@ -87,4 +87,17 @@ export class Room {
 
     @OneToMany(() => Alert, (alert) => alert.room)
     alerts?: Alert[];
+
+    // Asset Transaction relationships
+    @OneToMany('AssetTransactionItem', 'fromRoom')
+    fromTransactionItems?: any[];
+
+    @OneToMany('AssetTransactionItem', 'toRoom')
+    toTransactionItems?: any[];
+
+    @OneToMany('AssetTransactionHistory', 'oldRoom')
+    oldTransactionHistories?: any[];
+
+    @OneToMany('AssetTransactionHistory', 'newRoom')
+    newTransactionHistories?: any[];
 }
