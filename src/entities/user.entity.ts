@@ -87,4 +87,20 @@ export class User {
 
     @OneToMany(() => Alert, (alert) => alert.resolver)
     alerts?: Alert[];
+
+    // Asset Transaction relationships
+    @OneToMany('AssetTransaction', 'requester')
+    requestedTransactions?: any[];
+
+    @OneToMany('AssetTransaction', 'approver')
+    approvedTransactions?: any[];
+
+    @OneToMany('AssetTransaction', 'handover')
+    handoverTransactions?: any[];
+
+    @OneToMany('AssetTransaction', 'receiver')
+    receivedTransactions?: any[];
+
+    @OneToMany('AssetTransactionHistory', 'changer')
+    transactionHistories?: any[];
 }

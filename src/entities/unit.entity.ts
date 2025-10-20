@@ -108,4 +108,11 @@ export class Unit {
 
   @OneToMany(() => AssetBook, (assetBook) => assetBook.unit)
   assetBooks?: AssetBook[];
+
+  // Asset Transaction relationships
+  @OneToMany('AssetTransaction', 'fromUnit')
+  fromTransactions?: any[];
+
+  @OneToMany('AssetTransaction', 'toUnit')
+  toTransactions?: any[];
 }
