@@ -468,6 +468,43 @@ export class SeedingService implements OnModuleInit {
           },
         ],
       },
+      {
+        name: "Quản lý bàn giao",
+        permissions: [
+          {
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_TRANSACTION,
+          },
+          {
+            name: "Tạo",
+            code: PermissionConstants.PERM_CREATE_TRANSACTION,
+          },
+          {
+            name: "Cập nhật",
+            code: PermissionConstants.PERM_UPDATE_TRANSACTION,
+          },
+          {
+            name: "Xóa",
+            code: PermissionConstants.PERM_REMOVE_TRANSACTION,
+          },
+          {
+            name: "Đề xuất bàn giao",
+            code: PermissionConstants.PERM_PROPOSE_TRANSACTION,
+          },
+          {
+            name: "Phê duyệt",
+            code: PermissionConstants.PERM_APPROVE_TRANSACTION,
+          },
+          {
+            name: "Từ chối",
+            code: PermissionConstants.PERM_REJECT_TRANSACTION,
+          },
+          {
+            name: "Cập nhật trạng thái",
+            code: PermissionConstants.PERM_UPDATE_TRANSACTION_STATUS,
+          },
+        ],
+      },
     ];
     for (const managerPermissionData of managerPermissions) {
       let managerPermission = await this.managerPermissionRepository.findOne({
