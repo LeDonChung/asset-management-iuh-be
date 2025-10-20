@@ -21,6 +21,7 @@ import { AssetBooksModule } from './modules/asset-books/asset-books.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { LiquidationsModule } from './liquidations/liquidations.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { LiquidationsModule } from './liquidations/liquidations.module';
     RedisModule,
     AlertsModule,
     LiquidationsModule,
+    TransactionsModule,
   ],
   controllers: [],
   providers: [
