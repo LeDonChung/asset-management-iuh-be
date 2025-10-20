@@ -113,14 +113,14 @@ export class PermissionHelperService {
   /**
    * Tạo filter condition cho unitId dựa trên quyền của user
    */
-  async createUnitAccessFilter(user: User) {
+  async createUnitAccessFilter(user: User, fieldName: string = "unitId") {
     const accessibleUnitIds = await this.getAccessibleUnitIds(user);
     
     if (accessibleUnitIds.length === 0) {
       // Nếu không có quyền xem unit nào, trả về condition không thể match
       // Sử dụng UUID null để tránh lỗi invalid UUID syntax
       return {
-        field: "unitId",
+        field: fieldName,
         fieldType: "select",
         operator: "equals",
         value: ["00000000-0000-0000-0000-000000000000"], // UUID null không thể match
@@ -130,7 +130,7 @@ export class PermissionHelperService {
     if (accessibleUnitIds.length === 1) {
       // Nếu chỉ có quyền xem 1 unit
       return {
-        field: "unitId",
+        field: fieldName,
         fieldType: "select",
         operator: "equals",
         value: accessibleUnitIds,
@@ -139,7 +139,7 @@ export class PermissionHelperService {
 
     // Nếu có quyền xem nhiều units
     return {
-      field: "unitId",
+      field: fieldName,
       fieldType: "select",
       operator: "in",
       value: accessibleUnitIds,
