@@ -21,6 +21,8 @@ import { AssetStatus } from 'src/common/shared/AssetStatus';
 import { InventoryResult } from './inventory-result';
 import { AssetBookItem } from './asset-book-item.entity';
 import { Alert } from './alert.entity';
+import { AssetTransactionItem } from './asset-transaction-item.entity';
+import { AssetTransactionHistory } from './asset-transaction-history.entity';
 
 
 @Entity('assets')
@@ -79,7 +81,7 @@ export class Asset {
     @Column({
         type: 'enum',
         enum: AssetStatus,
-        default: AssetStatus.WAITING_ALLOCATION,
+        default: AssetStatus.IN_USE,
         comment: 'Trạng thái tài sản',
     })
     status: AssetStatus;
@@ -120,6 +122,10 @@ export class Asset {
 
     @OneToMany(() => Alert, (alert) => alert.asset)
     alerts?: Alert[];
+
+    // Asset Transaction relationships
+    @OneToMany(() => AssetTransactionItem, (item) => item.asset)
+    transactionItems?: AssetTransactionItem[];
 }
 
 // Child entities for inheritance
