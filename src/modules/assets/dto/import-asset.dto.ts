@@ -64,10 +64,10 @@ export class ImportAssetDto {
   @IsNotEmpty()
   purchasePackage: number;
 
-  @ApiPropertyOptional({ description: 'Trạng thái tài sản', enum: AssetStatus, default: AssetStatus.WAITING_ALLOCATION })
+  @ApiPropertyOptional({ description: 'Trạng thái tài sản', enum: AssetStatus, default: AssetStatus.IN_USE })
   @IsEnum(AssetStatus)
   @IsOptional()
-  status?: AssetStatus = AssetStatus.WAITING_ALLOCATION;
+  status?: AssetStatus = AssetStatus.IN_USE;
 
   @ApiPropertyOptional({ description: 'RFID Tag ID' })
   @IsString()
