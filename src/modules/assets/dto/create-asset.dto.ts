@@ -64,8 +64,8 @@ export class CreateAssetDto {
   @IsNotEmpty()
   categoryId: string;
 
-  @ApiPropertyOptional({ description: 'Trạng thái tài sản', enum: AssetStatus, default: AssetStatus.WAITING_ALLOCATION })
+  @ApiPropertyOptional({ description: 'Trạng thái tài sản', enum: AssetStatus, default: AssetStatus.IN_USE })
   @IsEnum(AssetStatus)
   @IsOptional()
-  status?: AssetStatus = AssetStatus.WAITING_ALLOCATION;
+  status?: AssetStatus = AssetStatus.IN_USE;
 }

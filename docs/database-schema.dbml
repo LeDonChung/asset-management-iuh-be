@@ -35,6 +35,7 @@ enum AssetStatus {
   IN_USE                  // đang sử dụng
   WAITING_HANDOVER       // chờ bàn giao
   WAITING_RECEIVE        // chờ tiếp nhận
+  TRANSFERRED            // đã bàn giao (trong sổ cũ)
   DAMAGED                // hư hỏng
   LOST                   // đã mất
   PROPOSED_LIQUIDATION   // đề xuất thanh lý
@@ -126,6 +127,19 @@ enum DamageReportStatus {
   IN_REVIEW
   APPROVED
   REJECTED
+}
+
+// Transaction related enums
+enum TransactionType {
+  TRANSFER        // Bàn giao giữa đơn vị (cần phê duyệt)
+  INTERNAL_MOVE   // Di chuyển nội bộ (không cần phê duyệt)
+}
+
+enum TransactionStatus {
+  DRAFT           // Bản nháp
+  PROPOSED        // Đề xuất bàn giao (gửi lên phòng quản trị)
+  APPROVED        // Phòng quản trị chấp nhận
+  REJECTED        // Phòng quản trị từ chối
 }
 
 // =============================================================================
@@ -426,6 +440,54 @@ Table liquidation_histories {
   createdAt timestamp [not null]
 }
 
+// Asset Transaction Management
+// Quản lý giao dịch tài sản: bàn giao, di chuyển giữa các đơn vị
+Table asset_transactions {
+  id string [primary key, note: 'UUID']
+  type TransactionType [not null, note: 'Loại giao dịch']
+  fromUnitId string [note: 'Đơn vị bàn giao (null nếu allocation)']
+  toUnitId string [not null, note: 'Đơn vị tiếp nhận']
+  requesterId string [not null, note: 'Người yêu cầu']
+  approverId string [note: 'Người phê duyệt (phòng quản trị)']
+  handoverId string [note: 'Người bàn giao']
+  receiverId string [note: 'Người tiếp nhận']
+  status TransactionStatus [default: 'DRAFT', note: 'Trạng thái']
+  requestNote text [note: 'Ghi chú yêu cầu']
+  approvalNote text [note: 'Ghi chú phê duyệt']
+  rejectionReason text [note: 'Lý do từ chối']
+  proposedAt timestamp [note: 'Thời gian đề xuất']
+  approvedAt timestamp [note: 'Thời gian phê duyệt']
+  handoverAt timestamp [note: 'Thời gian thực hiện bàn giao']
+  completedAt timestamp [note: 'Thời gian hoàn thành']
+  createdAt timestamp [not null]
+  updatedAt timestamp [not null]
+  deletedAt timestamp [note: 'Soft delete']
+}
+
+// Chi tiết các tài sản trong một giao dịch
+Table asset_transaction_items {
+  id string [primary key, note: 'UUID']
+  transactionId string [not null, note: 'ID giao dịch tài sản']
+  assetId string [not null, note: 'ID tài sản']
+  fromRoomId string [note: 'Phòng hiện tại của tài sản này']
+  toRoomId string [note: 'Phòng đích cho tài sản này (có thể khác với transaction.toRoomId)']
+  note text [note: 'Ghi chú cho từng tài sản']
+  createdAt timestamp [not null]
+  updatedAt timestamp [not null]
+}
+
+// Lịch sử thay đổi trạng thái của giao dịch (workflow: DRAFT → PROPOSED → APPROVED/REJECTED)
+Table asset_transaction_histories {
+  id string [primary key, note: 'UUID']
+  transactionId string [not null, note: 'ID giao dịch tài sản']
+  assetId string [not null, note: 'ID tài sản']
+  oldStatus TransactionStatus [not null, note: 'Trạng thái giao dịch cũ']
+  newStatus TransactionStatus [not null, note: 'Trạng thái giao dịch mới']
+  changedBy string [not null, note: 'Người thay đổi']
+  note text [note: 'Ghi chú thay đổi']
+  createdAt timestamp [not null, note: 'Thời gian ghi nhận thay đổi']
+}
+
 // Alert Management
 Table alerts {
   id string [primary key, note: 'UUID']
@@ -532,3 +594,18 @@ Ref: liquidation_histories.changedBy > users.id
 Ref: alerts.assetId > assets.id
 Ref: alerts.roomId > rooms.id
 Ref: alerts.resolverId > users.id
+
+// Asset Transaction Relationships
+Ref: asset_transactions.fromUnitId > units.id
+Ref: asset_transactions.toUnitId > units.id
+Ref: asset_transactions.requesterId > users.id
+Ref: asset_transactions.approverId > users.id
+Ref: asset_transactions.handoverId > users.id
+Ref: asset_transactions.receiverId > users.id
+Ref: asset_transaction_items.transactionId > asset_transactions.id [delete: cascade]
+Ref: asset_transaction_items.assetId > assets.id
+Ref: asset_transaction_items.fromRoomId > rooms.id
+Ref: asset_transaction_items.toRoomId > rooms.id
+Ref: asset_transaction_histories.transactionId > asset_transactions.id [delete: cascade]
+Ref: asset_transaction_histories.assetId > assets.id
+Ref: asset_transaction_histories.changedBy > users.id
