@@ -8,7 +8,10 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
+  Header,
 } from "@nestjs/common";
+import { Response } from "express";
 import { LiquidationsService } from "./liquidations.service";
 import { CreateLiquidationProposalDto } from "./dto/create-liquidation.dto";
 import {
@@ -298,5 +301,49 @@ export class LiquidationsController {
       evidenceDto,
       currentUser.id
     );
+  }
+
+  @Get(":id/export")
+  @ApiOperation({
+    summary: "Xuất file Excel danh sách tài sản thanh lý",
+    description:
+      "Xuất file Excel chứa danh sách tài sản cố định đề xuất thanh lý theo mẫu của trường.",
+  })
+  @ApiParam({ name: "id", description: "ID của đề xuất thanh lý" })
+  @ApiResponse({
+    status: 200,
+    description: "File Excel đã được tạo thành công",
+    content: {
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        schema: {
+          type: "string",
+          format: "binary",
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: "Không tìm thấy đề xuất" })
+  @ApiResponse({ status: 401, description: "Chưa xác thực" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async exportToExcel(
+    @Param("id") id: string,
+    @Res() res: Response
+  ) {
+    const buffer = await this.liquidationsService.exportToExcel(id);
+    
+    const fileName = `Danh_muc_thanh_ly_${id}_${new Date().getTime()}.xlsx`;
+    
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`
+    );
+    res.setHeader("Content-Length", buffer.length);
+    
+    res.send(buffer);
   }
 }
