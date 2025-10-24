@@ -13,6 +13,7 @@ import { InventoryGroup } from 'src/entities/inventory-group';
 import { InventoryGroupAssignment } from 'src/entities/inventory-group-assignment';
 import { InventoryResult } from 'src/entities/inventory-result';
 import { Asset } from 'src/entities/asset.entity';
+import { InventorySub } from 'src/entities/inventory-sub.entity';
 import { RedisModule } from '../redis/redis.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { RedisModule } from '../redis/redis.module';
       InventoryGroupAssignment,
       InventoryResult,
       Asset,
+      InventorySub,
     ]),
     RedisModule,
   ],

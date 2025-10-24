@@ -33,6 +33,7 @@ import { InventoryGroupAssignment } from "src/entities/inventory-group-assignmen
 import { InventoryResult } from "src/entities/inventory-result";
 import { Asset } from "src/entities/asset.entity";
 import { RedisService } from "../redis/redis.service";
+import { InventorySub } from "src/entities/inventory-sub.entity";
 import { SaveTempInventoryDto, AssetInventoryDetail } from "./dto/save-temp-inventory.dto";
 import { TempInventoryResponseDto } from "./dto/temp-inventory-response.dto";
 import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
@@ -67,8 +68,55 @@ export class InventoriesService {
     private inventoryResultRepository: Repository<InventoryResult>,
     @InjectRepository(Asset)
     private assetRepository: Repository<Asset>,
+    @InjectRepository(InventorySub)
+    private inventorySubRepository: Repository<InventorySub>,
     private redisService: RedisService
   ) {}
+
+  /**
+   * Tự động tạo tiểu ban kiểm kê cho các units
+   */
+  private async createInventorySubsForUnits(
+    inventorySessionUnits: InventorySessionUnit[],
+    currentUser: User
+  ): Promise<void> {
+    for (const sessionUnit of inventorySessionUnits) {
+      // Lấy thông tin unit để có tên
+      const unit = await this.unitRepository.findOne({
+        where: { id: sessionUnit.unitId }
+      });
+
+      if (unit) {
+        // Tạo tiểu ban kiểm kê với tên dựa trên tên unit
+        const inventorySub = this.inventorySubRepository.create({
+          name: `Tiểu ban kiểm kê ${unit.name}`,
+          inventorySessionUnitId: sessionUnit.id,
+          description: `Tiểu ban kiểm kê tự động tạo cho ${unit.name}`,
+          createdBy: currentUser.id,
+        });
+
+        await this.inventorySubRepository.save(inventorySub);
+      }
+    }
+  }
+
+  /**
+   * Xóa tiểu ban kiểm kê cho các units
+   */
+  private async deleteInventorySubsForUnits(
+    inventorySessionUnits: InventorySessionUnit[]
+  ): Promise<void> {
+    for (const sessionUnit of inventorySessionUnits) {
+      // Tìm và xóa tiểu ban kiểm kê liên quan
+      const inventorySub = await this.inventorySubRepository.findOne({
+        where: { inventorySessionUnitId: sessionUnit.id }
+      });
+
+      if (inventorySub) {
+        await this.inventorySubRepository.softDelete(inventorySub.id);
+      }
+    }
+  }
 
   async create(
     createInventoryDto: CreateInventoryDto,
@@ -160,7 +208,10 @@ export class InventoriesService {
           unitId,
         })
       );
-      await this.inventorySessionUnitRepository.save(inventorySessionUnits);
+      const savedInventorySessionUnits = await this.inventorySessionUnitRepository.save(inventorySessionUnits);
+
+      // Tự động tạo tiểu ban kiểm kê cho mỗi unit
+      await this.createInventorySubsForUnits(savedInventorySessionUnits, currentUser);
     }
 
     return this.findOne(savedSession.id);
