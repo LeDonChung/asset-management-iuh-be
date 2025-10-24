@@ -2,10 +2,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import { AssetStatus } from 'src/common/shared/AssetStatus';
 import { AssetType } from 'src/common/shared/AssetType';
-import { RfidTag } from 'src/entities/rfid-tag.entity';
 import { CategoryResponseDto } from 'src/modules/categories/dto/category-response.dto';
 import { RoomResponseDto } from 'src/modules/rooms/dto/room-response.dto';
 import { RfidTagResponseDto } from './rfid-tag-response.dto';
+import { TransactionItemAssetResponseDto } from './transaction-item-response.dto';
 
 export class AssetResponseDto {
   @ApiProperty({ description: 'Asset ID' })
@@ -83,4 +83,9 @@ export class AssetResponseDto {
   @Type(() => RfidTagResponseDto)
   @Expose()
   rfidTag?: RfidTagResponseDto;
+
+  @ApiPropertyOptional({ description: 'Danh sách các mục giao dịch liên quan đến tài sản' })
+  @Type(() => TransactionItemAssetResponseDto)
+  @Expose()
+  transactionItems ?: TransactionItemAssetResponseDto[];
 }

@@ -28,6 +28,11 @@ import { FilterUtil } from "src/common/utils/filter.util";
 import { User } from "src/entities/user.entity";
 import { Unit } from "src/entities/unit.entity";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
+import { Asset } from "src/entities/asset.entity";
+import { AssetBookItem } from "src/entities/asset-book-item.entity";
+import { AssetStatus } from "src/common/shared/AssetStatus";
+import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
+import * as ExcelJS from "exceljs";
 
 @Injectable()
 export class LiquidationsService {
@@ -38,6 +43,10 @@ export class LiquidationsService {
     private itemRepo: Repository<LiquidationProposalItem>,
     @InjectRepository(LiquidationHistory)
     private historyRepo: Repository<LiquidationHistory>,
+    @InjectRepository(Asset)
+    private assetRepo: Repository<Asset>,
+    @InjectRepository(AssetBookItem)
+    private assetBookItemRepo: Repository<AssetBookItem>,
     private permissionHelper: PermissionHelperService
   ) {}
 
@@ -430,7 +439,10 @@ export class LiquidationsService {
     finalizeDto: FinalizeProposalDto,
     handlerId: string
   ) {
-    const proposal = await this.proposalRepo.findOne({ where: { id } });
+    const proposal = await this.proposalRepo.findOne({ 
+      where: { id },
+      relations: ["items"]
+    });
 
     if (!proposal) {
       throw new NotFoundException("Không tìm thấy đề xuất thanh lý");
@@ -445,6 +457,28 @@ export class LiquidationsService {
     // Update proposal status to FINALIZED
     proposal.status = LiquidationStatus.FINALIZED;
     await this.proposalRepo.save(proposal);
+
+    // Cập nhật trạng thái của các asset thành LIQUIDATED
+    for (const item of proposal.items) {
+      // Cập nhật trạng thái asset
+      await this.assetRepo.update(
+        { id: item.assetId },
+        { status: AssetStatus.LIQUIDATED }
+      );
+
+      // Tìm và cập nhật AssetBookItem mới nhất của asset này
+      const latestAssetBookItem = await this.assetBookItemRepo.findOne({
+        where: { assetId: item.assetId },
+        order: { assignedAt: "DESC" }
+      });
+
+      if (latestAssetBookItem) {
+        await this.assetBookItemRepo.update(
+          { id: latestAssetBookItem.id },
+          { status: AssetBookItemStatus.LIQUIDATED }
+        );
+      }
+    }
 
     // Create history record
     const history = this.historyRepo.create({
@@ -623,5 +657,187 @@ export class LiquidationsService {
     };
 
     return messages[status] || "Cập nhật trạng thái";
+  }
+
+  async exportToExcel(id: string): Promise<Buffer> {
+    const proposal = await this.proposalRepo.findOne({
+      where: { id },
+      relations: [
+        "unit",
+        "items",
+        "items.asset",
+        "items.asset.currentRoom",
+      ],
+    });
+
+    if (!proposal) {
+      throw new NotFoundException("Không tìm thấy đề xuất thanh lý");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Danh mục thanh lý");
+
+    // Thiết lập độ rộng cột
+    worksheet.columns = [
+      { key: "stt", width: 5 },
+      { key: "fixedCode", width: 12 },
+      { key: "ktCode", width: 12 },
+      { key: "name", width: 40 },
+      { key: "specs", width: 30 },
+      { key: "roomCode", width: 10 },
+      { key: "systemQty", width: 10 },
+      { key: "actualQty", width: 10 },
+      { key: "note", width: 20 },
+    ];
+
+    // Tiêu đề - Dòng 1: TRƯỜNG ĐẠI HỌC CÔNG NGHIỆP TP HỒ CHÍ MINH
+    worksheet.mergeCells("A1:I1");
+    const headerRow1 = worksheet.getCell("A1");
+    headerRow1.value = "TRƯỜNG ĐẠI HỌC CÔNG NGHIỆP TP HỒ CHÍ MINH";
+    headerRow1.font = { name: "Arial", size: 9, bold: true };
+    headerRow1.alignment = { horizontal: "center", vertical: "middle" };
+
+    // Dòng 2: Địa chỉ
+    worksheet.mergeCells("A2:I2");
+    const headerRow2 = worksheet.getCell("A2");
+    headerRow2.value = "Địa chỉ: 12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP Hồ Chí Minh";
+    headerRow2.font = { name: "Arial", size: 9 };
+    headerRow2.alignment = { horizontal: "center", vertical: "middle" };
+
+    // Dòng 3: Trống
+    worksheet.addRow([]);
+
+    // Dòng 4: Tiêu đề chính
+    worksheet.mergeCells("A4:I4");
+    const titleRow = worksheet.getCell("A4");
+    titleRow.value = "DANH MỤC TÀI SẢN CỐ ĐỊNH ĐỀ XUẤT THANH LÝ";
+    titleRow.font = { name: "Arial", size: 12, bold: true, color: { argb: "FFFF0000" } };
+    titleRow.alignment = { horizontal: "center", vertical: "middle" };
+
+    // Dòng 5: Đơn vị
+    worksheet.mergeCells("A5:I5");
+    const unitRow = worksheet.getCell("A5");
+    unitRow.value = proposal.unit?.name || "KHOA CÔNG NGHỆ THÔNG TIN";
+    unitRow.font = { name: "Arial", size: 9, bold: true };
+    unitRow.alignment = { horizontal: "center", vertical: "middle" };
+
+    // Dòng 6: Năm
+    worksheet.mergeCells("A6:I6");
+    const yearRow = worksheet.getCell("A6");
+    const year = new Date(proposal.createdAt).getFullYear();
+    yearRow.value = `NĂM ${year}`;
+    yearRow.font = { name: "Arial", size: 9, bold: true };
+    yearRow.alignment = { horizontal: "center", vertical: "middle" };
+
+    // Dòng 7: Trống
+    worksheet.addRow([]);
+
+    // Dòng 8: Header của bảng
+    const headerRow = worksheet.addRow([
+      "STT",
+      "MÃ TSCĐ",
+      "MÃ KT",
+      "TÊN TSCĐ",
+      "THÔNG SỐ KỸ THUẬT",
+      "MÃ VỊ TRÍ",
+      "SL THEO SỔ SÁCH",
+      "SL THEO THỰC TẾ",
+      "GHI CHÚ",
+    ]);
+
+    headerRow.height = 30;
+    headerRow.font = { name: "Arial", size: 9, bold: true };
+    headerRow.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFFFF00" },
+    };
+
+    // Tô viền cho header
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // Thêm dữ liệu
+    proposal.items.forEach((item, index) => {
+      const row = worksheet.addRow([
+        index + 1,
+        item.asset?.fixedCode || "",
+        item.asset?.ktCode || "",
+        item.asset?.name || "",
+        item.asset?.specs || "",
+        item.asset?.currentRoom?.roomCode || "",
+        item.systemQuantity,
+        item.countedQuantity,
+        item.note || "",
+      ]);
+
+      row.font = { name: "Arial", size: 9 };
+      row.alignment = { vertical: "middle", wrapText: true };
+
+      // Căn giữa cho các cột số
+      row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+      row.getCell(7).alignment = { horizontal: "center", vertical: "middle" };
+      row.getCell(8).alignment = { horizontal: "center", vertical: "middle" };
+
+      // Tô viền cho từng cell
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // Thêm phần chữ ký (sau dữ liệu 2 dòng)
+    const lastDataRow = 8 + proposal.items.length;
+    const signatureRow = lastDataRow + 2;
+
+    // Ngày tháng
+    worksheet.mergeCells(`A${signatureRow}:I${signatureRow}`);
+    const dateCell = worksheet.getCell(`A${signatureRow}`);
+    const today = new Date();
+    dateCell.value = `Ngày ${today.getDate()} Tháng ${today.getMonth() + 1} Năm ${today.getFullYear()}`;
+    dateCell.font = { name: "Arial", size: 9 };
+    dateCell.alignment = { horizontal: "right", vertical: "middle" };
+
+    // Dòng chữ ký - 4 cột
+    const signatureLabelRow = signatureRow + 2;
+    worksheet.mergeCells(`A${signatureLabelRow}:B${signatureLabelRow}`);
+    worksheet.mergeCells(`C${signatureLabelRow}:D${signatureLabelRow}`);
+    worksheet.mergeCells(`E${signatureLabelRow}:F${signatureLabelRow}`);
+    worksheet.mergeCells(`G${signatureLabelRow}:I${signatureLabelRow}`);
+
+    const col1 = worksheet.getCell(`A${signatureLabelRow}`);
+    col1.value = "Người lập biểu";
+    col1.font = { name: "Arial", size: 9, bold: true };
+    col1.alignment = { horizontal: "center", vertical: "middle" };
+
+    const col2 = worksheet.getCell(`C${signatureLabelRow}`);
+    col2.value = "Thư ký";
+    col2.font = { name: "Arial", size: 9, bold: true };
+    col2.alignment = { horizontal: "center", vertical: "middle" };
+
+    const col3 = worksheet.getCell(`E${signatureLabelRow}`);
+    col3.value = "Trưởng nhóm kiểm kê";
+    col3.font = { name: "Arial", size: 9, bold: true };
+    col3.alignment = { horizontal: "center", vertical: "middle" };
+
+    const col4 = worksheet.getCell(`G${signatureLabelRow}`);
+    col4.value = "Đại diện ĐV sử dụng";
+    col4.font = { name: "Arial", size: 9, bold: true };
+    col4.alignment = { horizontal: "center", vertical: "middle" };
+
+    // Xuất file
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 }

@@ -33,6 +33,7 @@ import { PermissionHelperService } from "src/common/services/permission-helper.s
 import { User } from "src/entities/user.entity";
 import { plainToInstance } from "class-transformer";
 import { InventorySession } from "src/entities/inventory-session.entity";
+import { AssetStatus } from "src/common/shared/AssetStatus";
 
 @Injectable()
 export class AssetBooksService {
@@ -46,7 +47,7 @@ export class AssetBooksService {
         unitId,
         status: AssetBookStatus.OPEN,
         lookedAt: IsNull(),
-        items: { roomId, asset: { type: assetType } },
+        items: { roomId, asset: { type: assetType, status: AssetStatus.IN_USE }, status: AssetBookItemStatus.IN_USE },
       },
       relations: [
         "unit",
@@ -455,7 +456,6 @@ export class AssetBooksService {
         .leftJoinAndSelect("item.room", "room")
         .leftJoinAndSelect("item.book", "book")
         .leftJoinAndSelect("book.unit", "unit")
-        .leftJoinAndSelect("room.unit", "roomUnit")
         .leftJoinAndSelect("asset.category", "category")
         .leftJoinAndSelect("asset.rfidTag", "rfidTag");
 
@@ -497,6 +497,9 @@ export class AssetBooksService {
             { search: `%${filterDto.search}%` }
           );
         }
+
+      // Add distinct to prevent duplicates
+      queryBuilder.distinct(true);
 
       // Add default sorting
       if (filterDto.sorting && filterDto.sorting.length > 0) {
