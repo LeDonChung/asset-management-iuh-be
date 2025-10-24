@@ -33,8 +33,10 @@ async function bootstrap() {
       const allowedOrigins = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "http://localhost:3002",
         "https://asset.codeshare.id.vn",
         "https://socket.codeshare.id.vn",
+        "https://api.codeshare.id.vn",
       ];
   
       if (!origin) return callback(null, true); // Postman hoặc mobile
