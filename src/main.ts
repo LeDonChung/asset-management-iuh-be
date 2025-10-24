@@ -30,25 +30,19 @@ async function bootstrap() {
   // Enable CORS with specific settings
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests from specific domains and IPs
       const allowedOrigins = [
         "http://localhost:3000",
-        "http://localhost:3001", 
-        "http://127.0.0.1:3000",
-        "http://172.236.138.143:3000",
-        "https://172.236.138.143:3000",
+        "http://localhost:3001",
+        "https://asset.codeshare.id.vn",
+        "https://socket.codeshare.id.vn",
       ];
-      
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) {
-        return callback(null, true);
-      }
-      
-      // Check if origin matches allowed origins or contains laztar.com
+  
+      if (!origin) return callback(null, true); // Postman hoặc mobile
+  
       if (allowedOrigins.includes(origin)) {
-        callback(null, true);
+        callback(null, true); // chỉ 1 origin
       } else {
-        callback(null, true);
+        callback(new Error("Not allowed by CORS"), false);
       }
     },
     credentials: true,
@@ -62,7 +56,6 @@ async function bootstrap() {
       "Access-Control-Request-Method",
       "Access-Control-Request-Headers"
     ],
-    exposedHeaders: ["Content-Length"],
   });
 
   // Global exception filter
