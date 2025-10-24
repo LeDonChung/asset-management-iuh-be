@@ -267,7 +267,7 @@ export class RolesService {
      */
     async findAllInventoryRoles(): Promise<RoleResponseDto[]> {
         const roles = await this.roleRepository.find({
-            where: { code: In(["INVENTORY_COMMITTEE_HEAD"]) },
+            where: { code: In([RoleBase.INVENTORY_COMMITTEE_HEAD, RoleBase.INVENTORY_COMMITTEE_MEMBER, RoleBase.INVENTORY_COMMITTEE_SECRETARY]) },
             relations: ["permissions"],
         });
 

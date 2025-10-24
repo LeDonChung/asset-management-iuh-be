@@ -15,6 +15,7 @@ import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
 import { FieldType } from 'src/common/dto/filter.dto';
 import { FilterUtil } from 'src/common/utils/filter.util';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
+import { RoleBase } from 'src/common/utils/role.enum';
 
 @Injectable()
 export class UsersService {
@@ -102,7 +103,7 @@ export class UsersService {
     async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
         const user = await this.userRepository.findOne({
             where: { id: id, status: UserStatus.ACTIVE },
-            relations: ['roles']
+            relations: ['roles', 'roles.permissions']
         });
 
         if (!user) {
@@ -426,7 +427,7 @@ export class UsersService {
 
     async findAllUserInventory(): Promise<UserResponseDto[]> {
         try {
-            const inventoryRoleCodes = ["INVENTORY_COMMITTEE_HEAD", "INVENTORY_COMMITTEE_VICE_HEAD", "INVENTORY_COMMITTEE_SECRETARY", "INVENTORY_COMMITTEE_MEMBER", "INVENTORY_COMMITTEE_CHIEF_SECRETARY"];
+            const inventoryRoleCodes = [RoleBase.INVENTORY_COMMITTEE_HEAD, RoleBase.INVENTORY_COMMITTEE_MEMBER, RoleBase.INVENTORY_COMMITTEE_SECRETARY];
 
             const users = await this.userRepository
                 .createQueryBuilder('user')
@@ -456,17 +457,9 @@ export class UsersService {
     async findAllInventoryCommitteeUsers(): Promise<UserResponseDto[]> {
         try {
             const inventoryRoleCodes = [
-                "INVENTORY_COMMITTEE_HEAD",
-                "INVENTORY_COMMITTEE_VICE_HEAD",
-                "INVENTORY_COMMITTEE_SECRETARY",
-                "INVENTORY_COMMITTEE_MEMBER",
-                "INVENTORY_COMMITTEE_CHIEF_SECRETARY",
-                "INVENTORY_SUB_HEAD",
-                "INVENTORY_SUB_SECRETARY",
-                "INVENTORY_GROUP_HEAD",
-                "INVENTORY_GROUP_SECRETARY",
-                "INVENTORY_GROUP_MEMBER",
-                "INVENTORY_SUB_MEMBER"
+                RoleBase.INVENTORY_COMMITTEE_HEAD,
+                RoleBase.INVENTORY_COMMITTEE_MEMBER,
+                RoleBase.INVENTORY_COMMITTEE_SECRETARY,
             ];
 
             const users = await this.userRepository
@@ -519,7 +512,7 @@ export class UsersService {
         try {
             const user = await this.userRepository.findOne({
                 where: { id, status: UserStatus.ACTIVE },
-                relations: ['roles', 'unit'],
+                relations: ['roles', 'unit', 'roles.permissions'],
             });
             if (!user) throw new Error('User not found');
             return this.transformToResponseDto(user);

@@ -101,7 +101,23 @@ export class AssetsService {
   async findOne(id: string): Promise<AssetResponseDto> {
     const asset = await this.assetRepository.findOne({
       where: { id },
-      relations: ['category', 'currentRoom', 'rfidTag'],
+      relations: [
+        'category', 
+        'currentRoom', 
+        'currentRoom.unit',
+        'rfidTag', 
+        'transactionItems', 
+        'transactionItems.transaction', 
+        'transactionItems.transaction.fromUnit', 
+        'transactionItems.transaction.toUnit', 
+        'transactionItems.fromRoom', 
+        'transactionItems.toRoom'
+      ],
+      order: {
+        transactionItems: {
+          createdAt: 'DESC'
+        }
+      }
     });
 
     if (!asset) {
