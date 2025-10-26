@@ -1,6 +1,6 @@
 import {
   Entity,
-  PrimaryColumn,
+  PrimaryGeneratedColumn,
   Column,
   OneToOne,
   JoinColumn,
@@ -9,7 +9,10 @@ import { FixedAsset } from './asset.entity';
 
 @Entity('rfid_tags')
 export class RfidTag {
-  @PrimaryColumn({ name: 'rfid_id', comment: 'E280F3362000F00005E66021' })
+  @PrimaryGeneratedColumn({ name: 'id' })
+  id: number;
+
+  @Column({ name: 'rfid_id', nullable: true, comment: 'E280F3362000F00005E66021' })
   rfidId: string;
 
   @Column({ name: 'asset_id', nullable: false, unique: true, comment: 'Mã tài sản cố định' })
