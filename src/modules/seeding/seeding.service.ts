@@ -582,6 +582,43 @@ export class SeedingService implements OnModuleInit {
           },
         ],
       },
+      {
+        name: "Quản lý di chuyển",
+        permissions: [
+          {
+            name: "Xem",
+            code: PermissionConstants.PERM_VIEW_MOVEMENT,
+          },
+          {
+            name: "Tạo",
+            code: PermissionConstants.PERM_CREATE_MOVEMENT,
+          },
+          {
+            name: "Cập nhật",
+            code: PermissionConstants.PERM_UPDATE_MOVEMENT,
+          },
+          {
+            name: "Xóa",
+            code: PermissionConstants.PERM_REMOVE_MOVEMENT,
+          },
+          {
+            name: "Phê duyệt",
+            code: PermissionConstants.PERM_APPROVE_MOVEMENT,
+          },
+          {
+            name: "Từ chối",
+            code: PermissionConstants.PERM_REJECT_MOVEMENT,
+          },
+          {
+            name: "Đề xuất",
+            code: PermissionConstants.PERM_PROPOSE_MOVEMENT,
+          },
+          {
+            name: "Thực hiện di chuyển",
+            code: PermissionConstants.PERM_EXECUTE_MOVEMENT,
+          },
+        ],
+      },
     ];
     for (const managerPermissionData of managerPermissions) {
       let managerPermission = await this.managerPermissionRepository.findOne({
@@ -699,6 +736,40 @@ export class SeedingService implements OnModuleInit {
           PermissionConstants.PERM_VIEW_INVENTORY,
           PermissionConstants.PERM_VIEW_TRANSACTION,
           PermissionConstants.PERM_CREATE_TRANSACTION,
+        ]
+      },
+      {
+        code: RoleBase.TECHNICAL_STAFF,
+        name: "Nhân viên kỹ thuật",
+        accessScopeId: unitScope?.id,
+        permissions: [
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_UPDATE_ASSET,
+          PermissionConstants.PERM_VIEW_MOVEMENT,
+          PermissionConstants.PERM_CREATE_MOVEMENT,
+          PermissionConstants.PERM_EXECUTE_MOVEMENT,
+          PermissionConstants.PERM_VIEW_TRANSACTION,
+        ]
+      },
+      {
+        code: RoleBase.TECHNICAL_MANAGER,
+        name: "Trưởng phòng kỹ thuật",
+        accessScopeId: childUnitsScope?.id,
+        permissions: [
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_CREATE_ASSET,
+          PermissionConstants.PERM_UPDATE_ASSET,
+          PermissionConstants.PERM_VIEW_MOVEMENT,
+          PermissionConstants.PERM_CREATE_MOVEMENT,
+          PermissionConstants.PERM_UPDATE_MOVEMENT,
+          PermissionConstants.PERM_APPROVE_MOVEMENT,
+          PermissionConstants.PERM_REJECT_MOVEMENT,
+          PermissionConstants.PERM_EXECUTE_MOVEMENT,
+          PermissionConstants.PERM_VIEW_TRANSACTION,
+          PermissionConstants.PERM_CREATE_TRANSACTION,
+          PermissionConstants.PERM_APPROVE_TRANSACTION,
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_CATEGORY,
         ]
       }
     ];

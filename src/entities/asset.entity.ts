@@ -23,6 +23,7 @@ import { AssetBookItem } from './asset-book-item.entity';
 import { Alert } from './alert.entity';
 import { AssetTransactionItem } from './asset-transaction-item.entity';
 import { AssetTransactionHistory } from './asset-transaction-history.entity';
+import { AssetMovementItem } from './asset-movement-item.entity';
 
 
 @Entity('assets')
@@ -126,6 +127,10 @@ export class Asset {
     // Asset Transaction relationships
     @OneToMany(() => AssetTransactionItem, (item) => item.asset)
     transactionItems?: AssetTransactionItem[];
+
+    // Asset Movement relationships
+    @OneToMany(() => AssetMovementItem, (item) => item.asset)
+    movementItems?: AssetMovementItem[];
 }
 
 // Child entities for inheritance

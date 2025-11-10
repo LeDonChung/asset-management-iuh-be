@@ -32,6 +32,9 @@ import { AssetTransaction } from "src/entities/asset-transaction.entity";
 import { AssetTransactionHistory } from "src/entities/asset-transaction-history.entity";
 import { AssetTransactionItem } from "src/entities/asset-transaction-item.entity";
 import { AccessScope } from "src/entities/access-scope.entity";
+import { AssetMovement } from "src/entities/asset-movement.entity";
+import { AssetMovementHistory } from "src/entities/asset-movement-history.entity";
+import { AssetMovementItem } from "src/entities/asset-movement-item.entity";
 
 export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
   imports: [],
@@ -85,6 +88,9 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
         AssetTransaction,
         AssetTransactionHistory,
         AssetTransactionItem,
+        AssetMovement,
+        AssetMovementHistory,
+        AssetMovementItem,
         AccessScope,
       ],
       synchronize: false,
@@ -139,6 +145,9 @@ const dataSource = new DataSource({
     AssetTransaction,
     AssetTransactionHistory,
     AssetTransactionItem,
+    AssetMovement,
+    AssetMovementHistory,
+    AssetMovementItem,
     AccessScope
   ],
   migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
