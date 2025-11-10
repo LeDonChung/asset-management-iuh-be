@@ -556,6 +556,7 @@ export class AssetBooksService {
         type: item.asset.type,
         categoryId: item.asset.categoryId,
         status: item.asset.status,
+        bookItemStatus: item.status,
         createdAt: item.asset.createdAt,
         note: item.note,
         currentRoom: item.room

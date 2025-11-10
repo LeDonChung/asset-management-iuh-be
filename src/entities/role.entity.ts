@@ -6,10 +6,13 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   ManyToMany,
+  ManyToOne,
   JoinTable,
+  JoinColumn,
 } from "typeorm";
 import { Permission } from "./permission.entity";
 import { User } from "./user.entity";
+import { AccessScope } from "./access-scope.entity";
 
 @Entity("roles")
 export class Role {
@@ -21,6 +24,9 @@ export class Role {
 
   @Column({ unique: true })
   code: string;
+
+  @Column({ nullable: true })
+  accessScopeId?: string;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -42,6 +48,10 @@ export class Role {
 
   @ManyToMany(() => User, (user) => user.roles)
   users?: User[];
+
+  @ManyToOne(() => AccessScope, { nullable: true })
+  @JoinColumn({ name: "accessScopeId" })
+  accessScope?: AccessScope;
 
   @Column({ default: false })
   isProtected?: boolean;

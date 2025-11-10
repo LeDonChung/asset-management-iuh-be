@@ -13,6 +13,7 @@ import { MulterModule } from "@nestjs/platform-express";
 import { FilesModule } from "../files/files.module";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
 import { Unit } from "src/entities/unit.entity";
+import { AccessControlModule } from "src/common/services/access-control.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { Unit } from "src/entities/unit.entity";
       },
     }),
     FilesModule,
+    AccessControlModule,
   ],
   controllers: [AlertsController],
   providers: [AlertsService, PermissionHelperService],

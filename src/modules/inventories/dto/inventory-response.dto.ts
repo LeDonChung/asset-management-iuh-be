@@ -80,16 +80,6 @@ export class InventorySessionResponseDto {
   @Expose()
   name: string;
 
-  @ApiProperty({ description: "Đợt kiểm kê", example: 1 })
-  @Expose()
-  period: number;
-
-  @ApiProperty({
-    description: "Có phải kỳ kiểm kê toàn cục không",
-    example: false,
-  })
-  @Expose()
-  isGlobal: boolean;
 
   @ApiProperty({ description: "Ngày bắt đầu", example: "2024-12-01" })
   @Expose()

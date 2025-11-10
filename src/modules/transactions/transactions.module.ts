@@ -8,8 +8,10 @@ import { AssetTransactionHistory } from 'src/entities/asset-transaction-history.
 import { Asset } from 'src/entities/asset.entity';
 import { AssetBook } from 'src/entities/asset-book.entity';
 import { AssetBookItem } from 'src/entities/asset-book-item.entity';
+import { Room } from 'src/entities/room.entity';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
 import { Unit } from 'src/entities/unit.entity';
+import { AccessControlModule } from 'src/common/services/access-control.module';
 
 @Module({
   imports: [
@@ -20,8 +22,10 @@ import { Unit } from 'src/entities/unit.entity';
       Asset,
       AssetBook,
       AssetBookItem,
+      Room,
       Unit
     ]),
+    AccessControlModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, PermissionHelperService],

@@ -32,6 +32,7 @@ import { InventoryGroup } from "src/entities/inventory-group";
 import { InventoryGroupAssignment } from "src/entities/inventory-group-assignment";
 import { InventoryResult } from "src/entities/inventory-result";
 import { Asset } from "src/entities/asset.entity";
+import { Room } from "src/entities/room.entity";
 import { RedisService } from "../redis/redis.service";
 import { InventorySub } from "src/entities/inventory-sub.entity";
 import { SaveTempInventoryDto, AssetInventoryDetail } from "./dto/save-temp-inventory.dto";
@@ -42,6 +43,15 @@ import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory
 import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
 import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
 import { InventoryResultResponseDto } from "./dto/inventory-result-response.dto";
+import { UnitStatus } from "src/common/shared/UnitStatus";
+import { CopyInventoryDto } from "./dto/copy-inventory.dto";
+import { CopyInventoryResponseDto } from "./dto/copy-inventory-response.dto";
+import { UnitType } from "src/common/shared/UnitType";
+import { MultiRoomInventoryFilterDto } from "./dto/multi-room-inventory-filter.dto";
+import { MultiRoomInventoryResponseDto, RoomInventorySimpleDto, AssetInventorySimpleDto } from "./dto/multi-room-inventory-response.dto";
+import { ExportInventoryExcelDto, ExportMultiRoomInventoryExcelDto } from "./dto/export-inventory-excel.dto";
+import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class InventoriesService {
@@ -68,6 +78,8 @@ export class InventoriesService {
     private inventoryResultRepository: Repository<InventoryResult>,
     @InjectRepository(Asset)
     private assetRepository: Repository<Asset>,
+    @InjectRepository(Room)
+    private roomRepository: Repository<Room>,
     @InjectRepository(InventorySub)
     private inventorySubRepository: Repository<InventorySub>,
     private redisService: RedisService
@@ -122,7 +134,7 @@ export class InventoriesService {
     createInventoryDto: CreateInventoryDto,
     currentUser?: User
   ): Promise<InventorySessionResponseDto> {
-    const { fileUrls, unitIds, ...inventoryData } = createInventoryDto;
+    const { fileUrls, ...inventoryData } = createInventoryDto;
 
     // Validation: Kiểm tra người tạo có tồn tại không
     if (!currentUser) {
@@ -143,27 +155,19 @@ export class InventoriesService {
       );
     }
 
-    // Validation: Kiểm tra tên kỳ kiểm kê đã tồn tại trong năm này chưa
+    // Validation: Kiểm tra đã có kỳ kiểm kê nào trong năm này chưa (mỗi năm chỉ có 1 kỳ)
     const existingSession = await this.inventorySessionRepository.findOne({
       where: {
-        year: inventoryData.year,
-        period: inventoryData.period,
-      },
+        year: inventoryData.year
+      }
     });
 
     if (existingSession) {
       throw new BadRequestException(
-        `Kỳ kiểm kê "${inventoryData.name}" đã tồn tại trong năm ${inventoryData.year}`
+        `Năm ${inventoryData.year} đã có kỳ kiểm kê "${existingSession.name}". Mỗi năm chỉ được tạo một kỳ kiểm kê duy nhất.`
       );
     }
 
-    // Validation: Kiểm tra units nếu có
-    if (unitIds && unitIds.length > 0) {
-      const units = await this.unitRepository.findBy({ id: In(unitIds) });
-      if (units.length !== unitIds.length) {
-        throw new BadRequestException("Một hoặc nhiều đơn vị không tồn tại");
-      }
-    }
 
     // Validation: Kiểm tra format URL nếu có
     if (fileUrls && fileUrls.length > 0) {
@@ -200,12 +204,16 @@ export class InventoriesService {
     const savedSession =
       await this.inventorySessionRepository.save(inventorySession);
 
-    // Tạo inventory session units với sessionId đã có
-    if (unitIds && unitIds.length > 0) {
-      const inventorySessionUnits = unitIds.map((unitId) =>
+    // Tự động tạo inventory session units cho tất cả units
+    const allUnits = await this.unitRepository.find({
+      where: { status: UnitStatus.ACTIVE, type: UnitType.CAMPUS }
+    });
+    
+    if (allUnits.length > 0) {
+      const inventorySessionUnits = allUnits.map((unit) =>
         this.inventorySessionUnitRepository.create({
           sessionId: savedSession.id,
-          unitId,
+          unitId: unit.id,
         })
       );
       const savedInventorySessionUnits = await this.inventorySessionUnitRepository.save(inventorySessionUnits);
@@ -250,9 +258,7 @@ export class InventoriesService {
         searchFields: ["name"],
         fieldTypeMap: {
           name: FieldType.TEXT,
-          period: FieldType.NUMBER,
           status: FieldType.SELECT,
-          isGlobal: FieldType.BOOLEAN,
           year: FieldType.NUMBER,
           startDate: FieldType.DATE,
           endDate: FieldType.DATE,
@@ -341,7 +347,7 @@ export class InventoriesService {
     id: string,
     updateInventoryDto: UpdateInventoryDto
   ): Promise<InventorySessionResponseDto> {
-    const { fileUrls, unitIds, ...updateData } = updateInventoryDto;
+    const { fileUrls, ...updateData } = updateInventoryDto;
 
     // Kiểm tra inventory session có tồn tại không
     const existingSession = await this.inventorySessionRepository.findOne({
@@ -377,36 +383,22 @@ export class InventoriesService {
       }
     }
 
-    // Validation: Kiểm tra tên kỳ kiểm kê đã tồn tại trong năm này chưa (nếu có cập nhật tên)
-    if (updateData.name && updateData.name !== existingSession.name) {
-      const year = updateData.year || existingSession.year;
-      const existingSessionWithSamePeriod =
+    // Validation: Kiểm tra năm có thay đổi không (nếu có cập nhật năm)
+    if (updateData.year && updateData.year !== existingSession.year) {
+      const existingSessionInNewYear =
         await this.inventorySessionRepository.findOne({
           where: {
-            period: updateData.period,
-            year: year,
+            year: updateData.year,
           },
         });
 
-      if (
-        existingSessionWithSamePeriod &&
-        existingSessionWithSamePeriod.id !== id
-      ) {
+      if (existingSessionInNewYear && existingSessionInNewYear.id !== id) {
         throw new BadRequestException(
-          `Kỳ kiểm kê "${updateData.name}" đã tồn tại trong năm ${year}`
+          `Năm ${updateData.year} đã có kỳ kiểm kê "${existingSessionInNewYear.name}". Mỗi năm chỉ được có một kỳ kiểm kê duy nhất.`
         );
       }
     }
 
-    // Validation: Kiểm tra units nếu có cập nhật
-    if (unitIds !== undefined) {
-      if (unitIds.length > 0) {
-        const units = await this.unitRepository.findBy({ id: In(unitIds) });
-        if (units.length !== unitIds.length) {
-          throw new BadRequestException("Một hoặc nhiều đơn vị không tồn tại");
-        }
-      }
-    }
 
     // Validation: Kiểm tra format URL nếu có cập nhật
     if (fileUrls !== undefined && fileUrls.length > 0) {
@@ -452,27 +444,43 @@ export class InventoriesService {
     // Save tất cả trong một lần
     const savedSession =
       await this.inventorySessionRepository.save(existingSession);
-    // Xử lý units
-    if (unitIds !== undefined) {
+      
+    // Xử lý units - cập nhật để đồng bộ với tất cả units active hiện tại
+    const allActiveUnits = await this.unitRepository.find({
+      where: { status: UnitStatus.ACTIVE }
+    });
+    
+    const currentUnitIds = existingSession.inventorySessionUnits?.map(isu => isu.unitId) || [];
+    const activeUnitIds = allActiveUnits.map(unit => unit.id);
+    
+    // Chỉ cập nhật nếu có sự thay đổi trong danh sách units
+    const unitsChanged = currentUnitIds.length !== activeUnitIds.length || 
+                        !currentUnitIds.every(id => activeUnitIds.includes(id));
+    
+    if (unitsChanged) {
+      // Xóa các inventory subs trước (để tránh foreign key constraint)
+      if (existingSession.inventorySessionUnits && existingSession.inventorySessionUnits.length > 0) {
+        await this.deleteInventorySubsForUnits(existingSession.inventorySessionUnits);
+      }
+      
       // Xóa các inventory session units cũ
-      if (
-        existingSession.inventorySessionUnits &&
-        existingSession.inventorySessionUnits.length > 0
-      ) {
-        await this.inventorySessionUnitRepository.remove(
-          existingSession.inventorySessionUnits
-        );
+      if (existingSession.inventorySessionUnits && existingSession.inventorySessionUnits.length > 0) {
+        await this.inventorySessionUnitRepository.remove(existingSession.inventorySessionUnits);
       }
 
-      // Tạo inventory session units mới nếu có
-      if (unitIds && unitIds.length > 0) {
-        const inventorySessionUnits = unitIds.map((unitId) =>
+      // Tạo inventory session units mới cho tất cả units active
+      if (allActiveUnits.length > 0) {
+        const inventorySessionUnits = allActiveUnits.map((unit) =>
           this.inventorySessionUnitRepository.create({
             inventorySession: existingSession,
-            unitId,
+            unitId: unit.id,
           })
         );
-        await this.inventorySessionUnitRepository.save(inventorySessionUnits);
+        const savedInventorySessionUnits = await this.inventorySessionUnitRepository.save(inventorySessionUnits);
+        
+        // Tự động tạo lại tiểu ban kiểm kê cho mỗi unit
+        const currentUser = { id: existingSession.createdBy } as User;
+        await this.createInventorySubsForUnits(savedInventorySessionUnits, currentUser);
       }
     }
     return this.findOne(savedSession.id);
@@ -525,42 +533,240 @@ export class InventoriesService {
   }
 
   async remove(id: string): Promise<void> {
-    // Kiểm tra inventory session có tồn tại không
-    const inventorySession = await this.inventorySessionRepository.findOne({
-      where: { id },
-      relations: ["fileUrls", "inventorySessionUnits"],
+    // Kiểm tra session có tồn tại không
+    const session = await this.inventorySessionRepository.findOne({
+      where: { id }
     });
 
-    if (!inventorySession) {
-      throw new NotFoundException(
-        `Inventory session với ID ${id} không tồn tại`
-      );
+    if (!session) {
+      throw new NotFoundException('Kỳ kiểm kê không tồn tại');
     }
 
-    // Validation: Kiểm tra trạng thái có thể xóa không
-    if (inventorySession.status === "IN_PROGRESS") {
-      throw new BadRequestException(
-        "Không thể xóa kỳ kiểm kê đang trong quá trình thực hiện"
-      );
+    // Chỉ cho phép xóa khi ở trạng thái PLANNED
+    if (session.status !== InventorySessionStatus.PLANNED) {
+      throw new BadRequestException('Chỉ có thể xóa kỳ kiểm kê ở trạng thái Kế hoạch');
     }
 
-    // Xóa các file URLs liên quan
-    if (inventorySession.fileUrls && inventorySession.fileUrls.length > 0) {
-      await this.fileUrlRepository.remove(inventorySession.fileUrls);
-    }
-
-    // Xóa các inventory session units liên quan
-    if (
-      inventorySession.inventorySessionUnits &&
-      inventorySession.inventorySessionUnits.length > 0
-    ) {
-      await this.inventorySessionUnitRepository.remove(
-        inventorySession.inventorySessionUnits
-      );
-    }
-
-    // Xóa inventory session (soft delete)
     await this.inventorySessionRepository.softDelete(id);
+  }
+
+  /**
+   * Sao chép kỳ kiểm kê từ kỳ có sẵn
+   */
+  async copyInventorySession(
+    sourceSessionId: string,
+    copyInventoryDto: CopyInventoryDto,
+    currentUser: User
+  ): Promise<CopyInventoryResponseDto> {
+    const {
+      name,
+      year,
+      startDate,
+      endDate,
+      description,
+      copyMembers = false,
+      copyGroups = false,
+      copyAssignments = false,
+      copyFileUrls = false,
+      copySubInventories = true
+    } = copyInventoryDto;
+
+    // Validation: Kiểm tra source session có tồn tại không
+    const sourceSession = await this.inventorySessionRepository.findOne({
+      where: { id: sourceSessionId },
+      relations: [
+        'fileUrls',
+        'members',
+        'inventorySessionUnits',
+        'inventorySessionUnits.subInventory',
+        'inventorySessionUnits.subInventory.members',
+        'inventorySessionUnits.subInventory.groups',
+        'inventorySessionUnits.subInventory.groups.members',
+        'inventorySessionUnits.subInventory.groups.assignments'
+      ]
+    });
+
+    if (!sourceSession) {
+      throw new NotFoundException(`Kỳ kiểm kê nguồn với ID ${sourceSessionId} không tồn tại`);
+    }
+
+    // Validation: Kiểm tra ngày bắt đầu và kết thúc
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+
+    if (startDateObj >= endDateObj) {
+      throw new BadRequestException("Ngày bắt đầu phải nhỏ hơn ngày kết thúc");
+    }
+
+    if (startDateObj < new Date()) {
+      throw new BadRequestException("Ngày bắt đầu không được nhỏ hơn ngày hiện tại");
+    }
+
+    // Validation: Kiểm tra năm đích đã có kỳ kiểm kê chưa
+    const existingSessionInYear = await this.inventorySessionRepository.findOne({
+      where: { year }
+    });
+
+    if (existingSessionInYear) {
+      throw new BadRequestException(
+        `Năm ${year} đã có kỳ kiểm kê "${existingSessionInYear.name}". Mỗi năm chỉ được tạo một kỳ kiểm kê duy nhất.`
+      );
+    }
+
+    // Tạo inventory session mới
+    const newSession = this.inventorySessionRepository.create({
+      name,
+      year,
+      startDate: startDateObj,
+      endDate: endDateObj,
+      status: InventorySessionStatus.PLANNED,
+      createdBy: currentUser.id,
+    });
+
+    // Copy file URLs nếu được yêu cầu
+    if (copyFileUrls && sourceSession.fileUrls && sourceSession.fileUrls.length > 0) {
+      const newFileUrls = sourceSession.fileUrls.map(fileUrl =>
+        this.fileUrlRepository.create({ url: fileUrl.url })
+      );
+      newSession.fileUrls = newFileUrls;
+    }
+
+    // Lưu session mới
+    const savedSession = await this.inventorySessionRepository.save(newSession);
+
+    // Tự động tạo inventory session units cho tất cả units active
+    const allActiveUnits = await this.unitRepository.find({
+      where: { status: UnitStatus.ACTIVE, type: UnitType.CAMPUS }
+    });
+
+    let inventorySessionUnits: any[] = [];
+    if (allActiveUnits.length > 0) {
+      inventorySessionUnits = allActiveUnits.map((unit) =>
+        this.inventorySessionUnitRepository.create({
+          sessionId: savedSession.id,
+          unitId: unit.id,
+        })
+      );
+      const savedInventorySessionUnits = await this.inventorySessionUnitRepository.save(inventorySessionUnits);
+      inventorySessionUnits = savedInventorySessionUnits;
+    }
+
+    // Khởi tạo counters cho kết quả copy
+    const copyResults = {
+      membersCopied: 0,
+      groupsCopied: 0,
+      assignmentsCopied: 0,
+      fileUrlsCopied: copyFileUrls && sourceSession.fileUrls ? sourceSession.fileUrls.length : 0,
+      subInventoriesCopied: 0
+    };
+
+    // Copy members nếu được yêu cầu
+    if (copyMembers && sourceSession.members && sourceSession.members.length > 0) {
+      const newMembers = sourceSession.members.map(member =>
+        this.inventorySessionMemberRepository.create({
+          inventorySessionId: savedSession.id,
+          userId: member.userId,
+          role: member.role,
+          createdBy: currentUser.id,
+        })
+      );
+      const savedMembers = await this.inventorySessionMemberRepository.save(newMembers);
+      copyResults.membersCopied = newMembers.length;
+    }
+
+    // Copy sub inventories và các thành phần liên quan
+    if (copySubInventories && sourceSession.inventorySessionUnits) {
+      for (const sourceSessionUnit of sourceSession.inventorySessionUnits) {
+        // Tìm session unit tương ứng trong session mới
+        const newSessionUnit = inventorySessionUnits.find(isu => isu.unitId === sourceSessionUnit.unitId);
+        if (!newSessionUnit) continue;
+
+        if (sourceSessionUnit.subInventory) {
+          // Tạo sub inventory mới
+          const newSubInventory = this.inventorySubRepository.create({
+            name: sourceSessionUnit.subInventory.name,
+            inventorySessionUnitId: newSessionUnit.id,
+            description: sourceSessionUnit.subInventory.description,
+            createdBy: currentUser.id,
+          });
+          const savedSubInventory = await this.inventorySubRepository.save(newSubInventory);
+          copyResults.subInventoriesCopied++;
+
+          // Copy sub inventory members nếu có
+          if (sourceSessionUnit.subInventory.members && sourceSessionUnit.subInventory.members.length > 0) {
+            // Note: Sub inventory members copy would need SubInventoryMember repository
+            // This is commented out as we need to implement SubInventoryMember entity properly
+          }
+
+          // Copy groups nếu được yêu cầu
+          if (copyGroups && sourceSessionUnit.subInventory.groups && sourceSessionUnit.subInventory.groups.length > 0) {
+            for (const sourceGroup of sourceSessionUnit.subInventory.groups) {
+              const newGroup = this.inventoryGroupRepository.create({
+                name: sourceGroup.name,
+                subInventoryId: savedSubInventory.id,
+                description: sourceGroup.description,
+                status: sourceGroup.status,
+                createdBy: currentUser.id,
+              });
+              const savedGroup = await this.inventoryGroupRepository.save(newGroup);
+              copyResults.groupsCopied++;
+
+              // Copy group members nếu có
+              if (sourceGroup.members && sourceGroup.members.length > 0) {
+                const newGroupMembers = sourceGroup.members.map(member =>
+                  this.inventoryGroupMemberRepository.create({
+                    groupId: savedGroup.id,
+                    userId: member.userId,
+                    role: member.role,
+                    createdBy: currentUser.id,
+                  })
+                );
+                await this.inventoryGroupMemberRepository.save(newGroupMembers);
+              }
+
+              // Copy assignments nếu được yêu cầu
+              if (copyAssignments && sourceGroup.assignments && sourceGroup.assignments.length > 0) {
+                const newAssignments = sourceGroup.assignments.map(assignment =>
+                  this.inventoryGroupAssignmentRepository.create({
+                    groupId: savedGroup.id,
+                    unitId: assignment.unitId,
+                    startDate: startDateObj, // Sử dụng startDate từ session mới
+                    endDate: endDateObj, // Sử dụng endDate từ session mới
+                    note: assignment.note,
+                    createdBy: currentUser.id,
+                  })
+                );
+                await this.inventoryGroupAssignmentRepository.save(newAssignments);
+                copyResults.assignmentsCopied += newAssignments.length;
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Nếu không copy sub inventories, tự động tạo sub inventories mới
+      await this.createInventorySubsForUnits(inventorySessionUnits, currentUser);
+      copyResults.subInventoriesCopied = inventorySessionUnits.length;
+    }
+
+    // Lấy thông tin session mới đã tạo
+    const newInventorySession = await this.findOne(savedSession.id);
+
+    return plainToInstance(CopyInventoryResponseDto, {
+      newInventorySession,
+      sourceInventorySessionId: sourceSessionId,
+      copyOptions: {
+        copyMembers,
+        copyGroups,
+        copyAssignments,
+        copyFileUrls,
+        copySubInventories
+      },
+      copyResults,
+      copiedAt: new Date()
+    }, {
+      excludeExtraneousValues: true,
+    });
   }
 
   // === MEMBER MANAGEMENT METHODS ===
@@ -1426,6 +1632,826 @@ export class InventoriesService {
     return plainToInstance(RoomInventoryResultResponseDto, response, {
       excludeExtraneousValues: true,
     });
+  }
+
+  /**
+   * Lấy kết quả kiểm kê nhiều phòng với pagination
+   */
+  async getMultiRoomInventoryResults(
+    filterDto: MultiRoomInventoryFilterDto
+  ): Promise<MultiRoomInventoryResponseDto> {
+    const { page = 1, limit = 5, assignmentId, sessionId, unitId, search, assetType } = filterDto;
+    const offset = (page - 1) * limit;
+
+    // Tạo query builder cơ bản
+    let query = this.inventoryResultRepository
+      .createQueryBuilder('result')
+      .leftJoinAndSelect('result.asset', 'asset')
+      .leftJoinAndSelect('result.room', 'room')
+      .leftJoinAndSelect('result.assignment', 'assignment')
+      .leftJoinAndSelect('assignment.group', 'group')
+      .leftJoinAndSelect('group.subInventory', 'subInventory')
+      .leftJoinAndSelect('subInventory.inventorySessionUnit', 'sessionUnit')
+      .leftJoinAndSelect('sessionUnit.inventorySession', 'session')
+      .where('result.roomId IS NOT NULL')
+      .andWhere('result.deletedAt IS NULL')
+      .andWhere('asset.deletedAt IS NULL')
+      .andWhere('room.deletedAt IS NULL');
+
+    // Áp dụng filter theo assignmentId
+    if (assignmentId) {
+      query = query.andWhere('result.assignmentId = :assignmentId', { assignmentId });
+    }
+
+    // Áp dụng filter theo sessionId
+    if (sessionId) {
+      query = query.andWhere('session.id = :sessionId', { sessionId });
+    }
+
+    // Áp dụng filter theo unitId
+    if (unitId) {
+      query = query.andWhere('assignment.unitId = :unitId', { unitId });
+    }
+
+    // Áp dụng tìm kiếm theo tên phòng
+    if (search && search.trim()) {
+      query = query.andWhere('room.name ILIKE :search', { search: `%${search.trim()}%` });
+    }
+
+    // Áp dụng filter theo loại tài sản
+    if (assetType && assetType !== 'ALL') {
+      query = query.andWhere('asset.type = :assetType', { assetType });
+    }
+
+    // Lấy danh sách kết quả
+    const results = await query
+      .orderBy('room.name', 'ASC')
+      .addOrderBy('asset.fixedCode', 'ASC')
+      .getMany();
+
+    // Group theo roomId
+    const roomResultsMap = new Map<string, any[]>();
+    const roomInfoMap = new Map<string, any>();
+    
+    // Lấy thông tin chi tiết các phòng
+    const roomIds = [...new Set(results.map(result => result.roomId))];
+    if (roomIds.length > 0) {
+      const rooms = await this.roomRepository.find({
+        where: { id: In(roomIds) }
+      });
+      rooms.forEach(room => {
+        roomInfoMap.set(room.id, room);
+      });
+    }
+    
+    results.forEach(result => {
+      if (!roomResultsMap.has(result.roomId)) {
+        roomResultsMap.set(result.roomId, []);
+      }
+      roomResultsMap.get(result.roomId)!.push(result);
+    });
+
+    // Tạo danh sách các phòng
+    const roomsData: RoomInventorySimpleDto[] = [];
+    
+    for (const [roomId, roomResults] of roomResultsMap.entries()) {
+      const roomInfo = roomInfoMap.get(roomId);
+
+      // Phân loại tài sản theo type
+      const fixedAssets: AssetInventorySimpleDto[] = [];
+      const toolsEquipment: AssetInventorySimpleDto[] = [];
+
+      roomResults.forEach(result => {
+        const assetData: AssetInventorySimpleDto = {
+          id: result.id,
+          assetId: result.assetId,
+          systemQuantity: result.systemQuantity,
+          countedQuantity: result.countedQuantity,
+          status: result.status,
+          scanMethod: result.scanMethod,
+          note: result.note || '',
+          createdAt: result.createdAt,
+          asset: {
+            id: result.asset.id,
+            name: result.asset.name || '',
+            fixedCode: result.asset.fixedCode || '',
+            ktCode: result.asset.ktCode || '',
+            type: result.asset.type || '',
+          }
+        };
+
+        if (result.asset.type === 'FIXED_ASSET') {
+          fixedAssets.push(assetData);
+        } else {
+          toolsEquipment.push(assetData);
+        }
+      });
+
+      roomsData.push({
+        roomId,
+        roomName: roomInfo?.name || `Phòng ${roomId.substring(0, 8)}`,
+        fixedAssets,
+        toolsEquipment,
+      });
+    }
+
+    // Sort theo tên phòng
+    roomsData.sort((a, b) => a.roomName.localeCompare(b.roomName));
+
+    // Áp dụng pagination
+    const totalRooms = roomsData.length;
+    const totalPages = Math.ceil(totalRooms / limit);
+    const paginatedRooms = roomsData.slice(offset, offset + limit);
+
+    const response: MultiRoomInventoryResponseDto = {
+      rooms: paginatedRooms,
+      page,
+      limit,
+      totalRooms,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    };
+
+    return plainToInstance(MultiRoomInventoryResponseDto, response, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  // === EXPORT EXCEL METHODS ===
+
+  /**
+   * Xuất kết quả kiểm kê của một phòng ra file Excel với format chuyên nghiệp
+   */
+  async exportRoomInventoryToExcel(
+    exportDto: ExportInventoryExcelDto,
+    currentUser: User
+  ): Promise<Buffer> {
+    // Lấy thông tin phòng
+    const room = await this.roomRepository.findOne({
+      where: { id: exportDto.roomId },
+      relations: ['unit']
+    });
+
+    if (!room) {
+      throw new NotFoundException(`Không tìm thấy phòng với ID: ${exportDto.roomId}`);
+    }
+
+    // Lấy kết quả kiểm kê của phòng
+    const roomResults = await this.getRoomInventoryResults(exportDto.roomId);
+
+    // Tạo workbook với ExcelJS để có styling đẹp
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Báo cáo kiểm kê tài sản');
+
+    // Thiết lập width cho các cột
+    worksheet.columns = [
+      { width: 5 },   // STT
+      { width: 35 },  // Tên tài sản
+      { width: 15 },  // Mã tài sản
+      { width: 15 },  // Loại tài sản
+      { width: 12 },  // Số lượng hệ thống
+      { width: 12 },  // Số lượng kiểm kê
+      { width: 10 },  // Chênh lệch
+      { width: 15 },  // Phương pháp quét
+      { width: 12 },  // Trạng thái
+      { width: 30 },  // Ghi chú
+      { width: 12 },  // Ngày kiểm kê
+    ];
+
+    let currentRow = 1;
+
+    // Tiêu đề báo cáo
+    const titleCell = worksheet.getCell(`A${currentRow}`);
+    titleCell.value = `BÁO CÁO KIỂM KÊ TÀI SẢN PHÒNG ${room.roomCode || room.name}`;
+    worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+    titleCell.font = { bold: true, size: 16 };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'E6F3FF' }
+    };
+    currentRow += 2;
+
+    // Thông tin phòng và ngày
+    const roomInfoCell = worksheet.getCell(`A${currentRow}`);
+    roomInfoCell.value = `Phòng: ${room.roomCode || room.name} - Đơn vị: ${room.unit?.name || 'N/A'}`;
+    worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+    roomInfoCell.font = { bold: true, size: 12 };
+    roomInfoCell.alignment = { horizontal: 'left' };
+    currentRow++;
+
+    const dateInfoCell = worksheet.getCell(`A${currentRow}`);
+    dateInfoCell.value = `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}`;
+    worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+    dateInfoCell.font = { size: 11 };
+    dateInfoCell.alignment = { horizontal: 'left' };
+    currentRow++;
+
+    const userInfoCell = worksheet.getCell(`A${currentRow}`);
+    userInfoCell.value = `Người xuất: ${currentUser.fullName || currentUser.username}`;
+    worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+    userInfoCell.font = { size: 11 };
+    userInfoCell.alignment = { horizontal: 'left' };
+    currentRow += 2;
+
+    let rowIndex = 1;
+    let totalMatched = 0;
+    let totalMissing = 0;
+    let totalExcess = 0;
+
+    // Header bảng chính
+    const headers = [
+      'STT', 'Tên tài sản', 'Mã tài sản', 'Loại tài sản',
+      'SL hệ thống', 'SL kiểm kê', 'Chênh lệch', 'Phương pháp', 'Trạng thái', 'Ghi chú', 'Ngày KK'
+    ];
+
+    headers.forEach((header, index) => {
+      const cell = worksheet.getCell(currentRow, index + 1);
+      cell.value = header;
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '4472C4' }
+      };
+      this.setCellBorder(cell, true);
+    });
+    currentRow++;
+
+    // Thêm dữ liệu tài sản cố định
+    if (roomResults.fixedAssets?.length > 0) {
+      // Header section cho tài sản cố định
+      const fixedAssetHeaderCell = worksheet.getCell(`A${currentRow}`);
+      fixedAssetHeaderCell.value = '=== TÀI SẢN CỐ ĐỊNH ===';
+      worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+      fixedAssetHeaderCell.font = { bold: true, size: 12 };
+      fixedAssetHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      fixedAssetHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'F2F2F2' }
+      };
+      this.setCellBorder(fixedAssetHeaderCell, true);
+      currentRow++;
+
+      roomResults.fixedAssets.forEach((result) => {
+        if (this.shouldIncludeAsset(result, exportDto)) {
+          const difference = result.countedQuantity - result.systemQuantity;
+          
+          const rowData = [
+            rowIndex++,
+            result.asset?.name || '',
+            result.asset?.fixedCode || result.asset?.ktCode || '',
+            'Tài sản cố định',
+            result.systemQuantity,
+            result.countedQuantity,
+            difference,
+            this.getScanMethodText(result.scanMethod),
+            this.getStatusText(result.status),
+            result.note || '',
+            new Date(result.createdAt).toLocaleDateString('vi-VN')
+          ];
+
+          rowData.forEach((value, index) => {
+            const cell = worksheet.getCell(currentRow, index + 1);
+            cell.value = value;
+            cell.alignment = { horizontal: index === 1 || index === 9 ? 'left' : 'center', vertical: 'middle' };
+            
+            // Styling theo trạng thái
+            if (index === 8) { // Cột trạng thái
+              this.applyCellStatusStyling(cell, result.status);
+            }
+            
+            this.setCellBorder(cell, false);
+          });
+
+          // Đếm theo trạng thái
+          switch (result.status) {
+            case 'MATCHED': totalMatched++; break;
+            case 'MISSING': totalMissing++; break;
+            case 'EXCESS': totalExcess++; break;
+          }
+          
+          currentRow++;
+        }
+      });
+    }
+
+    // Thêm dữ liệu công cụ dụng cụ
+    if (roomResults.toolsEquipment?.length > 0) {
+      // Header section cho công cụ dụng cụ
+      const toolsHeaderCell = worksheet.getCell(`A${currentRow}`);
+      toolsHeaderCell.value = '=== CÔNG CỤ DỤNG CỤ ===';
+      worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+      toolsHeaderCell.font = { bold: true, size: 12 };
+      toolsHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      toolsHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'F2F2F2' }
+      };
+      this.setCellBorder(toolsHeaderCell, true);
+      currentRow++;
+
+      roomResults.toolsEquipment.forEach((result) => {
+        if (this.shouldIncludeAsset(result, exportDto)) {
+          const difference = result.countedQuantity - result.systemQuantity;
+          
+          const rowData = [
+            rowIndex++,
+            result.asset?.name || '',
+            result.asset?.fixedCode || result.asset?.ktCode || '',
+            'Công cụ dụng cụ',
+            result.systemQuantity,
+            result.countedQuantity,
+            difference,
+            this.getScanMethodText(result.scanMethod),
+            this.getStatusText(result.status),
+            result.note || '',
+            new Date(result.createdAt).toLocaleDateString('vi-VN')
+          ];
+
+          rowData.forEach((value, index) => {
+            const cell = worksheet.getCell(currentRow, index + 1);
+            cell.value = value;
+            cell.alignment = { horizontal: index === 1 || index === 9 ? 'left' : 'center', vertical: 'middle' };
+            
+            if (index === 8) {
+              this.applyCellStatusStyling(cell, result.status);
+            }
+            
+            this.setCellBorder(cell, false);
+          });
+
+          switch (result.status) {
+            case 'MATCHED': totalMatched++; break;
+            case 'MISSING': totalMissing++; break;
+            case 'EXCESS': totalExcess++; break;
+          }
+          
+          currentRow++;
+        }
+      });
+    }
+
+    // Bảng thống kê
+    currentRow += 2;
+    const statsTitle = worksheet.getCell(`A${currentRow}`);
+    statsTitle.value = 'THỐNG KÊ TỔNG HỢP';
+    worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+    statsTitle.font = { bold: true, size: 14 };
+    statsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+    statsTitle.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'E6F3FF' }
+    };
+    this.setCellBorder(statsTitle, true);
+    currentRow += 2;
+
+    // Thống kê chi tiết
+    const totalAssets = (roomResults.summary?.totalAssets || 0);
+    const statsData = [
+      ['Tổng số tài sản cố định:', roomResults.summary?.totalFixedAssets || 0],
+      ['Tổng số công cụ dụng cụ:', roomResults.summary?.totalToolsEquipment || 0],
+      ['Tổng số tài sản:', totalAssets],
+      ['Số tài sản khớp:', totalMatched],
+      ['Số tài sản thiếu:', totalMissing],
+      ['Số tài sản thừa:', totalExcess],
+      ['Tỷ lệ khớp:', `${totalAssets > 0 ? ((totalMatched / totalAssets) * 100).toFixed(1) : 0}%`],
+    ];
+
+    statsData.forEach(([label, value]) => {
+      const labelCell = worksheet.getCell(`A${currentRow}`);
+      labelCell.value = label;
+      labelCell.font = { bold: true };
+      labelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      
+      const valueCell = worksheet.getCell(`B${currentRow}`);
+      valueCell.value = value;
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      
+      this.setCellBorder(labelCell, false);
+      this.setCellBorder(valueCell, false);
+      currentRow++;
+    });
+
+    // Chuyển đổi workbook thành buffer
+    const excelBuffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(excelBuffer);
+  }
+
+  /**
+   * Xuất kết quả kiểm kê của nhiều phòng ra file Excel với format chuyên nghiệp
+   */
+  async exportMultiRoomInventoryToExcel(
+    exportDto: ExportMultiRoomInventoryExcelDto,
+    currentUser: User
+  ): Promise<Buffer> {
+    // Lấy thông tin đơn vị
+    const unit = await this.unitRepository.findOne({
+      where: { id: exportDto.unitId }
+    });
+
+    if (!unit) {
+      throw new NotFoundException(`Không tìm thấy đơn vị với ID: ${exportDto.unitId}`);
+    }
+
+    // Lấy kết quả kiểm kê nhiều phòng
+    const multiRoomFilter: MultiRoomInventoryFilterDto = {
+      unitId: exportDto.unitId,
+      page: 1,
+      limit: 1000, // Lấy tất cả để export
+      assetType: exportDto.assetType,
+    };
+
+    const multiRoomResults = await this.getMultiRoomInventoryResults(multiRoomFilter);
+
+    // Tạo workbook với ExcelJS để có styling đẹp
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Báo cáo kiểm kê tài sản');
+
+    // Thiết lập width cho các cột
+    worksheet.columns = [
+      { width: 5 },   // STT
+      { width: 15 },  // Phòng
+      { width: 35 },  // Tên tài sản
+      { width: 15 },  // Mã tài sản
+      { width: 15 },  // Loại tài sản
+      { width: 12 },  // Số lượng hệ thống
+      { width: 12 },  // Số lượng kiểm kê
+      { width: 10 },  // Chênh lệch
+      { width: 15 },  // Phương pháp quét
+      { width: 12 },  // Trạng thái
+      { width: 30 },  // Ghi chú
+      { width: 12 },  // Ngày kiểm kê
+    ];
+
+    let currentRow = 1;
+
+    // Tiêu đề báo cáo
+    const titleCell = worksheet.getCell(`A${currentRow}`);
+    titleCell.value = 'BÁO CÁO KIỂM KÊ TÀI SẢN NĂM 2025';
+    worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
+    titleCell.font = { bold: true, size: 16 };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'E6F3FF' }
+    };
+    currentRow += 2;
+
+    // Thông tin đơn vị và ngày
+    const unitInfoCell = worksheet.getCell(`A${currentRow}`);
+    unitInfoCell.value = `Đơn vị: ${unit.name}`;
+    worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
+    unitInfoCell.font = { bold: true, size: 12 };
+    unitInfoCell.alignment = { horizontal: 'left' };
+    currentRow++;
+
+    const dateInfoCell = worksheet.getCell(`A${currentRow}`);
+    dateInfoCell.value = `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}`;
+    worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
+    dateInfoCell.font = { size: 11 };
+    dateInfoCell.alignment = { horizontal: 'left' };
+    currentRow++;
+
+    const userInfoCell = worksheet.getCell(`A${currentRow}`);
+    userInfoCell.value = `Người xuất: ${currentUser.fullName || currentUser.username}`;
+    worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
+    userInfoCell.font = { size: 11 };
+    userInfoCell.alignment = { horizontal: 'left' };
+    currentRow += 2;
+
+    let globalRowIndex = 1;
+    let totalAssets = 0;
+    let totalMatched = 0;
+    let totalMissing = 0;
+    let totalExcess = 0;
+
+    // Lặp qua từng phòng
+    multiRoomResults.rooms.forEach((room) => {
+      // Header phòng
+      const roomHeaderCell = worksheet.getCell(`A${currentRow}`);
+      roomHeaderCell.value = `=== ${room.roomName} ===`;
+      worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
+      roomHeaderCell.font = { bold: true, size: 14 };
+      roomHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      roomHeaderCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'D3D3D3' }
+      };
+      // Border cho header phòng
+      this.setCellBorder(roomHeaderCell, true);
+      currentRow++;
+
+      // Header bảng
+      const headers = [
+        'STT', 'Phòng', 'Tên tài sản', 'Mã tài sản', 'Loại tài sản',
+        'SL hệ thống', 'SL kiểm kê', 'Chênh lệch', 'Phương pháp', 'Trạng thái', 'Ghi chú', 'Ngày KK'
+      ];
+
+      headers.forEach((header, index) => {
+        const cell = worksheet.getCell(currentRow, index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '4472C4' }
+        };
+        this.setCellBorder(cell, true);
+      });
+      currentRow++;
+
+      const roomStartRow = currentRow;
+      let roomAssetCount = 0;
+
+      // Thêm tài sản cố định
+      if (room.fixedAssets?.length > 0) {
+        room.fixedAssets.forEach((asset) => {
+          if (this.shouldIncludeMultiRoomAsset(asset, exportDto)) {
+            const difference = asset.countedQuantity - asset.systemQuantity;
+            
+            // Dữ liệu row
+            const rowData = [
+              globalRowIndex++,
+              room.roomName,
+              asset.asset?.name || '',
+              asset.asset?.fixedCode || asset.asset?.ktCode || '',
+              'Tài sản cố định',
+              asset.systemQuantity,
+              asset.countedQuantity,
+              difference,
+              this.getScanMethodText(asset.scanMethod),
+              this.getStatusText(asset.status),
+              asset.note || '',
+              new Date(asset.createdAt).toLocaleDateString('vi-VN')
+            ];
+
+            rowData.forEach((value, index) => {
+              const cell = worksheet.getCell(currentRow, index + 1);
+              cell.value = value;
+              cell.alignment = { horizontal: index === 2 || index === 10 ? 'left' : 'center', vertical: 'middle' };
+              
+              // Styling theo trạng thái
+              if (index === 9) { // Cột trạng thái
+                this.applyCellStatusStyling(cell, asset.status);
+              }
+              
+              this.setCellBorder(cell, false);
+            });
+            
+            currentRow++;
+            roomAssetCount++;
+            totalAssets++;
+            
+            // Đếm theo trạng thái
+            switch (asset.status) {
+              case 'MATCHED': totalMatched++; break;
+              case 'MISSING': totalMissing++; break;
+              case 'EXCESS': totalExcess++; break;
+            }
+          }
+        });
+      }
+
+      // Thêm công cụ dụng cụ
+      if (room.toolsEquipment?.length > 0) {
+        room.toolsEquipment.forEach((asset) => {
+          if (this.shouldIncludeMultiRoomAsset(asset, exportDto)) {
+            const difference = asset.countedQuantity - asset.systemQuantity;
+            
+            const rowData = [
+              globalRowIndex++,
+              room.roomName,
+              asset.asset?.name || '',
+              asset.asset?.fixedCode || asset.asset?.ktCode || '',
+              'Công cụ dụng cụ',
+              asset.systemQuantity,
+              asset.countedQuantity,
+              difference,
+              this.getScanMethodText(asset.scanMethod),
+              this.getStatusText(asset.status),
+              asset.note || '',
+              new Date(asset.createdAt).toLocaleDateString('vi-VN')
+            ];
+
+            rowData.forEach((value, index) => {
+              const cell = worksheet.getCell(currentRow, index + 1);
+              cell.value = value;
+              cell.alignment = { horizontal: index === 2 || index === 10 ? 'left' : 'center', vertical: 'middle' };
+              
+              if (index === 9) {
+                this.applyCellStatusStyling(cell, asset.status);
+              }
+              
+              this.setCellBorder(cell, false);
+            });
+            
+            currentRow++;
+            roomAssetCount++;
+            totalAssets++;
+            
+            switch (asset.status) {
+              case 'MATCHED': totalMatched++; break;
+              case 'MISSING': totalMissing++; break;
+              case 'EXCESS': totalExcess++; break;
+            }
+          }
+        });
+      }
+
+      // Dòng tổng cộng phòng
+      const summaryCell = worksheet.getCell(`A${currentRow}`);
+      summaryCell.value = `Tổng cộng phòng ${room.roomName}`;
+      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
+      summaryCell.font = { bold: true };
+      summaryCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      summaryCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF2CC' }
+      };
+
+      const countCell = worksheet.getCell(`C${currentRow}`);
+      countCell.value = `${roomAssetCount} tài sản`;
+      countCell.font = { bold: true };
+      countCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      countCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF2CC' }
+      };
+
+      // Border cho dòng tổng cộng
+      for (let col = 1; col <= 12; col++) {
+        this.setCellBorder(worksheet.getCell(currentRow, col), true);
+      }
+
+      currentRow += 2; // Khoảng cách giữa các phòng
+    });
+
+    // Bảng thống kê tổng hợp
+    currentRow += 2;
+    const statsTitle = worksheet.getCell(`A${currentRow}`);
+    statsTitle.value = 'THỐNG KÊ TỔNG HỢP';
+    worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
+    statsTitle.font = { bold: true, size: 14 };
+    statsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+    statsTitle.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'E6F3FF' }
+    };
+    this.setCellBorder(statsTitle, true);
+    currentRow += 2;
+
+    // Bảng thống kê chi tiết
+    const statsData = [
+      ['Tổng số tài sản:', totalAssets],
+      ['Số tài sản khớp:', totalMatched],
+      ['Số tài sản thiếu:', totalMissing],  
+      ['Số tài sản thừa:', totalExcess],
+      ['Tỷ lệ khớp:', `${totalAssets > 0 ? ((totalMatched / totalAssets) * 100).toFixed(1) : 0}%`],
+    ];
+
+    statsData.forEach(([label, value]) => {
+      const labelCell = worksheet.getCell(`A${currentRow}`);
+      labelCell.value = label;
+      labelCell.font = { bold: true };
+      labelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      
+      const valueCell = worksheet.getCell(`B${currentRow}`);
+      valueCell.value = value;
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      
+      this.setCellBorder(labelCell, false);
+      this.setCellBorder(valueCell, false);
+      currentRow++;
+    });
+
+    // Chuyển đổi workbook thành buffer
+    const excelBuffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(excelBuffer);
+  }
+
+  // === HELPER METHODS FOR EXPORT ===
+
+  private shouldIncludeAsset(asset: InventoryResultResponseDto, exportDto: ExportInventoryExcelDto): boolean {
+    // Filter by asset type if specified
+    if (exportDto.assetType && asset.asset?.type !== exportDto.assetType) {
+      return false;
+    }
+
+    // Filter by status if specified
+    if (exportDto.statusFilter && exportDto.statusFilter.length > 0) {
+      return exportDto.statusFilter.includes(asset.status);
+    }
+
+    return true;
+  }
+
+  private shouldIncludeMultiRoomAsset(asset: AssetInventorySimpleDto, exportDto: ExportMultiRoomInventoryExcelDto): boolean {
+    // Filter by asset type if specified
+    if (exportDto.assetType && asset.asset?.type !== exportDto.assetType) {
+      return false;
+    }
+
+    // Filter by status if specified
+    if (exportDto.statusFilter && exportDto.statusFilter.length > 0) {
+      return exportDto.statusFilter.includes(asset.status);
+    }
+
+    return true;
+  }
+
+  private getScanMethodText(scanMethod: string): string {
+    switch (scanMethod) {
+      case 'RFID':
+        return 'RFID';
+      case 'MANUAL':
+        return 'Thủ công';
+      default:
+        return scanMethod || 'Không xác định';
+    }
+  }
+
+  private getStatusText(status: string): string {
+    switch (status) {
+      case 'MATCHED':
+        return 'Khớp';
+      case 'MISSING':
+        return 'Thiếu';
+      case 'EXCESS':
+        return 'Thừa';
+      case 'BROKEN':
+        return 'Hư hỏng';
+      case 'NEEDS_REPAIR':
+        return 'Cần sửa chữa';
+      case 'LIQUIDATION_PROPOSED':
+        return 'Đề xuất thanh lý';
+      default:
+        return status || 'Không xác định';
+    }
+  }
+
+  private getAssetTypeText(assetType: string): string {
+    switch (assetType) {
+      case 'FIXED_ASSET':
+        return 'Tài sản cố định';
+      case 'TOOLS_EQUIPMENT':
+        return 'Công cụ dụng cụ';
+      default:
+        return assetType || 'Không xác định';
+    }
+  }
+
+  // === HELPER METHODS FOR EXCEL STYLING ===
+
+  private setCellBorder(cell: any, thick = false): void {
+    const borderStyle = thick ? 'medium' : 'thin';
+    cell.border = {
+      top: { style: borderStyle },
+      left: { style: borderStyle },
+      bottom: { style: borderStyle },
+      right: { style: borderStyle }
+    };
+  }
+
+  private applyCellStatusStyling(cell: any, status: string): void {
+    switch (status) {
+      case 'MATCHED':
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'C6EFCE' } // Xanh nhạt
+        };
+        break;
+      case 'MISSING':
+        cell.fill = {
+          type: 'pattern', 
+          pattern: 'solid',
+          fgColor: { argb: 'FFC7CE' } // Đỏ nhạt
+        };
+        break;
+      case 'EXCESS':
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid', 
+          fgColor: { argb: 'FFEB9C' } // Vàng nhạt
+        };
+        break;
+      default:
+        // Không styling đặc biệt
+        break;
+    }
   }
 
 }

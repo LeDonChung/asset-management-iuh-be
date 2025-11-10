@@ -139,3 +139,13 @@ export class RejectTransactionDto {
   @IsString()
   rejectionReason: string;
 }
+
+export class ReceiveTransactionDto {
+  @ApiProperty({
+    description: 'Ghi chú khi tiếp nhận tài sản',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  note?: string;
+}

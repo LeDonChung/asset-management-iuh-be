@@ -31,6 +31,7 @@ import { LiquidationProposalItem } from "src/entities/liquidation-proposal-item"
 import { AssetTransaction } from "src/entities/asset-transaction.entity";
 import { AssetTransactionHistory } from "src/entities/asset-transaction-history.entity";
 import { AssetTransactionItem } from "src/entities/asset-transaction-item.entity";
+import { AccessScope } from "src/entities/access-scope.entity";
 
 export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
   imports: [],
@@ -84,6 +85,7 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
         AssetTransaction,
         AssetTransactionHistory,
         AssetTransactionItem,
+        AccessScope,
       ],
       synchronize: false,
       logging: false,
@@ -137,6 +139,7 @@ const dataSource = new DataSource({
     AssetTransaction,
     AssetTransactionHistory,
     AssetTransactionItem,
+    AccessScope
   ],
   migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
   migrationsTableName: "typeorm_migrations",
