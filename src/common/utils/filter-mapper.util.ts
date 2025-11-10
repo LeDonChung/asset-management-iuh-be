@@ -140,12 +140,10 @@ export class FilterMapperUtil {
     const fieldTypeMap: Record<string, FieldType> = {
       'name': FieldType.TEXT,
       'description': FieldType.TEXT,
-      'period': FieldType.TEXT,
       'year': FieldType.NUMBER,
       'startDate': FieldType.DATE,
       'endDate': FieldType.DATE,
       'status': FieldType.SELECT,
-      'isGlobal': FieldType.BOOLEAN,
       'createdAt': FieldType.DATE,
       'updatedAt': FieldType.DATE
     };

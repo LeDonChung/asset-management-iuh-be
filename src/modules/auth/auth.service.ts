@@ -34,6 +34,7 @@ export class AuthService {
 
             const roles = user.roles.map(role => role.code);
             const permissions = user.roles.flatMap(role => role.permissions?.map(p => p.code) ?? []);
+            const accessScopeTypes = user.roles.map(role => role.accessScope?.type).filter(Boolean);
 
             // Generate JWT token
             const payload: JwtPayload = {
@@ -43,6 +44,7 @@ export class AuthService {
                 fullName: user.fullName,
                 unitId: user.unitId,
                 permissions: permissions,
+                accessScopeTypes: accessScopeTypes,
             };
 
             const token = this.jwtService.sign(payload);
@@ -52,6 +54,7 @@ export class AuthService {
                 fullName: user.fullName,
                 roles: roles,
                 permissions: permissions,
+                accessScopeTypes: accessScopeTypes,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
                 birthDate: user.birthDate,
@@ -68,7 +71,7 @@ export class AuthService {
     async validateUser(username: string, password: string): Promise<User> {
         const user = await this.userRepository.findOne({
             where: { username, status: UserStatus.ACTIVE },
-            relations: ['roles', 'roles.permissions', 'unit'],
+            relations: ['roles', 'roles.permissions', 'roles.accessScope', 'unit'],
         });
         if (user && (await bcrypt.compare(password, user.password))) {
             return user;
@@ -79,7 +82,7 @@ export class AuthService {
     async findUserById(sub: string): Promise<User> {
         const user = await this.userRepository.findOne({
             where: { id: sub, status: UserStatus.ACTIVE },
-            relations: ['roles', 'roles.permissions'],
+            relations: ['roles', 'roles.permissions', 'roles.accessScope'],
         });
         if (!user) {
             throw new UnauthorizedException(

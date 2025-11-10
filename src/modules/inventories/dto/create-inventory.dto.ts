@@ -11,15 +11,6 @@ export class CreateInventoryDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ description: 'Đợt kiểm kê', example: 1 })
-  @IsNumber()
-  period: number;
-
-  @ApiPropertyOptional({ description: 'Có phải kỳ kiểm kê toàn cục không', example: false, default: false })
-  @IsBoolean()
-  @IsOptional()
-  isGlobal?: boolean = false;
-
   @ApiProperty({ description: 'Ngày bắt đầu (YYYY-MM-DD)', example: '2024-12-01' })
   @IsDateString()
   startDate: string;
@@ -49,14 +40,4 @@ export class CreateInventoryDto {
   @IsOptional()
   fileUrls?: string[] = [];
 
-  @ApiPropertyOptional({ 
-    description: 'Danh sách ID các đơn vị', 
-    type: [String],
-    example: ['123e4567-e89b-12d3-a456-426614174001', '123e4567-e89b-12d3-a456-426614174002'],
-    default: []
-  })
-  @IsArray()
-  @IsUUID('4', { each: true })
-  @IsOptional()
-  unitIds?: string[] = [];
 }

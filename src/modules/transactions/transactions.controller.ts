@@ -17,6 +17,7 @@ import {
   ProposeTransactionDto,
   ApproveTransactionDto,
   RejectTransactionDto,
+  ReceiveTransactionDto,
 } from './dto/update-transaction.dto';
 import { TransactionFilterDto } from './dto/filter-transaction.dto';
 import { TransactionResponseDto, SimplifiedTransactionResponseDto } from './dto/response-transaction.dto';
@@ -44,7 +45,7 @@ export class TransactionsController {
   @ApiOperation({
     summary: 'Tạo mới giao dịch bàn giao',
     description:
-      'Tạo giao dịch bàn giao tài sản giữa các đơn vị hoặc phòng ban. Hỗ trợ 3 loại: TRANSFER (bàn giao giữa đơn vị), INTERNAL_MOVE (di chuyển nội bộ), ALLOCATION (phân bổ tài sản mới).',
+      'Tạo giao dịch bàn giao tài sản giữa các đơn vị. Tài sản sẽ tự động được chuyển về kho của đơn vị đích.',
   })
   @ApiResponse({
     status: 201,
@@ -125,8 +126,7 @@ export class TransactionsController {
   @Permissions(PermissionConstants.PERM_UPDATE_TRANSACTION)
   async update(
     @Param('id') id: string,
-    @Body() updateDto: UpdateTransactionDto,
-    @CurrentUser() currentUser: User,
+    @Body() updateDto: UpdateTransactionDto
   ) {
     return this.transactionsService.updateTransaction(
       id,
@@ -218,6 +218,35 @@ export class TransactionsController {
       id,
       rejectDto,
       currentUser.id,
+    );
+  }
+
+  @Patch(':id/receive')
+  @ApiOperation({
+    summary: 'Tiếp nhận tài sản đã bàn giao',
+    description:
+      'Xác nhận đơn vị đích đã tiếp nhận tài sản từ trạng thái APPROVED sang RECEIVED.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của giao dịch' })
+  @ApiResponse({
+    status: 200,
+    description: 'Đã xác nhận tiếp nhận tài sản thành công',
+    type: TransactionResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Không thể tiếp nhận giao dịch' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy giao dịch' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  // @Permissions(PermissionConstants.PERM_RECEIVE_TRANSACTION)
+  receiveTransaction(
+    @Param('id') id: string,
+    @Body() receiveDto: ReceiveTransactionDto,
+    @CurrentUser() currentUser: User,
+  ) {
+    return this.transactionsService.receiveTransaction(
+      id,
+      currentUser.id,
+      receiveDto.note,
     );
   }
 

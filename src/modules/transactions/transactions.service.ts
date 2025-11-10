@@ -1,12 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { plainToInstance } from 'class-transformer';
 import { AssetTransaction } from 'src/entities/asset-transaction.entity';
 import { AssetTransactionItem } from 'src/entities/asset-transaction-item.entity';
 import { AssetTransactionHistory } from 'src/entities/asset-transaction-history.entity';
 import { Asset } from 'src/entities/asset.entity';
 import { AssetBook } from 'src/entities/asset-book.entity';
 import { AssetBookItem } from 'src/entities/asset-book-item.entity';
+import { Room } from 'src/entities/room.entity';
+import { Unit } from 'src/entities/unit.entity';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto, UpdateTransactionStatusDto, ProposeTransactionDto, ApproveTransactionDto, RejectTransactionDto } from './dto/update-transaction.dto';
 import { TransactionFilterDto } from './dto/filter-transaction.dto';
@@ -20,6 +23,7 @@ import { FilterUtil } from 'src/common/utils/filter.util';
 import { FieldType } from 'src/common/dto/filter.dto';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
 import { User } from 'src/entities/user.entity';
+import { AccessScopeType } from 'src/entities/access-scope.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -36,6 +40,10 @@ export class TransactionsService {
     private assetBookRepo: Repository<AssetBook>,
     @InjectRepository(AssetBookItem)
     private assetBookItemRepo: Repository<AssetBookItem>,
+    @InjectRepository(Room)
+    private roomRepo: Repository<Room>,
+    @InjectRepository(Unit)
+    private unitRepo: Repository<Unit>,
     private permissionHelper: PermissionHelperService,
   ) {}
 
@@ -62,101 +70,68 @@ export class TransactionsService {
       );
     }
 
-    // Validate fromUnitId and toUnitId are provided
-    if (!createDto.fromUnitId || !createDto.toUnitId) {
-      throw new BadRequestException('Phải chỉ định đơn vị nguồn và đơn vị đích');
-    }
-
-    // For INTERNAL_MOVE, fromUnitId must equal toUnitId
-    if (createDto.type === TransactionType.INTERNAL_MOVE) {
-      if (createDto.fromUnitId !== createDto.toUnitId) {
-        throw new BadRequestException('Di chuyển nội bộ phải trong cùng một đơn vị');
-      }
-    } else if (createDto.type === TransactionType.TRANSFER) {
-      // For TRANSFER, fromUnitId must be different from toUnitId
-      if (createDto.fromUnitId === createDto.toUnitId) {
-        throw new BadRequestException('Bàn giao phải giữa các đơn vị khác nhau');
-      }
+    // Validate fromUnitId and toUnitId are different (for TRANSFER)
+    if (createDto.fromUnitId === createDto.toUnitId) {
+      throw new BadRequestException('Đơn vị bàn giao và đơn vị tiếp nhận phải khác nhau');
     }
 
     // Validate that assets belong to fromUnit by checking current asset books
-    if (createDto.fromUnitId) {
-      const currentYear = new Date().getFullYear();
-      const fromAssetBook = await this.findOrCreateAssetBook(createDto.fromUnitId, currentYear);
-      
-      const assetBookItems = await this.assetBookItemRepo
-        .createQueryBuilder('item')
-        .where('item.bookId = :bookId', { bookId: fromAssetBook.id })
-        .andWhere('item.assetId IN (:...assetIds)', { assetIds })
-        .andWhere('item.status = :status', { status: AssetBookItemStatus.IN_USE })
-        .getMany();
-
-      if (assetBookItems.length !== assetIds.length) {
-        throw new BadRequestException(
-          'Một số tài sản không thuộc sổ tài sản của đơn vị nguồn hoặc không ở trạng thái IN_USE'
-        );
-      }
-    }
-
-    // Determine initial status based on transaction type
-    let initialStatus = createDto.status || TransactionStatus.DRAFT;
+    const currentYear = new Date().getFullYear();
+    const fromAssetBook = await this.findOrCreateAssetBook(createDto.fromUnitId, currentYear);
     
-    // INTERNAL_MOVE doesn't need approval - set to APPROVED immediately
-    if (createDto.type === TransactionType.INTERNAL_MOVE) {
-      initialStatus = TransactionStatus.APPROVED;
+    const assetBookItems = await this.assetBookItemRepo
+      .createQueryBuilder('item')
+      .where('item.bookId = :bookId', { bookId: fromAssetBook.id })
+      .andWhere('item.assetId IN (:...assetIds)', { assetIds })
+      .andWhere('item.status = :status', { status: AssetBookItemStatus.IN_USE })
+      .getMany();
+
+    if (assetBookItems.length !== assetIds.length) {
+      throw new BadRequestException(
+        'Một số tài sản không thuộc sổ tài sản của đơn vị nguồn hoặc không ở trạng thái IN_USE'
+      );
     }
 
-    // Create transaction
+    // Tìm phòng kho mặc định của đơn vị đích
+    const warehouseRoom = await this.findUnitWarehouseRoom(createDto.toUnitId);
+    if (!warehouseRoom) {
+      throw new BadRequestException('Không tìm thấy phòng kho mặc định cho đơn vị đích');
+    }
+
+    // Create transfer transaction với trạng thái từ DTO hoặc mặc định DRAFT
     const transaction = this.transactionRepo.create({
-      type: createDto.type,
+      type: TransactionType.TRANSFER,
       fromUnitId: createDto.fromUnitId,
       toUnitId: createDto.toUnitId,
       requesterId,
       requestNote: createDto.requestNote,
-      status: initialStatus,
-      approverId: createDto.type === TransactionType.INTERNAL_MOVE ? requesterId : undefined,
-      approvalNote: createDto.type === TransactionType.INTERNAL_MOVE ? 'Tự động phê duyệt cho di chuyển nội bộ' : undefined,
+      status: createDto.status || TransactionStatus.DRAFT,
     });
 
     const savedTransaction = await this.transactionRepo.save(transaction);
 
-    // Create transaction items
+    // Create transaction items - tự động set toRoomId = kho đơn vị đích cho tất cả items
     const items = createDto.items.map(item =>
       this.transactionItemRepo.create({
         transactionId: savedTransaction.id,
         assetId: item.assetId,
         fromRoomId: item.fromRoomId,
-        toRoomId: item.toRoomId,
+        toRoomId: warehouseRoom.id, // Tất cả tài sản đều chuyển về kho đơn vị đích
         note: item.note,
       })
     );
 
     await this.transactionItemRepo.save(items);
 
-    // Handle different transaction types
-    if (createDto.type === TransactionType.INTERNAL_MOVE) {
-      // For INTERNAL_MOVE: execute immediately (already APPROVED)
-      // Pass items from DTO instead of transaction.items (which is not loaded)
-      await this.handleApprovedInternalMove(savedTransaction, assets, requesterId, createDto.items);
-      
-      // Create history for INTERNAL_MOVE (DRAFT -> APPROVED)
-      await this.createTransactionHistory(
-        savedTransaction.id,
-        TransactionStatus.DRAFT,
-        TransactionStatus.APPROVED,
-        requesterId,
-        'Di chuyển nội bộ được tự động phê duyệt và thực hiện'
-      );
-    } else {
-      // For TRANSFER: create history record
-      await this.createTransactionHistory(
-        savedTransaction.id,
-        TransactionStatus.DRAFT,
-        initialStatus,
-        requesterId,
-        `Tạo giao dịch ${createDto.type}: ${createDto.requestNote || ''}`
-      );
-    }
+    // Create history record for TRANSFER
+    const statusText = createDto.status === TransactionStatus.PROPOSED ? 'đề xuất' : 'nháp';
+    await this.createTransactionHistory(
+      savedTransaction.id,
+      TransactionStatus.DRAFT,
+      createDto.status || TransactionStatus.DRAFT,
+      requesterId,
+      `Tạo giao dịch bàn giao ${statusText}: ${createDto.requestNote || ''}`
+    );
 
     return this.getTransactionById(savedTransaction.id);
   }
@@ -183,72 +158,61 @@ export class TransactionsService {
         relations: ['fromUnit', 'toUnit', 'requester', 'items'],
       };
 
-      // Tạo filter permission-based cho fromUnitId
-      const unitAccessFilter = await this.permissionHelper.createUnitAccessFilter(currentUser, "fromUnitId");
+      // **1. SUPER ADMIN: Xem tất cả giao dịch**
+      if (this.permissionHelper.isAdmin(currentUser)) {
+        // Admin có thể xem tất cả, chỉ áp dụng filters từ request
+        const quickFilterConditions: any[] = [];
+        
+        // Handle additional filters from request
+        if (filterDto.type) {
+          quickFilterConditions.push({
+            field: 'type',
+            fieldType: 'select',
+            operator: 'equals',
+            value: [filterDto.type],
+          });
+        }
 
-      // Check if user has no access to any units (null UUID indicates no access)
-      if (
-        unitAccessFilter.value.includes("00000000-0000-0000-0000-000000000000")
-      ) {
-        // Return empty result immediately if user has no access
-        return new PaginatedResponseDto([], {
-          page: 1,
-          limit: filterDto.pagination?.itemsPerPage || 5,
-          total: 0,
-          totalPages: 0,
-          hasNext: false,
-          hasPrev: false,
-        });
-      }
+        if (filterDto.status) {
+          quickFilterConditions.push({
+            field: 'status',
+            fieldType: 'select',
+            operator: 'equals',
+            value: [filterDto.status],
+          });
+        }
 
-      // Handle quick filters for backward compatibility
-      const quickFilterConditions = [unitAccessFilter]; // Add unit access filter
-
-      // Rule for administrators: exclude drafts (DRAFT status)
-      if (this.permissionHelper.isAdminDeptUser(currentUser)) {
-        quickFilterConditions.push({
-          field: "status",
-          fieldType: "select",
-          operator: "in",
-          value: [
-            TransactionStatus.PROPOSED,
-            TransactionStatus.APPROVED,
-            TransactionStatus.REJECTED,
-          ],
-        });
-      }
-
-      if (filterDto.type) {
-        quickFilterConditions.push({
-          field: 'type',
-          fieldType: 'select',
-          operator: 'equals',
-          value: [filterDto.type],
-        });
-      }
-
-      if (filterDto.status) {
-        quickFilterConditions.push({
-          field: 'status',
-          fieldType: 'select',
-          operator: 'equals',
-          value: [filterDto.status],
-        });
-      }
-
-      if (filterDto.fromUnitId) {
-        // Kiểm tra xem user có quyền xem unit này không
-        const accessibleUnitIds =
-          await this.permissionHelper.getAccessibleUnitIds(currentUser);
-        if (accessibleUnitIds.includes(filterDto.fromUnitId)) {
+        if (filterDto.fromUnitId) {
           quickFilterConditions.push({
             field: "fromUnitId",
             fieldType: "select",
             operator: "equals",
             value: [filterDto.fromUnitId],
           });
-        } else {
-          // Nếu không có quyền, trả về kết quả rỗng
+        }
+
+        // Merge với existing conditions
+        filterDto.conditions = [
+          ...(filterDto.conditions || []),
+          ...quickFilterConditions,
+        ];
+
+        return FilterUtil.getFilteredResults(
+          this.transactionRepo,
+          filterDto,
+          SimplifiedTransactionResponseDto,
+          config,
+          'transaction',
+        );
+      }
+
+      // **2. PHÒNG QUẢN TRỊ (ADMIN_DEPT/CHILD_UNITS): Xem tất cả giao dịch của đơn vị con (trừ DRAFT)**
+      else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+        // Lấy tất cả unit IDs mà admin dept có quyền quản lý
+        const accessibleUnitIds = await this.permissionHelper.getAccessibleUnitIds(currentUser);
+        
+        if (accessibleUnitIds.length === 0) {
+          console.log('No accessible units for Admin Dept user');
           return new PaginatedResponseDto([], {
             page: 1,
             limit: filterDto.pagination?.itemsPerPage || 5,
@@ -258,21 +222,197 @@ export class TransactionsService {
             hasPrev: false,
           });
         }
+
+        // Sử dụng query builder để xử lý logic OR phức tạp
+        const queryBuilder = this.transactionRepo
+          .createQueryBuilder('transaction')
+          .leftJoinAndSelect('transaction.fromUnit', 'fromUnit')
+          .leftJoinAndSelect('transaction.toUnit', 'toUnit')
+          .leftJoinAndSelect('transaction.requester', 'requester')
+          .leftJoinAndSelect('transaction.items', 'items')
+          .where('(transaction.fromUnitId IN (:...accessibleUnitIds) OR transaction.toUnitId IN (:...accessibleUnitIds))', { 
+            accessibleUnitIds 
+          })
+          .andWhere('transaction.status IN (:...allowedStatuses)', {
+            allowedStatuses: [
+              TransactionStatus.PROPOSED,
+              TransactionStatus.APPROVED,
+              TransactionStatus.REJECTED,
+              TransactionStatus.RECEIVED,
+            ]
+          });
+
+        // Handle additional filters from request
+        if (filterDto.type) {
+          queryBuilder.andWhere('transaction.type = :type', { type: filterDto.type });
+        }
+
+        if (filterDto.status) {
+          queryBuilder.andWhere('transaction.status = :status', { status: filterDto.status });
+        }
+
+        if (filterDto.fromUnitId) {
+          // Kiểm tra xem user có quyền xem unit này không
+          if (accessibleUnitIds.includes(filterDto.fromUnitId)) {
+            queryBuilder.andWhere('transaction.fromUnitId = :fromUnitId', { fromUnitId: filterDto.fromUnitId });
+          } else {
+            // Nếu không có quyền, trả về kết quả rỗng
+            return new PaginatedResponseDto([], {
+              page: 1,
+              limit: filterDto.pagination?.itemsPerPage || 5,
+              total: 0,
+              totalPages: 0,
+              hasNext: false,
+              hasPrev: false,
+            });
+          }
+        }
+
+        // Apply search if provided
+        if (filterDto.search) {
+          queryBuilder.andWhere(
+            '(transaction.requestNote LIKE :search OR fromUnit.name LIKE :search OR toUnit.name LIKE :search OR requester.fullName LIKE :search)',
+            { search: `%${filterDto.search}%` }
+          );
+        }
+
+        // Apply sorting
+        queryBuilder.orderBy('transaction.createdAt', 'DESC');
+
+        // Apply pagination
+        const page = filterDto.pagination?.currentPage || 1;
+        const limit = filterDto.pagination?.itemsPerPage || 5;
+        const offset = (page - 1) * limit;
+
+        const [results, total] = await queryBuilder
+          .skip(offset)
+          .take(limit)
+          .getManyAndCount();
+
+        const totalPages = Math.ceil(total / limit);
+
+        // Transform to response DTOs for Admin Dept
+        const transformedData = plainToInstance(SimplifiedTransactionResponseDto, results, {
+          excludeExtraneousValues: true,
+        });
+
+        return new PaginatedResponseDto(
+          transformedData,
+          {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNext: page < totalPages,
+            hasPrev: page > 1,
+          }
+        );
       }
 
-      // Merge with existing conditions
-      filterDto.conditions = [
-        ...(filterDto.conditions || []),
-        ...quickFilterConditions,
-      ];
+      // **3. ĐỚN VỊ SỬ DỤNG (USER_DEPT/UNIT): Chỉ xem giao dịch mình tạo và giao dịch mình nhận (đã approved)**
+      else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+        if (!currentUser.unitId) {
+          return new PaginatedResponseDto([], {
+            page: 1,
+            limit: filterDto.pagination?.itemsPerPage || 5,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          });
+        }
 
-      return FilterUtil.getFilteredResults(
-        this.transactionRepo,
-        filterDto,
-        SimplifiedTransactionResponseDto,
-        config,
-        'transaction',
-      );
+        // Tạo query builder thủ công để handle logic OR phức tạp
+        const queryBuilder = this.transactionRepo
+          .createQueryBuilder('transaction')
+          .leftJoinAndSelect('transaction.fromUnit', 'fromUnit')
+          .leftJoinAndSelect('transaction.toUnit', 'toUnit')
+          .leftJoinAndSelect('transaction.requester', 'requester')
+          .leftJoinAndSelect('transaction.items', 'items')
+          .where('(transaction.fromUnitId = :userUnitId)', { userUnitId: currentUser.unitId })
+          .orWhere('(transaction.toUnitId = :userUnitId AND transaction.status IN (:...approvedStatuses))', {
+            userUnitId: currentUser.unitId,
+            approvedStatuses: [TransactionStatus.APPROVED, TransactionStatus.RECEIVED, TransactionStatus.REJECTED],
+          });
+
+        // Apply additional filters
+        if (filterDto.type) {
+          queryBuilder.andWhere('transaction.type = :type', { type: filterDto.type });
+        }
+
+        if (filterDto.status) {
+          queryBuilder.andWhere('transaction.status = :status', { status: filterDto.status });
+        }
+
+        if (filterDto.fromUnitId) {
+          // User chỉ có thể filter theo unit của mình
+          if (filterDto.fromUnitId === currentUser.unitId) {
+            queryBuilder.andWhere('transaction.fromUnitId = :fromUnitId', { fromUnitId: filterDto.fromUnitId });
+          } else {
+            // Nếu filter unit khác, trả về rỗng
+            return new PaginatedResponseDto([], {
+              page: 1,
+              limit: filterDto.pagination?.itemsPerPage || 5,
+              total: 0,
+              totalPages: 0,
+              hasNext: false,
+              hasPrev: false,
+            });
+          }
+        }
+
+        // Apply search if provided
+        if (filterDto.search) {
+          queryBuilder.andWhere(
+            '(transaction.requestNote LIKE :search OR fromUnit.name LIKE :search OR toUnit.name LIKE :search OR requester.fullName LIKE :search)',
+            { search: `%${filterDto.search}%` }
+          );
+        }
+
+        // Apply sorting
+        queryBuilder.orderBy('transaction.createdAt', 'DESC');
+
+        // Apply pagination
+        const page = filterDto.pagination?.currentPage || 1;
+        const limit = filterDto.pagination?.itemsPerPage || 5;
+        const offset = (page - 1) * limit;
+
+        const [results, total] = await queryBuilder
+          .skip(offset)
+          .take(limit)
+          .getManyAndCount();
+
+        const totalPages = Math.ceil(total / limit);
+
+        // Transform to response DTOs for User Dept  
+        const transformedData = plainToInstance(SimplifiedTransactionResponseDto, results, {
+          excludeExtraneousValues: true,
+        });
+
+        return new PaginatedResponseDto(
+          transformedData,
+          {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNext: page < totalPages,
+            hasPrev: page > 1,
+          }
+        );
+      }
+
+      // **4. Các user khác không có quyền xem**
+      else {
+        return new PaginatedResponseDto([], {
+          page: 1,
+          limit: filterDto.pagination?.itemsPerPage || 5,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        });
+      }
     } catch (e) {
       console.log(e);
       throw e;
@@ -395,7 +535,7 @@ export class TransactionsService {
       id,
       TransactionStatus.APPROVED,
       approverId,
-      approveDto.approvalNote || 'Giao dịch được phê duyệt',
+      `Giao dịch đã được phê duyệt. ${approveDto.approvalNote || ''}`,
       { approverId }
     );
   }
@@ -405,12 +545,54 @@ export class TransactionsService {
     rejectDto: RejectTransactionDto,
     approverId: string,
   ): Promise<TransactionResponseDto> {
+    if (!rejectDto.rejectionReason || rejectDto.rejectionReason.trim() === '') {
+      throw new BadRequestException('Lý do từ chối là bắt buộc');
+    }
+    
     return this.updateTransactionStatus(
       id,
       TransactionStatus.REJECTED,
       approverId,
-      rejectDto.rejectionReason,
+      `Giao dịch đã bị từ chối. Lý do: ${rejectDto.rejectionReason}`,
       { rejectionReason: rejectDto.rejectionReason }
+    );
+  }
+
+  async receiveTransaction(
+    id: string,
+    receiverId: string,
+    note?: string,
+  ): Promise<TransactionResponseDto> {
+    const transaction = await this.transactionRepo.findOne({
+      where: { id },
+      relations: ['toUnit', 'items.asset'],
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Không tìm thấy giao dịch');
+    }
+
+    if (transaction.status !== TransactionStatus.APPROVED) {
+      throw new BadRequestException('Chỉ có thể tiếp nhận giao dịch đã được phê duyệt');
+    }
+
+    // Tìm phòng kho của đơn vị đích
+    const warehouseRoom = await this.findUnitWarehouseRoom(transaction.toUnitId);
+    if (!warehouseRoom) {
+      throw new BadRequestException('Không tìm thấy phòng kho mặc định của đơn vị đích');
+    }
+
+    const warehouseInfo = `kho ${warehouseRoom.name} của ${transaction.toUnit.name}`;
+
+    // Cập nhật sổ tài sản và phòng của tài sản
+    await this.handleAssetTransferOnReceive(transaction, warehouseRoom.id);
+
+    return this.updateTransactionStatus(
+      id,
+      TransactionStatus.RECEIVED,
+      receiverId,
+      `Đơn vị đích đã tiếp nhận tài sản. Tài sản đã được chuyển về ${warehouseInfo}. ${note || ''}`,
+      { receiverId }
     );
   }
 
@@ -443,11 +625,15 @@ export class TransactionsService {
 
     switch (newStatus) {
       case TransactionStatus.APPROVED:
-        // Khi chấp nhận: cập nhật tài sản và sổ tài sản
-        await this.handleApprovedTransaction(transaction, assets, updaterId, note);
+        // Khi chấp nhận: chỉ ghi lại lịch sử
+        await this.createTransactionHistory(id, oldStatus, newStatus, updaterId, note);
+        break;
+      case TransactionStatus.RECEIVED:
+        // Khi tiếp nhận: chỉ ghi lại lịch sử
+        await this.createTransactionHistory(id, oldStatus, newStatus, updaterId, note);
         break;
       case TransactionStatus.REJECTED:
-        // Khi từ chối: không thay đổi gì, chỉ ghi lại lịch sử
+        // Khi từ chối: chỉ ghi lại lịch sử
         await this.handleRejectedTransaction(id, oldStatus, newStatus, updaterId, note);
         break;
       default:
@@ -458,136 +644,6 @@ export class TransactionsService {
     return this.getTransactionById(id);
   }
 
-  private async handleApprovedInternalMove(
-    transaction: AssetTransaction,
-    assets: Asset[],
-    requesterId: string,
-    transactionItems: { assetId: string; fromRoomId?: string; toRoomId?: string; note?: string }[],
-  ): Promise<void> {
-    const currentYear = new Date().getFullYear();
-
-    // 1. Cập nhật vị trí tài sản - chỉ cập nhật currentRoomId
-    for (const asset of assets) {
-      const item = transactionItems.find(i => i.assetId === asset.id);
-      if (item?.toRoomId) {
-        await this.assetRepo.update(asset.id, { 
-          currentRoomId: item.toRoomId
-        });
-      }
-    }
-
-    // 2. Cập nhật roomId trong sổ tài sản (cùng đơn vị, chỉ đổi phòng)
-    const assetBook = await this.findOrCreateAssetBook(transaction.fromUnitId, currentYear);
-    
-    for (const asset of assets) {
-      const item = transactionItems.find(i => i.assetId === asset.id);
-      if (item?.toRoomId) {
-        await this.assetBookItemRepo.update(
-          { 
-            bookId: assetBook.id,
-            assetId: asset.id 
-          },
-          { 
-            roomId: item.toRoomId,
-            note: `Di chuyển nội bộ từ giao dịch ${transaction.id}`
-          }
-        );
-      }
-    }
-
-    // Lịch sử sẽ được tạo bởi handleApprovedTransaction
-  }
-
-  private async handleApprovedTransaction(
-    transaction: AssetTransaction,
-    assets: Asset[],
-    updaterId: string,
-    note: string,
-  ): Promise<void> {
-    // Phân biệt xử lý theo loại transaction
-    if (transaction.type === TransactionType.INTERNAL_MOVE) {
-      // Nếu là INTERNAL_MOVE, load transaction items để có data
-      const transactionWithItems = await this.transactionRepo.findOne({
-        where: { id: transaction.id },
-        relations: ['items']
-      });
-      if (transactionWithItems?.items) {
-        const itemsData = transactionWithItems.items.map(item => ({
-          assetId: item.assetId,
-          fromRoomId: item.fromRoomId,
-          toRoomId: item.toRoomId,
-          note: item.note
-        }));
-        await this.handleApprovedInternalMove(transaction, assets, updaterId, itemsData);
-      }
-    } else if (transaction.type === TransactionType.TRANSFER) {
-      // Nếu là TRANSFER, xử lý bàn giao giữa đơn vị
-      await this.handleApprovedTransfer(transaction, assets, updaterId, note);
-    }
-
-    // Tạo lịch sử thay đổi trạng thái giao dịch
-    await this.createTransactionHistory(
-      transaction.id,
-      TransactionStatus.PROPOSED, // oldStatus
-      TransactionStatus.APPROVED, // newStatus
-      updaterId,
-      note
-    );
-  }
-
-  private async handleApprovedTransfer(
-    transaction: AssetTransaction,
-    assets: Asset[],
-    updaterId: string,
-    note: string,
-  ): Promise<void> {
-    const currentYear = new Date().getFullYear();
-
-    // 1. Cập nhật vị trí tài sản - chỉ cập nhật vị trí, không thay đổi status
-    for (const asset of assets) {
-      const item = transaction.items.find(i => i.assetId === asset.id);
-      await this.assetRepo.update(asset.id, { 
-        currentRoomId: item?.toRoomId
-        // Không cập nhật status của tài sản
-      });
-    }
-
-    // 2. Cập nhật trạng thái trong sổ cũ thành TRANSFERRED
-    if (transaction.fromUnitId) {
-      const oldAssetBook = await this.findOrCreateAssetBook(transaction.fromUnitId, currentYear);
-      
-      for (const asset of assets) {
-        await this.assetBookItemRepo.update(
-          { 
-            bookId: oldAssetBook.id,
-            assetId: asset.id 
-          },
-          { status: AssetBookItemStatus.TRANSFERRED }
-        );
-      }
-    }
-
-    // 3. Tạo mới trong sổ đơn vị nhận
-    const newAssetBook = await this.findOrCreateAssetBook(transaction.toUnitId, currentYear);
-    
-    const newAssetBookItems = assets.map(asset => {
-      const item = transaction.items.find(i => i.assetId === asset.id);
-      return this.assetBookItemRepo.create({
-        bookId: newAssetBook.id,
-        assetId: asset.id,
-        roomId: item?.toRoomId,
-        assignedAt: new Date(),
-        quantity: 1, // Mặc định là 1 cho tài sản cố định
-        status: AssetBookItemStatus.IN_USE,
-        note: `Bàn giao từ giao dịch ${transaction.id}`
-      });
-    });
-
-    await this.assetBookItemRepo.save(newAssetBookItems);
-
-    // Lịch sử sẽ được tạo bởi handleApprovedTransaction
-  }
-
   private async handleRejectedTransaction(
     transactionId: string,
     oldStatus: TransactionStatus,
@@ -595,9 +651,7 @@ export class TransactionsService {
     updaterId: string,
     note: string,
   ): Promise<void> {
-    // For rejected transactions, assets remain in their current state
-    // No changes needed to asset status or location
-    // Just create history record
+    // Chỉ ghi lại lịch sử, không thay đổi tài sản hay sổ tài sản
     await this.createTransactionHistory(
       transactionId,
       oldStatus,
@@ -651,7 +705,8 @@ export class TransactionsService {
     const validTransitions = {
       [TransactionStatus.DRAFT]: [TransactionStatus.PROPOSED],
       [TransactionStatus.PROPOSED]: [TransactionStatus.APPROVED, TransactionStatus.REJECTED],
-      [TransactionStatus.APPROVED]: [TransactionStatus.REJECTED], // Chỉ có thể từ chối sau khi đã chấp nhận
+      [TransactionStatus.APPROVED]: [TransactionStatus.RECEIVED, TransactionStatus.REJECTED],
+      [TransactionStatus.RECEIVED]: [], // Trạng thái kết thúc
       [TransactionStatus.REJECTED]: [], // Không thể chuyển trạng thái sau khi đã từ chối
     };
 
@@ -661,6 +716,78 @@ export class TransactionsService {
       throw new BadRequestException(
         `Không thể chuyển từ trạng thái ${currentStatus} sang ${newStatus}`
       );
+    }
+  }
+
+  /**
+   * Tìm phòng kho mặc định của đơn vị
+   * Phòng kho có đặc điểm: building = "INVENTORY", name = "Kho"
+   */
+  private async findUnitWarehouseRoom(unitId: string): Promise<Room | null> {
+    const unit = await this.unitRepo.findOne({ where: { id: unitId } });
+    if (!unit) {
+      return null;
+    }
+
+    // Tìm phòng kho theo convention: name = "Kho", building = "INVENTORY"
+    const warehouseRoom = await this.roomRepo.findOne({
+      where: {
+        unitId: unitId,
+        name: "Kho",
+        building: "INVENTORY"
+      },
+      relations: ['unit']
+    });
+
+    return warehouseRoom;
+  }
+
+  /**
+   * Xử lý việc chuyển giao tài sản khi nhận transaction
+   * - Cập nhật AssetBookItem cũ thành TRANSFERRED
+   * - Tạo AssetBookItem mới cho đơn vị đích
+   * - Cập nhật phòng hiện tại của tài sản
+   */
+  private async handleAssetTransferOnReceive(
+    transaction: AssetTransaction,
+    warehouseRoomId: string,
+  ): Promise<void> {
+    const currentYear = new Date().getFullYear();
+    
+    // 1. Tìm hoặc tạo sổ tài sản của đơn vị nguồn và đơn vị đích
+    const fromAssetBook = await this.findOrCreateAssetBook(transaction.fromUnitId, currentYear);
+    const toAssetBook = await this.findOrCreateAssetBook(transaction.toUnitId, currentYear);
+
+    for (const item of transaction.items) {
+      // 2. Cập nhật AssetBookItem cũ của đơn vị nguồn thành TRANSFERRED
+      await this.assetBookItemRepo
+        .createQueryBuilder()
+        .update(AssetBookItem)
+        .set({ status: AssetBookItemStatus.TRANSFERRED })
+        .where('bookId = :bookId', { bookId: fromAssetBook.id })
+        .andWhere('assetId = :assetId', { assetId: item.assetId })
+        .andWhere('status = :currentStatus', { currentStatus: AssetBookItemStatus.IN_USE })
+        .execute();
+
+      // 3. Tạo AssetBookItem mới cho đơn vị đích
+      const newAssetBookItem = this.assetBookItemRepo.create({
+        bookId: toAssetBook.id,
+        assetId: item.assetId,
+        roomId: warehouseRoomId,
+        assignedAt: new Date(),
+        quantity: 1,
+        status: AssetBookItemStatus.IN_USE,
+        note: `Tiếp nhận từ ${transaction.fromUnit?.name || 'đơn vị khác'} theo giao dịch ${transaction.id}`,
+      });
+      await this.assetBookItemRepo.save(newAssetBookItem);
+
+      // 4. Cập nhật phòng hiện tại của tài sản (currentRoomId)
+      await this.assetRepo
+        .createQueryBuilder()
+        .update('assets')
+        .set({ currentRoomId: warehouseRoomId })
+        .where('id = :assetId', { assetId: item.assetId })
+        .execute();
     }
   }
 }

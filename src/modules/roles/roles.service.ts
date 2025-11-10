@@ -18,6 +18,7 @@ import { ERR_EXISTS, NOT_FOUND } from "src/common/utils/error-type-response";
 import { RoleBase } from "src/common/utils/role.enum";
 import { User } from "src/entities/user.entity";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
+import { AccessScope } from "src/entities/access-scope.entity";
 
 @Injectable()
 export class RolesService {
@@ -27,6 +28,8 @@ export class RolesService {
         private readonly roleRepository: Repository<Role>,
         @InjectRepository(Permission)
         private readonly permissionRepository: Repository<Permission>,
+        @InjectRepository(AccessScope)
+        private readonly accessScopeRepository: Repository<AccessScope>,
         private permissionHelper: PermissionHelperService
     ) { }
 
@@ -58,6 +61,7 @@ export class RolesService {
                 code: CommonUtils.generateCode(createRoleDto.name, ROLE_CODE_PREFIX),
             });
 
+            // Xử lý permissions
             if (createRoleDto.permissionIds && createRoleDto.permissionIds.length > 0) {
                 const permissions = await this.permissionRepository.findByIds(
                     createRoleDto.permissionIds
@@ -74,6 +78,21 @@ export class RolesService {
                 }
 
                 role.permissions = permissions;
+            }
+
+            // Xử lý access scope
+            if (createRoleDto.accessScopeId) {
+                const accessScope = await this.accessScopeRepository.findOne({
+                    where: { id: createRoleDto.accessScopeId }
+                });
+
+                if (!accessScope) {
+                    throw new NotFoundException(
+                        errorResponse(NOT_FOUND, `Access scope with ID '${createRoleDto.accessScopeId}' not found`)
+                    );
+                }
+
+                role.accessScopeId = createRoleDto.accessScopeId;
             }
 
             const savedRole = await this.roleRepository.save(role);
@@ -110,7 +129,7 @@ export class RolesService {
 
             const roles = await this.roleRepository.find({
                 where: { code: Not(In(excludedRoles)) },
-                relations: ["permissions"],
+                relations: ["permissions", "accessScope"],
                 order: { createdAt: "DESC" },
             });
 
@@ -132,7 +151,7 @@ export class RolesService {
         try {
             const role = await this.roleRepository.findOne({
                 where: { id },
-                relations: ["permissions"],
+                relations: ["permissions", "accessScope"],
             });
 
             if (!role) {
@@ -162,7 +181,7 @@ export class RolesService {
         try {
             const role = await this.roleRepository.findOne({
                 where: { id },
-                relations: ["permissions"],
+                relations: ["permissions", "accessScope"],
             });
 
             if (!role) {
@@ -213,6 +232,26 @@ export class RolesService {
                 }
             }
 
+            // Cập nhật access scope nếu có
+            if (updateRoleDto.accessScopeId !== undefined) {
+                if (updateRoleDto.accessScopeId) {
+                    const accessScope = await this.accessScopeRepository.findOne({
+                        where: { id: updateRoleDto.accessScopeId }
+                    });
+
+                    if (!accessScope) {
+                        throw new NotFoundException(
+                            errorResponse(NOT_FOUND, `Access scope with ID '${updateRoleDto.accessScopeId}' not found`)
+                        );
+                    }
+
+                    role.accessScope = accessScope;
+                } else {
+                    // Nếu accessScopeId là null hoặc empty string, xóa access scope
+                    role.accessScope = null;
+                }
+            }
+
             await this.roleRepository.save(role);
             return this.findOne(id);
         } catch (error) {
@@ -247,16 +286,16 @@ export class RolesService {
 
         await this.roleRepository.softDelete(id);
     }
-
-    // Lấy tất cả permissions có sẵn (để sử dụng trong giao diện chọn)
+    
     /**
-     * getAvailablePermissions
-     * @description Lấy tất cả các quyền có sẵn
-     * @returns Danh sách các quyền có sẵn
+     * getAvailableAccessScopes
+     * @description Lấy tất cả các access scope có sẵn
+     * @returns Danh sách các access scope có sẵn
      */
-    async getAvailablePermissions(): Promise<Permission[]> {
-        return this.permissionRepository.find({
-            order: { name: "ASC" },
+    async getAvailableAccessScopes(): Promise<AccessScope[]> {
+        return this.accessScopeRepository.find({
+            relations: ['unit'],
+            order: { type: "ASC", createdAt: "DESC" },
         });
     }
 
@@ -268,7 +307,7 @@ export class RolesService {
     async findAllInventoryRoles(): Promise<RoleResponseDto[]> {
         const roles = await this.roleRepository.find({
             where: { code: In([RoleBase.INVENTORY_COMMITTEE_HEAD, RoleBase.INVENTORY_COMMITTEE_MEMBER, RoleBase.INVENTORY_COMMITTEE_SECRETARY]) },
-            relations: ["permissions"],
+            relations: ["permissions", "accessScope"],
         });
 
         return roles.map(this.transformToResponseDto);
@@ -292,6 +331,12 @@ export class RolesService {
                     name: permission.name,
                     code: permission.code,
                 })) ?? [],
+            accessScope: role.accessScope ? {
+                id: role.accessScope.id,
+                type: role.accessScope.type,
+                unitId: role.accessScope.unitId,
+                description: role.accessScope.description,
+            } : undefined,
         };
     }
 }

@@ -14,6 +14,7 @@ import { Unit } from "src/entities/unit.entity";
 import { Room } from "src/entities/room.entity";
 import { RoomStatus } from "src/common/shared/RoomStatus";
 import { RoleBase } from "src/common/utils/role.enum";
+import { AccessScope, AccessScopeType } from "src/entities/access-scope.entity";
 
 @Injectable()
 export class SeedingService implements OnModuleInit {
@@ -33,7 +34,9 @@ export class SeedingService implements OnModuleInit {
     @InjectRepository(Unit)
     private readonly unitRepository: Repository<Unit>,
     @InjectRepository(Room)
-    private readonly roomRepository: Repository<Room>
+    private readonly roomRepository: Repository<Room>,
+    @InjectRepository(AccessScope)
+    private readonly accessScopeRepository: Repository<AccessScope>
   ) {}
 
   async onModuleInit() {
@@ -46,11 +49,13 @@ export class SeedingService implements OnModuleInit {
       this.logger.log("Starting database seeding...");
 
       await this.seedPermissions();
+      await this.seedAccessScopes();
       await this.seedRoles();
       await this.seedAdminUser();
       await this.seedInventoryUsers();
       await this.seedUnits();
       await this.seedCategories();
+      await this.seedInventoryRoomsForExistingDepts();
       this.logger.log("Database seeding completed successfully");
     } catch (error) {
       this.logger.error("Error during database seeding:", error);
@@ -120,7 +125,7 @@ export class SeedingService implements OnModuleInit {
     // Create three units type Campus
     const unitsCampus = [
       {
-        name: "Đại học Công nghiệp Thành phố Hồ Chí Minh",
+        name: "Cơ sở Gò Vấp",
         type: UnitType.CAMPUS,
       },
       {
@@ -278,6 +283,78 @@ export class SeedingService implements OnModuleInit {
             }
           }
         }
+      }
+    }
+
+    // Create inventory room for each department
+    await this.seedInventoryRooms(unitsUserDeptCreated);
+  }
+
+  private async seedInventoryRooms(departments: any[]) {
+    for (const dept of departments) {
+      const inventoryRoomCode = `${dept.unitCode}INVENTORY`;
+      
+      // Check if inventory room already exists for this department
+      const existingInventoryRoom = await this.roomRepository.findOne({
+        where: { 
+          roomCode: inventoryRoomCode,
+          unit: { id: dept.id }
+        }
+      });
+
+      if (!existingInventoryRoom) {
+        const inventoryRoom = this.roomRepository.create({
+          name: "Kho",
+          building: "INVENTORY",
+          floor: "00",
+          roomNumber: dept.unitCode.toString().padStart(2, "0"), // Use unitCode as roomNumber to ensure uniqueness
+          status: RoomStatus.ACTIVE,
+          unit: dept,
+          roomCode: inventoryRoomCode,
+          adjacentRooms: [],
+        });
+
+        await this.roomRepository.save(inventoryRoom);
+        this.logger.log(`Created inventory room for department: ${dept.name} with code: ${inventoryRoom.roomCode}`);
+      }
+    }
+  }
+
+  private async seedInventoryRoomsForExistingDepts() {
+    // Tìm tất cả các đơn vị USER_DEPT hiện có trong database
+    const userDepts = await this.unitRepository.find({
+      where: { type: UnitType.USER_DEPT }
+    });
+
+    this.logger.log(`Found ${userDepts.length} USER_DEPT units to create inventory rooms for`);
+
+    for (const dept of userDepts) {
+      const inventoryRoomCode = `${dept.unitCode}INVENTORY`;
+      
+      // Kiểm tra xem phòng kho đã tồn tại chưa
+      const existingInventoryRoom = await this.roomRepository.findOne({
+        where: { 
+          roomCode: inventoryRoomCode,
+          unit: { id: dept.id }
+        }
+      });
+
+      if (!existingInventoryRoom) {
+        const inventoryRoom = this.roomRepository.create({
+          name: "Kho",
+          building: "INVENTORY",
+          floor: "00", 
+          roomNumber: dept.unitCode.toString().padStart(2, "0"), // Use unitCode as roomNumber to ensure uniqueness
+          status: RoomStatus.ACTIVE,
+          unit: dept,
+          roomCode: inventoryRoomCode,
+          adjacentRooms: [],
+        });
+
+        await this.roomRepository.save(inventoryRoom);
+        this.logger.log(`Created inventory room for existing department: ${dept.name} with code: ${inventoryRoom.roomCode}`);
+      } else {
+        this.logger.log(`Inventory room already exists for department: ${dept.name}`);
       }
     }
   }
@@ -537,28 +614,120 @@ export class SeedingService implements OnModuleInit {
     }
   }
 
-  private async seedRoles() {
-    const roleBase = [RoleBase.ADMIN, RoleBase.USER_DEPT, RoleBase.ADMIN_DEPT];
-    for (const roleCode of roleBase) {
-      let role = await this.roleRepository.findOne({
-        where: { code: roleCode },
+  private async seedAccessScopes() {
+    const accessScopes = [
+      {
+        type: AccessScopeType.GLOBAL,
+        description: "Toàn hệ thống - Admin"
+      },
+      {
+        type: AccessScopeType.UNIT,
+        description: "Chỉ unit được chỉ định"
+      },
+      {
+        type: AccessScopeType.CHILD_UNITS,
+        description: "Unit và các unit con - Admin Dept"
+      },
+      {
+        type: AccessScopeType.SELF,
+        description: "Chỉ dữ liệu của chính mình"
+      }
+    ];
+
+    for (const scopeData of accessScopes) {
+      let scope = await this.accessScopeRepository.findOne({
+        where: { type: scopeData.type, unitId: null }
       });
+      
+      if (!scope) {
+        scope = await this.accessScopeRepository.save(
+          this.accessScopeRepository.create(scopeData)
+        );
+        this.logger.log(`Created access scope: ${scopeData.type}`);
+      }
+    }
+  }
+
+  private async seedRoles() {
+    // Lấy access scopes
+    const globalScope = await this.accessScopeRepository.findOne({
+      where: { type: AccessScopeType.GLOBAL }
+    });
+    const childUnitsScope = await this.accessScopeRepository.findOne({
+      where: { type: AccessScopeType.CHILD_UNITS }
+    });
+    const unitScope = await this.accessScopeRepository.findOne({
+      where: { type: AccessScopeType.UNIT }
+    });
+
+    const roleConfigs = [
+      {
+        code: RoleBase.ADMIN,
+        name: "Quản trị viên",
+        accessScopeId: globalScope?.id,
+        getAllPermissions: true
+      },
+      {
+        code: RoleBase.ADMIN_DEPT,
+        name: "Trưởng phòng quản trị",
+        accessScopeId: childUnitsScope?.id,
+        permissions: [
+          PermissionConstants.PERM_VIEW_USER,
+          PermissionConstants.PERM_CREATE_USER,
+          PermissionConstants.PERM_UPDATE_USER,
+          PermissionConstants.PERM_VIEW_UNIT,
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_CREATE_ASSET,
+          PermissionConstants.PERM_UPDATE_ASSET,
+          PermissionConstants.PERM_VIEW_CATEGORY,
+          PermissionConstants.PERM_CREATE_CATEGORY,
+          PermissionConstants.PERM_UPDATE_CATEGORY,
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_CREATE_INVENTORY,
+          PermissionConstants.PERM_UPDATE_INVENTORY,
+        ]
+      },
+      {
+        code: RoleBase.USER_DEPT,
+        name: "Trưởng đơn vị sử dụng",
+        accessScopeId: unitScope?.id,
+        permissions: [
+          PermissionConstants.PERM_VIEW_ASSET,
+          PermissionConstants.PERM_CREATE_ASSET,
+          PermissionConstants.PERM_UPDATE_ASSET,
+          PermissionConstants.PERM_VIEW_CATEGORY,
+          PermissionConstants.PERM_VIEW_INVENTORY,
+          PermissionConstants.PERM_VIEW_TRANSACTION,
+          PermissionConstants.PERM_CREATE_TRANSACTION,
+        ]
+      }
+    ];
+
+    for (const config of roleConfigs) {
+      let role = await this.roleRepository.findOne({
+        where: { code: config.code }
+      });
+
       if (!role) {
-        var roleCreate = this.roleRepository.create({
-          name:
-            roleCode === RoleBase.ADMIN
-              ? "Quản trị viên"
-              : roleCode === RoleBase.USER_DEPT
-                ? "Trưởng đơn vị sử dụng"
-                : "Trưởng phòng quản trị",
-          code: roleCode,
+        role = this.roleRepository.create({
+          name: config.name,
+          code: config.code,
+          accessScopeId: config.accessScopeId,
           isProtected: true,
         });
-        if (roleCode === RoleBase.ADMIN) {
+
+        if (config.getAllPermissions) {
           const permissions = await this.permissionRepository.find();
-          roleCreate.permissions = permissions;
+          role.permissions = permissions;
+        } else if (config.permissions) {
+          const permissions = await this.permissionRepository.find({
+            where: config.permissions.map(code => ({ code }))
+          });
+          role.permissions = permissions;
         }
-        roleCreate = await this.roleRepository.save(roleCreate);
+
+        await this.roleRepository.save(role);
+        this.logger.log(`Created role: ${config.name} with access scope: ${config.accessScopeId ? 'assigned' : 'none'}`);
       }
     }
 

@@ -11,6 +11,7 @@ import { RfidTag } from 'src/entities/rfid-tag.entity';
 import { InventoryResult } from 'src/entities/inventory-result';
 import { InventorySession } from 'src/entities/inventory-session.entity';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
+import { AccessControlModule } from 'src/common/services/access-control.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PermissionHelperService } from 'src/common/services/permission-helper.s
       InventoryResult,
       InventorySession,
     ]),
+    AccessControlModule,
   ],
   controllers: [AssetBooksController],
   providers: [AssetBooksService, PermissionHelperService],

@@ -7,9 +7,10 @@ import { User } from 'src/entities/user.entity';
 import { Room } from 'src/entities/room.entity';
 import { RoomsService } from '../rooms/rooms.service';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
+import { AccessControlModule } from 'src/common/services/access-control.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Unit, User, Room])],
+  imports: [TypeOrmModule.forFeature([Unit, User, Room]), AccessControlModule],
   controllers: [UnitsController],
   providers: [UnitsService, RoomsService, PermissionHelperService],
   exports: [UnitsService],

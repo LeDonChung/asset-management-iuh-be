@@ -10,6 +10,8 @@ import { UpdateAssetDto } from "./dto/update-asset.dto";
 import { UpdateRfidDto } from "./dto/update-rfid.dto";
 import { AssetResponseDto } from "./dto/asset-response.dto";
 import { ClassifyRfidsResponseDto } from "./dto/classify-rfids-response.dto";
+import { WarehouseAssetFilterDto } from "./dto/warehouse-asset-filter.dto";
+import { WarehouseAssetResponseDto } from "./dto/warehouse-asset-response.dto";
 import { Asset, FixedAsset, ToolsEquipment } from "src/entities/asset.entity";
 import { RfidTag } from "src/entities/rfid-tag.entity";
 import { AssetType } from "src/common/shared/AssetType";
@@ -18,8 +20,16 @@ import { plainToClass, plainToInstance } from "class-transformer";
 import { Room } from "src/entities/room.entity";
 import { Category } from "src/entities/category.entity";
 import { User } from "src/entities/user.entity";
+import { Unit } from "src/entities/unit.entity";
+import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
+import { TransactionStatus } from "src/common/shared/TransactionStatus";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
 import * as XLSX from "xlsx";
 import { ImportAssetDto, ImportResultDto } from "./dto/import-asset.dto";
+import { BulkLocationUpdateDto, BulkLocationUpdateResultDto } from "./dto/bulk-location-update.dto";
+import { AssetBookItem } from "src/entities/asset-book-item.entity";
+import { AssetBook } from "src/entities/asset-book.entity";
+import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
 
 @Injectable()
 export class AssetsService {
@@ -31,7 +41,14 @@ export class AssetsService {
     @InjectRepository(Room)
     private readonly roomRepository: Repository<Room>,
     @InjectRepository(Category)
-    private readonly categoryRepository: Repository<Category>
+    private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(Unit)
+    private readonly unitRepository: Repository<Unit>,
+    @InjectRepository(AssetBookItem)
+    private readonly assetBookItemRepository: Repository<AssetBookItem>,
+    @InjectRepository(AssetBook)
+    private readonly assetBookRepository: Repository<AssetBook>,
+    private readonly permissionHelper: PermissionHelperService,
   ) {}
 
   async findByRfids(
@@ -648,5 +665,394 @@ export class AssetsService {
       otherRooms,
       unknowns,
     };
+  }
+
+  /**
+   * Helper method để trả về kết quả rỗng cho pagination
+   */
+  private emptyPaginatedResult(currentPage: number, itemsPerPage: number): PaginatedResponseDto<WarehouseAssetResponseDto> {
+    return {
+      data: [],
+      pagination: {
+        page: currentPage,
+        limit: itemsPerPage,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false,
+        nextPage: null,
+        prevPage: null,
+        firstPage: 1,
+        lastPage: 1,
+      },
+    };
+  }
+
+  /**
+   * Lấy danh sách tài sản đang chờ tiếp nhận tại kho
+   * (Tài sản đã được bàn giao với trạng thái RECEIVED thuộc về đơn vị hiện tại nhưng vẫn ở trong kho)
+   */
+  async findWarehouseAssets(
+    filterDto: WarehouseAssetFilterDto,
+    currentUser: User
+  ): Promise<PaginatedResponseDto<WarehouseAssetResponseDto>> {
+    const {
+      search,
+      type,
+      status,
+      unitId,
+      warehouseRoomId,
+      currentPage = 1,
+      itemsPerPage = 10,
+    } = filterDto;
+
+    const queryBuilder = this.assetRepository
+      .createQueryBuilder('asset')
+      .leftJoinAndSelect('asset.category', 'category')
+      .leftJoinAndSelect('asset.currentRoom', 'currentRoom')
+      .leftJoinAndSelect('currentRoom.unit', 'currentUnit')
+      .leftJoinAndSelect('asset.rfidTag', 'rfidTag')
+      .leftJoinAndSelect('asset.transactionItems', 'transactionItems')
+      .leftJoinAndSelect('transactionItems.transaction', 'transaction')
+      .leftJoinAndSelect('transaction.fromUnit', 'fromUnit')
+      .leftJoinAndSelect('transaction.toUnit', 'toUnit')
+      .where('currentRoom.building = :building', { 
+        building: 'INVENTORY'
+      })
+      .andWhere('transaction.status = :transactionStatus', { 
+        transactionStatus: TransactionStatus.RECEIVED 
+      });
+
+    // **1. SUPER ADMIN: Xem tất cả tài sản warehouse**
+    if (this.permissionHelper.isAdmin(currentUser)) {
+      // Admin có thể xem tất cả, không cần filter thêm
+      console.log('Admin access: viewing all warehouse assets');
+    }
+
+    // **2. PHÒNG QUẢN TRỊ (ADMIN_DEPT/CHILD_UNITS): Xem tài sản warehouse của đơn vị con**
+    else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+      const accessibleUnitIds = await this.permissionHelper.getAccessibleUnitIds(currentUser);
+      
+      if (accessibleUnitIds.length === 0) {
+        return this.emptyPaginatedResult(currentPage, itemsPerPage);
+      }
+
+      queryBuilder.andWhere('currentUnit.id IN (:...accessibleUnitIds)', { 
+        accessibleUnitIds 
+      });
+      console.log('Admin Dept access: viewing warehouse assets for units:', accessibleUnitIds);
+    }
+
+    // **3. ĐỚN VỊ SỬ DỤNG (USER_DEPT/UNIT): Chỉ xem tài sản warehouse của đơn vị mình**
+    else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+      if (!currentUser.unitId) {
+        return this.emptyPaginatedResult(currentPage, itemsPerPage);
+      }
+
+      queryBuilder.andWhere('currentUnit.id = :currentUserUnitId', {
+        currentUserUnitId: currentUser.unitId
+      });
+      console.log('User Dept access: viewing warehouse assets for unit:', currentUser.unitId);
+    }
+
+    // **4. Các user khác không có quyền xem**
+    else {
+      return this.emptyPaginatedResult(currentPage, itemsPerPage);
+    }
+
+    // Lọc theo tìm kiếm
+    if (search) {
+      queryBuilder.andWhere(
+        '(asset.name ILIKE :search OR asset.ktCode ILIKE :search OR asset.fixedCode ILIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    // Lọc theo loại tài sản
+    if (type) {
+      queryBuilder.andWhere('asset.type = :type', { type });
+    }
+
+    // Lọc theo trạng thái tài sản
+    if (status) {
+      queryBuilder.andWhere('asset.status = :status', { status });
+    }
+
+    // Lọc theo đơn vị (với kiểm tra quyền)
+    if (unitId) {
+      // Admin có thể filter bất kỳ unit nào
+      if (this.permissionHelper.isAdmin(currentUser)) {
+        queryBuilder.andWhere('transaction.toUnitId = :unitId', { unitId });
+      }
+      // Admin Dept chỉ có thể filter unit trong phạm vi quyền
+      else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+        const accessibleUnitIds = await this.permissionHelper.getAccessibleUnitIds(currentUser);
+        if (accessibleUnitIds.includes(unitId)) {
+          queryBuilder.andWhere('transaction.toUnitId = :unitId', { unitId });
+        } else {
+          // Nếu filter unit ngoài phạm vi quyền, trả về rỗng
+          return this.emptyPaginatedResult(currentPage, itemsPerPage);
+        }
+      }
+      // User Dept chỉ có thể filter unit của mình
+      else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+        if (unitId === currentUser.unitId) {
+          queryBuilder.andWhere('transaction.toUnitId = :unitId', { unitId });
+        } else {
+          // Nếu filter unit khác, trả về rỗng
+          return this.emptyPaginatedResult(currentPage, itemsPerPage);
+        }
+      }
+    }
+
+    // Lọc theo phòng kho cụ thể
+    if (warehouseRoomId) {
+      queryBuilder.andWhere('currentRoom.id = :warehouseRoomId', { warehouseRoomId });
+    }
+
+    // Sắp xếp theo ngày cập nhật mới nhất
+    queryBuilder.orderBy('asset.updatedAt', 'DESC');
+
+    // Phân trang
+    const offset = (currentPage - 1) * itemsPerPage;
+    const [assets, total] = await queryBuilder
+      .skip(offset)
+      .take(itemsPerPage)
+      .getManyAndCount();
+
+    // Chuyển đổi dữ liệu
+    const warehouseAssets: WarehouseAssetResponseDto[] = assets.map((asset) => {
+      // Tìm giao dịch RECEIVED gần nhất
+      const lastReceivedTransaction = asset.transactionItems
+        ?.filter(item => item.transaction?.status === TransactionStatus.RECEIVED)
+        ?.sort((a, b) => new Date(b.transaction.updatedAt).getTime() - new Date(a.transaction.updatedAt).getTime())
+        ?.[0]?.transaction;
+
+      return {
+        id: asset.id,
+        ktCode: asset.ktCode,
+        fixedCode: asset.fixedCode,
+        name: asset.name,
+        specs: asset.specs,
+        entrydate: asset.entrydate,
+        unit: asset.unit,
+        quantity: asset.quantity,
+        origin: asset.origin,
+        purchasePackage: asset.purchasePackage,
+        type: asset.type,
+        status: asset.status,
+        allowMove: asset.allowMove,
+        createdAt: asset.createdAt,
+        updatedAt: asset.updatedAt,
+        category: asset.category ? {
+          id: asset.category.id,
+          name: asset.category.name,
+          code: asset.category.code,
+        } : undefined,
+        currentRoom: asset.currentRoom ? {
+          id: asset.currentRoom.id,
+          name: asset.currentRoom.name,
+          roomCode: asset.currentRoom.roomCode,
+        } : undefined,
+        currentUnit: asset.currentRoom?.unit ? {
+          id: asset.currentRoom.unit.id,
+          name: asset.currentRoom.unit.name,
+          unitCode: asset.currentRoom.unit.unitCode,
+        } : undefined,
+        rfidTag: (asset as FixedAsset)?.rfidTag ? {
+          id: (asset as FixedAsset).rfidTag.id,
+          rfid: (asset as FixedAsset).rfidTag.rfidId,
+        } : undefined,
+        lastReceivedTransaction: lastReceivedTransaction ? {
+          transactionId: lastReceivedTransaction.id,
+          receivedAt: lastReceivedTransaction.updatedAt,
+          fromUnitName: lastReceivedTransaction.fromUnit?.name || 'N/A',
+          toUnitName: lastReceivedTransaction.toUnit?.name || 'N/A',
+        } : undefined,
+      };
+    });
+
+    return {
+      data: warehouseAssets,
+      pagination: {
+        page: currentPage,
+        limit: itemsPerPage,
+        total,
+        totalPages: Math.ceil(total / itemsPerPage),
+        hasNext: currentPage < Math.ceil(total / itemsPerPage),
+        hasPrev: currentPage > 1,
+        nextPage: currentPage < Math.ceil(total / itemsPerPage) ? currentPage + 1 : null,
+        prevPage: currentPage > 1 ? currentPage - 1 : null,
+        firstPage: 1,
+        lastPage: Math.ceil(total / itemsPerPage),
+      },
+    };
+  }
+
+  /**
+   * Lấy danh sách đơn vị có quyền xem trong warehouse
+   */
+  async getWarehouseUnits(currentUser: User): Promise<{ id: string; name: string; unitCode: number }[]> {
+    // **1. SUPER ADMIN: Xem tất cả units**
+    if (this.permissionHelper.isAdmin(currentUser)) {
+      const units = await this.unitRepository.find({
+        select: ['id', 'name', 'unitCode'],
+        order: { name: 'ASC' },
+      });
+      return units;
+    }
+
+    // **2. PHÒNG QUẢN TRỊ (ADMIN_DEPT/CHILD_UNITS): Xem units trong phạm vi quyền**
+    else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+      const accessibleUnitIds = await this.permissionHelper.getAccessibleUnitIds(currentUser);
+      
+      if (accessibleUnitIds.length === 0) {
+        return [];
+      }
+
+      const units = await this.unitRepository.find({
+        where: { id: In(accessibleUnitIds) },
+        select: ['id', 'name', 'unitCode'],
+        order: { name: 'ASC' },
+      });
+      return units;
+    }
+
+    // **3. ĐỚN VỊ SỬ DỤNG (USER_DEPT/UNIT): Chỉ xem unit của mình**
+    else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+      if (!currentUser.unitId) {
+        return [];
+      }
+
+      const unit = await this.unitRepository.findOne({
+        where: { id: currentUser.unitId },
+        select: ['id', 'name', 'unitCode'],
+      });
+
+      return unit ? [unit] : [];
+    }
+
+    // **4. Các user khác không có quyền xem**
+    else {
+      return [];
+    }
+  }
+
+  /**
+   * Cập nhật vị trí hàng loạt cho các tài sản warehouse
+   */
+  async bulkUpdateLocations(
+    updateDto: BulkLocationUpdateDto,
+    currentUser: User,
+  ): Promise<BulkLocationUpdateResultDto> {
+    const result: BulkLocationUpdateResultDto = {
+      successCount: 0,
+      errorCount: 0,
+      totalCount: updateDto.items.length,
+      successAssetIds: [],
+      errors: [],
+      executedAt: new Date(),
+      executedBy: currentUser.id,
+    };
+
+    // Lấy tất cả assetIds để validate
+    const assetIds = updateDto.items.map(item => item.assetId);
+    const assets = await this.assetRepository.find({
+      where: { id: In(assetIds) },
+      relations: ['currentRoom', 'currentRoom.unit'],
+    });
+
+    // Lấy tất cả roomIds để validate
+    const roomIds = updateDto.items.map(item => item.roomId);
+    const rooms = await this.roomRepository.find({
+      where: { id: In(roomIds) },
+      relations: ['unit'],
+    });
+
+    const currentYear = new Date().getFullYear();
+
+    for (const updateItem of updateDto.items) {
+      try {
+        // 1. Validate asset exists
+        const asset = assets.find(a => a.id === updateItem.assetId);
+        if (!asset) {
+          result.errors.push(`Không tìm thấy tài sản với ID: ${updateItem.assetId}`);
+          result.errorCount++;
+          continue;
+        }
+
+        // 2. Validate room exists
+        const newRoom = rooms.find(r => r.id === updateItem.roomId);
+        if (!newRoom) {
+          result.errors.push(`Không tìm thấy phòng với ID: ${updateItem.roomId} cho tài sản ${asset.ktCode}`);
+          result.errorCount++;
+          continue;
+        }
+
+        // 3. Validate asset đang ở warehouse (currentRoom có building = "INVENTORY")
+        if (!asset.currentRoom || asset.currentRoom.building !== "INVENTORY") {
+          result.errors.push(`Tài sản ${asset.ktCode} không đang ở kho, không thể di chuyển`);
+          result.errorCount++;
+          continue;
+        }
+
+        // 4. Validate room mới phải cùng unit với asset hiện tại
+        if (!asset.currentRoom?.unit || newRoom.unit.id !== asset.currentRoom.unit.id) {
+          result.errors.push(`Phòng mới phải cùng đơn vị với tài sản ${asset.ktCode}`);
+          result.errorCount++;
+          continue;
+        }
+
+        // 5. Cập nhật currentRoomId của asset
+        await this.assetRepository.update(
+          { id: asset.id },
+          { currentRoomId: newRoom.id }
+        );
+
+        // 6. Cập nhật AssetBookItem hiện tại
+        const currentAssetBook = await this.findOrCreateAssetBook(asset.currentRoom.unit.id, currentYear);
+        await this.assetBookItemRepository
+          .createQueryBuilder()
+          .update(AssetBookItem)
+          .set({ 
+            roomId: newRoom.id,
+            note: updateItem.note || updateDto.generalNote || `Chuyển từ ${asset.currentRoom.name} đến ${newRoom.name}`,
+          })
+          .where('bookId = :bookId', { bookId: currentAssetBook.id })
+          .andWhere('assetId = :assetId', { assetId: asset.id })
+          .andWhere('status = :status', { status: AssetBookItemStatus.IN_USE })
+          .execute();
+
+        result.successAssetIds.push(asset.id);
+        result.successCount++;
+
+      } catch (error) {
+        console.error(`Error updating location for asset ${updateItem.assetId}:`, error);
+        result.errors.push(`Lỗi cập nhật tài sản ${updateItem.assetId}: ${error.message}`);
+        result.errorCount++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Tìm hoặc tạo AssetBook cho unit và năm
+   */
+  private async findOrCreateAssetBook(unitId: string, year: number): Promise<AssetBook> {
+    let assetBook = await this.assetBookRepository.findOne({
+      where: { unitId, year }
+    });
+
+    if (!assetBook) {
+      assetBook = this.assetBookRepository.create({
+        unitId,
+        year,
+        status: 'OPEN' as any, // AssetBookStatus.OPEN
+      });
+      assetBook = await this.assetBookRepository.save(assetBook);
+    }
+
+    return assetBook;
   }
 }
