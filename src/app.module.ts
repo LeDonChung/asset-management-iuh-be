@@ -22,6 +22,7 @@ import { RedisModule } from './modules/redis/redis.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { LiquidationsModule } from './liquidations/liquidations.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { MovementsModule } from './modules/movements/movements.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { TransactionsModule } from './modules/transactions/transactions.module';
     AlertsModule,
     LiquidationsModule,
     TransactionsModule,
+    MovementsModule,
   ],
   controllers: [],
   providers: [

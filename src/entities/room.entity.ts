@@ -19,6 +19,7 @@ import { Asset } from "./asset.entity";
 import { AssetBookItem } from "./asset-book-item.entity";
 import { InventoryResult } from "./inventory-result";
 import { Alert } from "./alert.entity";
+import { AssetMovementItem } from "./asset-movement-item.entity";
 
 @Entity("rooms")
 @Unique("unique_room_location", ["building", "floor", "roomNumber", "unitId"])
@@ -100,4 +101,11 @@ export class Room {
 
     @OneToMany('AssetTransactionHistory', 'newRoom')
     newTransactionHistories?: any[];
+
+    // Asset Movement relationships
+    @OneToMany(() => AssetMovementItem, (item) => item.fromRoom)
+    fromMovements?: AssetMovementItem[];
+
+    @OneToMany(() => AssetMovementItem, (item) => item.toRoom)
+    toMovements?: AssetMovementItem[];
 }
