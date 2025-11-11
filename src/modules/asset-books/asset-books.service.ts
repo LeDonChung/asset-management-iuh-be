@@ -527,7 +527,7 @@ export class AssetBooksService {
           });
       } else {
         // Sorting mặc định
-        queryBuilder.addOrderBy("asset.createdAt", "DESC");
+        queryBuilder.addOrderBy("asset.status", "ASC");
       }
 
       // Get pagination settings with defaults

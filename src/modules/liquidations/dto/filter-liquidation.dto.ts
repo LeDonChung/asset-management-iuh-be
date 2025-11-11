@@ -1,8 +1,8 @@
 import { IsEnum, IsOptional, IsUUID, IsNumber, Min } from "class-validator";
 import { Type } from "class-transformer";
-import { LiquidationStatus } from "../../common/shared/LiquidationStatus";
 import { BaseFilterDto } from "src/common/dto/base-filter.dto";
 import { ApiProperty } from "@nestjs/swagger";
+import { LiquidationStatus } from "src/common/shared/LiquidationStatus";
 
 export class LiquidationProposalFilterDto extends BaseFilterDto {
   @ApiProperty({

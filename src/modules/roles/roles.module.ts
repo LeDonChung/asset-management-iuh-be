@@ -5,7 +5,7 @@ import { Role } from 'src/entities/role.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Permission } from 'src/entities/permission.entity';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
-import { LiquidationsModule } from 'src/liquidations/liquidations.module';
+import { LiquidationsModule } from 'src/modules/liquidations/liquidations.module';
 import { Unit } from 'src/entities/unit.entity';
 import { AccessControlModule } from 'src/common/services/access-control.module';
 import { AccessScope } from 'src/entities/access-scope.entity';

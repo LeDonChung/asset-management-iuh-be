@@ -1,8 +1,8 @@
 import { PartialType } from '@nestjs/swagger';
 import { CreateLiquidationProposalDto } from './create-liquidation.dto';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { LiquidationStatus } from '../../common/shared/LiquidationStatus';
 import { ApiProperty } from '@nestjs/swagger';
+import { LiquidationStatus } from 'src/common/shared/LiquidationStatus';
 
 export class UpdateLiquidationDto extends PartialType(CreateLiquidationProposalDto) {}
 

@@ -1,7 +1,7 @@
-import { LiquidationStatus } from "../../common/shared/LiquidationStatus";
-import { AssetType } from "../../common/shared/AssetType";
+import { LiquidationStatus } from "src/common/shared/LiquidationStatus";
 import { ApiProperty } from "@nestjs/swagger";
 import { Expose } from "class-transformer";
+import { AssetType } from "src/common/shared/AssetType";
 
 export class SimplifiedLiquidationResponseDto {
     @ApiProperty({ description: 'ID của đề xuất thanh lý' })
