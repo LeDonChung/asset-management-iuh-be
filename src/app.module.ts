@@ -20,7 +20,7 @@ import { InventoryGroupModule } from './modules/inventory-group/inventory-group.
 import { AssetBooksModule } from './modules/asset-books/asset-books.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
-import { LiquidationsModule } from './liquidations/liquidations.module';
+import { LiquidationsModule } from './modules/liquidations/liquidations.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { MovementsModule } from './modules/movements/movements.module';
 

@@ -18,7 +18,7 @@ import { LiquidationProposalFilterDto } from "./dto/filter-liquidation.dto";
 import { LiquidationProposalResponseDto } from "./dto/response-liquidation.dto";
 import { SimplifiedLiquidationResponseDto } from "./dto/simplified-liquidation-response.dto";
 
-import { LiquidationStatus } from "../common/shared/LiquidationStatus";
+import { LiquidationStatus } from "../../common/shared/LiquidationStatus";
 import { LiquidationProposal } from "src/entities/liquidation.entity";
 import { LiquidationProposalItem } from "src/entities/liquidation-proposal-item";
 import { LiquidationHistory } from "src/entities/liquidation-history.entity";

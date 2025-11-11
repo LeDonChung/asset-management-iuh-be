@@ -12,7 +12,6 @@ import {
   Header,
 } from "@nestjs/common";
 import { Response } from "express";
-import { LiquidationsService } from "./liquidations.service";
 import { CreateLiquidationProposalDto } from "./dto/create-liquidation.dto";
 import {
   UpdateLiquidationStatusDto,
@@ -40,6 +39,7 @@ import { CurrentUser } from "src/modules/auth/decorators/current-user.decorator"
 import { User } from "src/entities/user.entity";
 import { Permissions } from "src/modules/auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
+import { LiquidationsService } from "./liquidations.service";
 
 @ApiTags("Liquidations")
 @Controller("api/v1/liquidations")

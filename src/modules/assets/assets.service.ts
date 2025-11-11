@@ -1055,4 +1055,51 @@ export class AssetsService {
 
     return assetBook;
   }
+
+  /**
+   * Đề xuất thanh lý tài sản: cập nhật trạng thái tài sản và sổ tài sản
+   */
+  async proposeLiquidation(
+    id: string,
+    note?: string,
+  ): Promise<AssetResponseDto> {
+    const asset = await this.assetRepository.findOne({
+      where: { id },
+      relations: ["currentRoom", "currentRoom.unit"],
+    });
+
+    if (!asset) {
+      throw new NotFoundException(`Asset with ID ${id} not found`);
+    }
+
+    try {
+      // 1) Cập nhật trạng thái tài sản
+      asset.status = AssetStatus.PROPOSED_LIQUIDATION;
+      await this.assetRepository.save(asset);
+
+      // 2) Cập nhật trạng thái trong sổ tài sản (nếu xác định được đơn vị hiện tại)
+      const unitId = asset.currentRoom?.unit?.id;
+      if (unitId) {
+        const currentYear = new Date().getFullYear();
+        const currentAssetBook = await this.findOrCreateAssetBook(unitId, currentYear);
+
+        // Cập nhật các bản ghi đang "đang dùng" hoặc "hư hỏng" thành "đề xuất thanh lý"
+        await this.assetBookItemRepository
+          .createQueryBuilder()
+          .update(AssetBookItem)
+          .set({
+            status: AssetBookItemStatus.PROPOSED_LIQUIDATION,
+            note: note || 'Đề xuất thanh lý',
+          })
+          .where('bookId = :bookId', { bookId: currentAssetBook.id })
+          .andWhere('assetId = :assetId', { assetId: asset.id })
+          .andWhere('status IN (:...statuses)', { statuses: [AssetBookItemStatus.IN_USE, AssetBookItemStatus.DAMAGED] })
+          .execute();
+      }
+
+      return this.findOne(id);
+    } catch (error) {
+      throw new BadRequestException('Failed to propose liquidation: ' + error.message);
+    }
+  }
 }

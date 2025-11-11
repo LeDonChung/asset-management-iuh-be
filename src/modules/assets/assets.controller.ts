@@ -174,6 +174,25 @@ export class AssetsController {
     await this.assetsService.removeRfidTag(id);
   }
 
+  @Patch(":id/propose-liquidation")
+  @ApiOperation({ summary: "Đề xuất thanh lý tài sản: cập nhật trạng thái tài sản và sổ tài sản" })
+  @ApiResponse({
+    status: 200,
+    description: "Asset proposed for liquidation successfully",
+    type: AssetResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Asset not found" })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_UPDATE_ASSET)
+  @ApiBearerAuth()
+  async proposeLiquidation(
+    @Param("id") id: string,
+    @Body() body: { note?: string }
+  ): Promise<AssetResponseDto> {
+    return this.assetsService.proposeLiquidation(id, body?.note);
+  }
+
   @Post("import")
   @UseInterceptors(FileInterceptor("file"))
   @ApiOperation({
@@ -322,4 +341,5 @@ export class AssetsController {
   ): Promise<BulkLocationUpdateResultDto> {
     return this.assetsService.bulkUpdateLocations(updateDto, currentUser);
   }
+  
 }
