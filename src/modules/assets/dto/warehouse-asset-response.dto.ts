@@ -45,6 +45,12 @@ export class WarehouseAssetResponseDto {
   })
   unit: string;
 
+  @ApiPropertyOptional({
+    description: 'Vị trí cụ thể trong phòng',
+    example: 'Bàn A1, góc phòng'
+  })
+  locationInRoom?: string;
+
   @ApiProperty({
     description: 'Số lượng',
     example: 1

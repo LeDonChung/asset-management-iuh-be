@@ -35,6 +35,7 @@ import { ClassifyRfidsResponseDto } from "./dto/classify-rfids-response.dto";
 import { WarehouseAssetFilterDto } from "./dto/warehouse-asset-filter.dto";
 import { WarehouseAssetResponseDto } from "./dto/warehouse-asset-response.dto";
 import { BulkLocationUpdateDto, BulkLocationUpdateResultDto } from "./dto/bulk-location-update.dto";
+import { UnidentifiedAssetFilterDto } from "./dto/unidentified-asset-filter.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "src/entities/user.entity";
@@ -62,6 +63,28 @@ export class AssetsController {
     return await this.assetsService.findByRfids(rfids);
   }
 
+  @Post("unidentified")
+  @ApiOperation({
+    summary: "Lấy danh sách tài sản chưa được định danh",
+    description: "Trả về danh sách tài sản chưa được định danh với phân trang. Công cụ dụng cụ: chưa có vị trí. Tài sản cố định: chưa có vị trí và RFID tag."
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Danh sách tài sản chưa được định danh với phân trang",
+    type: PaginatedResponseDto<AssetResponseDto>,
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @ApiBody({ type: UnidentifiedAssetFilterDto })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  // @Permissions(PermissionConstants.PERM_IDENTIFY_ASSET)
+  @ApiBearerAuth()
+  async findUnidentifiedAssets(
+    @Body() filterDto: UnidentifiedAssetFilterDto,
+    @CurrentUser() currentUser: User
+  ): Promise<PaginatedResponseDto<AssetResponseDto>> {
+    return this.assetsService.findUnidentifiedAssets(filterDto, currentUser);
+  }
+
   @Post()
   @ApiOperation({ summary: "Định danh tài sản - cả cố định, công cụ dụng cụ" })
   @ApiResponse({
@@ -71,7 +94,7 @@ export class AssetsController {
   })
   @ApiResponse({ status: 400, description: "Bad request" })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_IDENTIFY_ASSET)
+  // @Permissions(PermissionConstants.PERM_IDENTIFY_ASSET)
   @ApiBearerAuth()
   async create(
     @Body() createAssetDto: CreateAssetDto,
@@ -119,9 +142,10 @@ export class AssetsController {
   @ApiBearerAuth()
   async update(
     @Param("id") id: string,
-    @Body() updateAssetDto: UpdateAssetDto
+    @Body() updateAssetDto: UpdateAssetDto,
+    @CurrentUser() currentUser: User
   ): Promise<AssetResponseDto> {
-    return this.assetsService.update(id, updateAssetDto);
+    return this.assetsService.update(id, updateAssetDto, currentUser);
   }
 
   @Delete(":id")
@@ -134,44 +158,6 @@ export class AssetsController {
   @ApiBearerAuth()
   async remove(@Param("id") id: string): Promise<void> {
     return this.assetsService.remove(id);
-  }
-
-  @Patch(":id/rfid")
-  @ApiOperation({ summary: "Cập nhật RFID tag cho tài sản cố định" })
-  @ApiResponse({
-    status: 200,
-    description: "RFID tag updated successfully",
-    type: AssetResponseDto,
-  })
-  @ApiResponse({ status: 404, description: "Asset not found" })
-  @ApiResponse({
-    status: 400,
-    description: "Bad request - Only Fixed Assets can have RFID tags",
-  })
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_UPDATE_RFID)
-  @ApiBearerAuth()
-  async updateRfidTag(
-    @Param("id") id: string,
-    @Body() updateRfidDto: UpdateRfidDto
-  ): Promise<AssetResponseDto> {
-    return this.assetsService.updateRfidTag(id, updateRfidDto);
-  }
-
-  @Delete(":id/rfid")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: "Xóa RFID tag khỏi tài sản" })
-  @ApiResponse({ status: 204, description: "RFID tag removed successfully" })
-  @ApiResponse({ status: 404, description: "Asset not found" })
-  @ApiResponse({
-    status: 400,
-    description: "Bad request - Asset does not have RFID tag",
-  })
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PermissionConstants.PERM_REMOVE_ASSET)
-  @ApiBearerAuth()
-  async removeRfidTag(@Param("id") id: string): Promise<void> {
-    await this.assetsService.removeRfidTag(id);
   }
 
   @Patch(":id/propose-liquidation")

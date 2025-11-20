@@ -115,6 +115,9 @@ export class Asset {
     @JoinColumn({ name: 'current_room_id' })
     currentRoom: Room;
 
+    @Column({ name: 'location_in_room', nullable: true, comment: 'Vị trí cụ thể trong phòng' })
+    locationInRoom: string;
+
     @OneToMany(() => InventoryResult, (result) => result.asset)
     inventoryResults?: InventoryResult[];
 

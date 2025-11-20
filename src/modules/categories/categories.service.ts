@@ -6,7 +6,6 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { Category } from '../../entities/category.entity';
 import { plainToClass, plainToInstance } from 'class-transformer';
-import { CommonUtils } from 'src/common/utils/common.utils';
 
 @Injectable()
 export class CategoriesService {
@@ -37,7 +36,10 @@ export class CategoriesService {
     }
 
     const category = this.categoryRepository.create(createCategoryDto);
-    category.code = CommonUtils.generateCode(createCategoryDto.name);
+    
+    // Generate auto-increment code: count + 1
+    const count = await this.categoryRepository.count();
+    category.code = (count + 1).toString();
 
     // If parentCode is provided, verify parent exists
     if (createCategoryDto.parentCode) {

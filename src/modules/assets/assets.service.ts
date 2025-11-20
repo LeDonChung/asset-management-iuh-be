@@ -12,6 +12,9 @@ import { AssetResponseDto } from "./dto/asset-response.dto";
 import { ClassifyRfidsResponseDto } from "./dto/classify-rfids-response.dto";
 import { WarehouseAssetFilterDto } from "./dto/warehouse-asset-filter.dto";
 import { WarehouseAssetResponseDto } from "./dto/warehouse-asset-response.dto";
+import { UnidentifiedAssetFilterDto } from "./dto/unidentified-asset-filter.dto";
+import { FilterUtil } from "src/common/utils/filter.util";
+import { FieldType } from "src/common/dto/filter.dto";
 import { Asset, FixedAsset, ToolsEquipment } from "src/entities/asset.entity";
 import { RfidTag } from "src/entities/rfid-tag.entity";
 import { AssetType } from "src/common/shared/AssetType";
@@ -33,6 +36,8 @@ import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
 
 @Injectable()
 export class AssetsService {
+  private readonly DEBUG_MODE = process.env.NODE_ENV === 'development' && process.env.DEBUG_ASSETS === 'true';
+
   constructor(
     @InjectRepository(Asset)
     private readonly assetRepository: Repository<Asset>,
@@ -51,6 +56,15 @@ export class AssetsService {
     private readonly permissionHelper: PermissionHelperService,
   ) {}
 
+  /**
+   * Log debug thông tin chỉ khi DEBUG_MODE được bật
+   */
+  private debugLog(message: string, ...args: any[]): void {
+    if (this.DEBUG_MODE) {
+      console.log(message, ...args);
+    }
+  }
+
   async findByRfids(
     rfids: string[]
   ): Promise<{ rfid: string; allowMove: boolean }[]> {
@@ -63,6 +77,81 @@ export class AssetsService {
       rfid: rfid.rfidId,
       allowMove: rfid.asset?.allowMove ?? false,
     }));
+  }
+
+  /**
+   * Generate ktCode theo định dạng: xx-yyyy/nn
+   * xx: số năm đưa vào sử dụng (ví dụ: 19 cho năm 2019, 25 cho năm 2025)
+   * yyyy: mã danh mục lấy từ category.code
+   * nn: gói mua (bắt đầu từ 00)
+   */
+  private async generateKtCode(yearPrefix: string, categoryId?: string, purchasePackage = 0): Promise<string> {
+    const nn = purchasePackage.toString().padStart(2, '0');
+    
+    // Lấy 2 chữ số cuối của năm nhập
+    const currentYear = new Date().getFullYear();
+    const xx = currentYear.toString().slice(-2); // Ví dụ: 2025 -> 25
+    
+    // Lấy mã danh mục từ category.code
+    let yyyy = '0000'; // Mặc định
+    if (categoryId) {
+      const category = await this.categoryRepository.findOne({ where: { id: categoryId } });
+      if (category && category.code) {
+        // Lấy 4 chữ số từ category.code, nếu không đủ thì pad
+        const digits = category.code.replace(/\D/g, ''); // Loại bỏ ký tự không phải số
+        if (digits.length >= 4) {
+          yyyy = digits.substring(0, 4);
+        } else if (digits.length > 0) {
+          yyyy = digits.padStart(4, '0');
+        } else {
+          // Nếu không có số trong code, dùng hash của tên category
+          yyyy = Math.abs(category.code.split('').reduce((a, b) => {
+            a = ((a << 5) - a) + b.charCodeAt(0);
+            return a & a;
+          }, 0)).toString().padStart(4, '0').substring(0, 4);
+        }
+      }
+    }
+    
+    return `${xx}-${yyyy}/${nn}`;
+  }
+
+  /**
+   * Generate fixedCode theo định dạng: xxxx.yyyyy
+   * xxxx: mã danh mục lấy từ category.code
+   * yyyyy: số thứ tự = số tài sản hiện có trong danh mục + 1
+   */
+  private async generateFixedCode(categoryId?: string): Promise<string> {
+    // Lấy mã danh mục từ category.code
+    let categoryPrefix = '10000'; // Mặc định
+    if (categoryId) {
+      const category = await this.categoryRepository.findOne({ where: { id: categoryId } });
+      if (category && category.code) {
+        // Sử dụng category.code làm prefix
+        const digits = category.code.replace(/\D/g, ''); // Lấy chỉ số
+        if (digits.length >= 4) {
+          categoryPrefix = digits.substring(0, 4);
+        } else if (digits.length > 0) {
+          categoryPrefix = digits.padStart(4, '0');
+        } else {
+          // Nếu code không có số, tạo từ hash tên category
+          categoryPrefix = Math.abs(category.code.split('').reduce((a, b) => {
+            a = ((a << 5) - a) + b.charCodeAt(0);
+            return a & a;
+          }, 0)).toString().padStart(4, '0').substring(0, 4);
+        }
+      }
+    }
+
+    // Đếm số tài sản hiện có trong danh mục này + 1
+    const assetCount = await this.assetRepository.count({
+      where: { categoryId: categoryId }
+    });
+    
+    const nextSeq = assetCount + 1;
+    const seqPart = nextSeq.toString().padStart(5, '0');
+    
+    return `${categoryPrefix}.${seqPart}`;
   }
 
   async create(
@@ -85,7 +174,17 @@ export class AssetsService {
         entrydate: new Date(createAssetDto.entrydate),
       });
 
-      // Gán phòng hiện tại nếu có
+      // Nếu ktCode không có, tự sinh theo quy tắc xx-yyyy/nn
+      if (!createAssetDto.ktCode) {
+        asset.ktCode = await this.generateKtCode('', createAssetDto.categoryId, createAssetDto.purchasePackage ?? 0);
+      }
+
+      // Nếu fixedCode không có, tự sinh theo quy tắc xxxx.yyyy (xxxx là mã danh mục, yyyy là sequence)
+      if (!createAssetDto.fixedCode) {
+        asset.fixedCode = await this.generateFixedCode(createAssetDto.categoryId);
+      }
+
+      // Gán phòng hiện tại nếu có (không bắt buộc khi tạo từ asset-books)
       if (createAssetDto.currentRoomId != undefined) {
         const room = await this.roomRepository.findOne({
           where: { id: createAssetDto.currentRoomId },
@@ -114,6 +213,48 @@ export class AssetsService {
       // Gán creator
       if (currentUser) {
         asset.creator = currentUser;
+      }
+
+      // Xử lý RFID nếu được cung cấp
+      if (createAssetDto.rfid && asset.type === AssetType.FIXED_ASSET) {
+        // Kiểm tra RFID đã tồn tại chưa
+        const existingRfid = await this.rfidTagRepository.findOne({
+          where: { rfidId: createAssetDto.rfid },
+          relations: ['asset']
+        });
+        
+        if (existingRfid && existingRfid.asset) {
+          throw new BadRequestException(`RFID ${createAssetDto.rfid} đã được gán cho tài sản khác`);
+        }
+        
+        // Tạo hoặc cập nhật RFID tag
+        let rfidTag: RfidTag;
+        if (existingRfid) {
+          rfidTag = existingRfid;
+        } else {
+          rfidTag = new RfidTag();
+          rfidTag.rfidId = createAssetDto.rfid;
+          rfidTag.assignedDate = new Date().toISOString();
+        }
+        
+        // Lưu asset trước
+        const savedAsset = await this.assetRepository.save(asset);
+        
+        // Gán asset cho RFID và lưu
+        rfidTag.asset = savedAsset;
+        rfidTag.assetId = savedAsset.id;
+        await this.rfidTagRepository.save(rfidTag);
+        
+        // Cập nhật status thành IN_USE khi có RFID
+        savedAsset.status = AssetStatus.IN_USE;
+        return plainToInstance(AssetResponseDto, await this.assetRepository.save(savedAsset), {
+          excludeExtraneousValues: true,
+        });
+      }
+
+      // Nếu là FIXED_ASSET và chưa có RFID, set status = UNIDENTIFIED
+      if (asset.type === AssetType.FIXED_ASSET && !createAssetDto.rfid) {
+        asset.status = AssetStatus.UNIDENTIFIED;
       }
 
       const savedAsset = await this.assetRepository.save(asset);
@@ -179,11 +320,12 @@ export class AssetsService {
 
   async update(
     id: string,
-    updateAssetDto: UpdateAssetDto
+    updateAssetDto: UpdateAssetDto,
+    currentUser?: User
   ): Promise<AssetResponseDto> {
     const asset = await this.assetRepository.findOne({
       where: { id },
-      relations: ["category", "creator", "currentRoom"],
+      relations: ["category", "creator", "currentRoom", "currentRoom.unit", "rfidTag"],
     });
 
     if (!asset) {
@@ -191,21 +333,57 @@ export class AssetsService {
     }
 
     try {
-      // Cập nhật thông tin phòng nếu có
-      if (updateAssetDto.currentRoomId !== undefined) {
-        const room = await this.roomRepository.findOne({
-          where: { id: updateAssetDto.currentRoomId },
-        });
-        if (!room) {
-          throw new NotFoundException(
-            `Room with ID ${updateAssetDto.currentRoomId} not found`
-          );
+      // Kiểm tra nếu tài sản đã có phòng sử dụng thì không cho cập nhật một số thông tin quan trọng
+      const hasCurrentRoom = asset.currentRoom !== null;
+      
+      if (hasCurrentRoom) {
+        // Danh sách các trường không được phép cập nhật khi tài sản đã có phòng sử dụng
+        const restrictedFields = ['type', 'categoryId', 'ktCode', 'fixedCode'];
+        
+        for (const field of restrictedFields) {
+          if (updateAssetDto[field] !== undefined && updateAssetDto[field] !== asset[field]) {
+            throw new BadRequestException(
+              `Không thể cập nhật ${field} khi tài sản đã được phân bổ cho phòng sử dụng. Vui lòng thu hồi tài sản trước khi cập nhật.`
+            );
+          }
         }
-        asset.currentRoom = room;
+
+        // Không cho phép thay đổi RFID khi đã có phòng sử dụng
+        if (updateAssetDto.rfid !== undefined) {
+          const currentRfid = asset.type === AssetType.FIXED_ASSET 
+            ? (asset as FixedAsset).rfidTag?.rfidId 
+            : null;
+          
+          if (updateAssetDto.rfid !== currentRfid) {
+            throw new BadRequestException(
+              'Không thể cập nhật mã RFID khi tài sản đã được phân bổ cho phòng sử dụng. Vui lòng thu hồi tài sản trước khi cập nhật.'
+            );
+          }
+        }
+
+        this.debugLog(`Asset ${id} has current room, restricting updates to basic info only`);
       }
 
-      // Cập nhật thông tin danh mục nếu có
-      if (updateAssetDto.categoryId !== undefined) {
+      // Cập nhật thông tin phòng nếu có
+      if (updateAssetDto.currentRoomId !== undefined) {
+        if (updateAssetDto.currentRoomId === null || updateAssetDto.currentRoomId === '') {
+          // Cho phép xóa phòng (thu hồi tài sản)
+          asset.currentRoom = null;
+        } else {
+          const room = await this.roomRepository.findOne({
+            where: { id: updateAssetDto.currentRoomId },
+          });
+          if (!room) {
+            throw new NotFoundException(
+              `Room with ID ${updateAssetDto.currentRoomId} not found`
+            );
+          }
+          asset.currentRoom = room;
+        }
+      }
+
+      // Cập nhật thông tin danh mục nếu có (chỉ khi chưa có phòng sử dụng)
+      if (updateAssetDto.categoryId !== undefined && !hasCurrentRoom) {
         const category = await this.categoryRepository.findOne({
           where: { id: updateAssetDto.categoryId },
         });
@@ -217,13 +395,89 @@ export class AssetsService {
         asset.category = category;
       }
 
+      // Xử lý RFID cho tài sản cố định (chỉ khi chưa có phòng sử dụng)
+      if (updateAssetDto.rfid !== undefined && asset.type === AssetType.FIXED_ASSET && !hasCurrentRoom) {
+        if (updateAssetDto.rfid) {
+          // Kiểm tra RFID đã tồn tại chưa
+          const existingRfid = await this.rfidTagRepository.findOne({
+            where: { rfidId: updateAssetDto.rfid },
+            relations: ['asset']
+          });
+          
+          if (existingRfid && existingRfid.asset && existingRfid.asset.id !== id) {
+            throw new BadRequestException(`RFID ${updateAssetDto.rfid} đã được gán cho tài sản khác`);
+          }
+          
+          // Xóa RFID cũ nếu có
+          const currentRfid = await this.rfidTagRepository.findOne({
+            where: { assetId: id }
+          });
+          if (currentRfid) {
+            await this.rfidTagRepository.remove(currentRfid);
+          }
+
+          // Tạo hoặc cập nhật RFID mới
+          let rfidTag: RfidTag;
+          if (existingRfid) {
+            rfidTag = existingRfid;
+          } else {
+            rfidTag = new RfidTag();
+            rfidTag.rfidId = updateAssetDto.rfid;
+            rfidTag.assignedDate = new Date().toISOString();
+          }
+          
+          rfidTag.asset = asset;
+          rfidTag.assetId = asset.id;
+          await this.rfidTagRepository.save(rfidTag);
+          
+          // Cập nhật status thành IN_USE khi có RFID
+          asset.status = AssetStatus.IN_USE;
+        } else {
+          // Xóa RFID nếu rfid = ''
+          const currentRfid = await this.rfidTagRepository.findOne({
+            where: { assetId: id }
+          });
+          if (currentRfid) {
+            await this.rfidTagRepository.remove(currentRfid);
+          }
+          
+          // Set status về UNIDENTIFIED nếu không có phòng
+          if (!asset.currentRoom) {
+            asset.status = AssetStatus.UNIDENTIFIED;
+          }
+        }
+      }
+
+      // Cập nhật thông tin cơ bản (luôn được phép)
+      const allowedFields = ['name', 'specs', 'entrydate', 'locationInRoom', 'unit', 'quantity', 'origin', 'purchasePackage', 'status'];
+      const updateData: any = {};
+      
+      for (const field of allowedFields) {
+        if (updateAssetDto[field] !== undefined) {
+          if (field === 'entrydate') {
+            updateData[field] = new Date(updateAssetDto[field]);
+          } else {
+            updateData[field] = updateAssetDto[field];
+          }
+        }
+      }
+
+      // Cập nhật các trường được phép (khi chưa có phòng sử dụng)
+      if (!hasCurrentRoom) {
+        const additionalFields = ['type', 'ktCode', 'fixedCode'];
+        for (const field of additionalFields) {
+          if (updateAssetDto[field] !== undefined) {
+            updateData[field] = updateAssetDto[field];
+          }
+        }
+      }
+
       const updatedAsset = await this.assetRepository.save({
         ...asset,
-        ...updateAssetDto,
-        entrydate: updateAssetDto.entrydate
-          ? new Date(updateAssetDto.entrydate)
-          : asset.entrydate,
+        ...updateData,
       });
+
+      this.debugLog(`Asset ${id} updated successfully. HasCurrentRoom: ${hasCurrentRoom}`);
 
       return plainToInstance(AssetResponseDto, updatedAsset, {
         excludeExtraneousValues: true,
@@ -377,7 +631,7 @@ export class AssetsService {
           const rowNumber = batchIndex * batchSize + i + 2; // +2 vì bỏ qua header và index bắt đầu từ 0
 
           try {
-            // Mapping dữ liệu từ Excel theo cấu trúc bạn cung cấp (13 cột A-M)
+            // Mapping dữ liệu từ Excel theo cấu trúc bạn cung cấp (13 cột A-M, có thể mở rộng thêm N)
             const assetData: ImportAssetDto = {
               ktCode: row[0]?.toString() || "", // A: Mã kế toán
               fixedCode: row[1]?.toString() || "", // B: Mã tài sản
@@ -392,6 +646,7 @@ export class AssetsService {
               entrydate: this.formatDate(row[10]?.toString() || ""), // K: Ngày nhập
               purchasePackage: parseInt(row[11]?.toString()) || 0, // L: Gói mua
               rfidId: row[12]?.toString() || "", // M: RFID Tag nếu có
+              locationInRoom: row[13]?.toString() || "", // N: Vị trí cụ thể trong phòng (tùy chọn)
               status: AssetStatus.IN_USE,
             };
 
@@ -670,7 +925,7 @@ export class AssetsService {
   /**
    * Helper method để trả về kết quả rỗng cho pagination
    */
-  private emptyPaginatedResult(currentPage: number, itemsPerPage: number): PaginatedResponseDto<WarehouseAssetResponseDto> {
+  private emptyPaginatedResult<T>(currentPage: number, itemsPerPage: number): PaginatedResponseDto<T> {
     return {
       data: [],
       pagination: {
@@ -836,6 +1091,7 @@ export class AssetsService {
         specs: asset.specs,
         entrydate: asset.entrydate,
         unit: asset.unit,
+        locationInRoom: asset.locationInRoom,
         quantity: asset.quantity,
         origin: asset.origin,
         purchasePackage: asset.purchasePackage,
@@ -1054,6 +1310,189 @@ export class AssetsService {
     }
 
     return assetBook;
+  }
+
+  /**
+   * Lấy danh sách tài sản chưa được định danh
+   * - Công cụ dụng cụ: chưa có vị trí (currentRoomId IS NULL)
+   * - Tài sản cố định: chưa có vị trí (currentRoomId IS NULL) VÀ chưa có RFID tag
+   */
+  async findUnidentifiedAssets(
+    filterDto: UnidentifiedAssetFilterDto,
+    currentUser: User
+  ): Promise<PaginatedResponseDto<AssetResponseDto>> {
+    const config = {
+      searchFields: ["name", "ktCode", "fixedCode"],
+      fieldTypeMap: {
+        "name": FieldType.TEXT,
+        "ktCode": FieldType.TEXT,
+        "fixedCode": FieldType.TEXT,
+        "type": FieldType.SELECT,
+        "createdAt": FieldType.DATE,
+      },
+      defaultSorting: { field: "createdAt", direction: "DESC" as const },
+      relations: [
+        "category",
+        "currentRoom",
+        "rfidTag",
+      ],
+    };
+
+    const queryBuilder = this.assetRepository
+      .createQueryBuilder('asset')
+      .leftJoinAndSelect('asset.category', 'category')
+      .leftJoinAndSelect('asset.currentRoom', 'currentRoom')
+      .leftJoinAndSelect('asset.rfidTag', 'rfidTag')
+      .leftJoin('asset.creator', 'creator')
+      .where('asset.current_room_id IS NULL');
+
+    // **Áp dụng phân quyền truy cập**
+    // **1. SUPER ADMIN: Xem tất cả tài sản chưa định danh**
+    if (this.permissionHelper.isAdmin(currentUser)) {
+      // Admin có thể xem tất cả, không cần filter thêm
+    }
+
+    // **2. PHÒNG QUẢN TRỊ (ADMIN_DEPT/CHILD_UNITS): Chỉ xem tài sản chưa định danh của đơn vị mình**
+    else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
+      if (!currentUser.unitId) {
+        // Trả về kết quả rỗng nếu user không thuộc unit nào
+        return {
+          data: [],
+          pagination: {
+            page: filterDto.pagination?.currentPage || 1,
+            limit: filterDto.pagination?.itemsPerPage || 10,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+            nextPage: null,
+            prevPage: null,
+            firstPage: 1,
+            lastPage: 1,
+          },
+        };
+      }
+
+      // ADMIN_DEPT chỉ xem tài sản do người trong đơn vị mình tạo
+      // Không xem tài sản của đơn vị con để tránh xung đột giữa các phòng quản trị
+      queryBuilder.andWhere(
+        '(creator.unitId = :currentUserUnitId OR creator.unitId IS NULL)',
+        { currentUserUnitId: currentUser.unitId }
+      );
+    }
+
+    // **3. ĐỚN VỊ SỬ DỤNG (USER_DEPT/UNIT): Chỉ xem tài sản chưa định danh của đơn vị mình**
+    else if (this.permissionHelper.isUserDeptUser(currentUser)) {
+      if (!currentUser.unitId) {
+        // Trả về kết quả rỗng nếu user không thuộc unit nào
+        return {
+          data: [],
+          pagination: {
+            page: filterDto.pagination?.currentPage || 1,
+            limit: filterDto.pagination?.itemsPerPage || 10,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+            nextPage: null,
+            prevPage: null,
+            firstPage: 1,
+            lastPage: 1,
+          },
+        };
+      }
+
+      // Chỉ xem tài sản do người trong đơn vị mình tạo
+      queryBuilder.andWhere(
+        '(creator.unitId = :currentUserUnitId OR creator.unitId IS NULL)',
+        { currentUserUnitId: currentUser.unitId }
+      );
+    }
+
+    // **4. Các user khác không có quyền xem**
+    else {
+      // Trả về kết quả rỗng
+      return {
+        data: [],
+        pagination: {
+          page: filterDto.pagination?.currentPage || 1,
+          limit: filterDto.pagination?.itemsPerPage || 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+          nextPage: null,
+          prevPage: null,
+          firstPage: 1,
+          lastPage: 1,
+        },
+      };
+    }
+
+    // Lọc theo loại tài sản (nếu có)
+    if (filterDto.type) {
+      queryBuilder.andWhere('asset.type = :type', { type: filterDto.type });
+      
+      // Nếu là tài sản cố định, cần thêm điều kiện chưa có RFID tag
+      if (filterDto.type === AssetType.FIXED_ASSET) {
+        queryBuilder.andWhere('rfidTag.id IS NULL');
+      }
+      // Nếu là công cụ dụng cụ, chỉ cần chưa có vị trí (đã filter ở trên)
+    } else {
+      // Không filter type: lấy cả hai loại
+      // - TOOLS_EQUIPMENT: chỉ cần chưa có vị trí
+      // - FIXED_ASSET: chưa có vị trí VÀ chưa có RFID tag
+      queryBuilder.andWhere(
+        '(asset.type = :toolsType OR (asset.type = :fixedType AND rfidTag.asset_id IS NULL))',
+        { 
+          toolsType: AssetType.TOOLS_EQUIPMENT,
+          fixedType: AssetType.FIXED_ASSET
+        }
+      );
+    }
+
+    // Áp dụng filters từ BaseFilterDto (conditions, search, sorting)
+    FilterUtil.applyFiltersToQuery(
+      queryBuilder,
+      filterDto,
+      config,
+      "asset"
+    );
+
+    // Lấy pagination settings với defaults
+    const page = filterDto.pagination?.currentPage || 1;
+    const limit = filterDto.pagination?.itemsPerPage || 10;
+    const skip = (page - 1) * limit;
+
+    // Áp dụng pagination
+    queryBuilder.skip(skip).take(limit);
+
+    // Execute query và get count
+    const [assets, total] = await queryBuilder.getManyAndCount();
+
+    // Chuyển đổi dữ liệu
+    const assetDtos = plainToInstance(AssetResponseDto, assets, {
+      excludeExtraneousValues: true,
+    });
+
+    // Tính toán pagination metadata
+    const pagination = {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNext: page < Math.ceil(total / limit),
+      hasPrev: page > 1,
+      nextPage: page < Math.ceil(total / limit) ? page + 1 : null,
+      prevPage: page > 1 ? page - 1 : null,
+      firstPage: 1,
+      lastPage: Math.ceil(total / limit),
+    };
+
+    return {
+      data: assetDtos,
+      pagination,
+    };
   }
 
   /**

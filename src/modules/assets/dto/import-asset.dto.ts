@@ -19,6 +19,11 @@ export class ImportAssetDto {
   @IsOptional()
   location?: string;
 
+  @ApiPropertyOptional({ description: 'Vị trí cụ thể trong phòng' })
+  @IsString()
+  @IsOptional()
+  locationInRoom?: string;
+
   @ApiProperty({ description: 'Danh mục' })
   @IsString()
   @IsOptional()

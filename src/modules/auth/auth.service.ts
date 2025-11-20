@@ -5,6 +5,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { User, UserStatus } from "src/entities/user.entity";
 import { errorResponse } from "src/common/helpers/error-response";
 import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
 import { JwtPayload } from "./interfaces/jwt-payload.interface";
 import { LoginDto } from "./dtos/login.dto";
 import { ChangePasswordDto } from "./dtos/change-password.dto";
@@ -12,6 +13,10 @@ import { UserProfileResponseDto } from "./dtos/user-profile-response.dto";
 import { UpdateProfileDto } from "./dtos/user-profile.dto";
 import { UserResponseDto } from "../users/dto/user-response.dto";
 import { UserLoginResponse } from "./dtos/user-login-response.dto";
+import { ForgotPasswordDto } from "./dtos/forgot-password.dto";
+import { ResetPasswordDto } from "./dtos/reset-password.dto";
+import { RedisService } from "../redis/redis.service";
+import { EmailService } from "../email/email.service";
 
 @Injectable()
 export class AuthService {
@@ -20,6 +25,8 @@ export class AuthService {
         private readonly userRepository: Repository<User>,
         private readonly jwtService: JwtService,
         private readonly logger: Logger,
+        private readonly redisService: RedisService,
+        private readonly emailService: EmailService,
     ) { }
     async login(
         loginDto: LoginDto,
@@ -59,6 +66,7 @@ export class AuthService {
                 phoneNumber: user.phoneNumber,
                 birthDate: user.birthDate,
                 unitId: user.unitId,
+                unitName: user.unit?.name,
             }
         
             return { user: userLogin, token };
@@ -179,5 +187,124 @@ export class AuthService {
             phoneNumber: user.phoneNumber,
             birthDate: user.birthDate,
         };
+    }
+
+    /**
+     * Send forgot password email
+     * @description Generate reset token and send password reset email
+     * @param forgotPasswordDto DTO containing email address
+     * @returns Success message
+     */
+    async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string }> {
+        const { email } = forgotPasswordDto;
+
+        // Find user by email
+        const user = await this.userRepository.findOne({
+            where: { email, status: UserStatus.ACTIVE },
+        });
+
+        if (!user) {
+            // Don't reveal if email exists or not for security reasons
+            return { message: 'Nếu email tồn tại trong hệ thống, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu' };
+        }
+
+        try {
+            // Generate secure reset token
+            const resetToken = crypto.randomBytes(32).toString('hex');
+            const resetTokenKey = `reset_password:${resetToken}`;
+
+            // Store token in Redis with 5 minutes expiration
+            await this.redisService.set(resetTokenKey, {
+                userId: user.id,
+                email: user.email,
+                createdAt: new Date().toISOString(),
+            }, 300); // 5 minutes = 300 seconds
+
+            // Send reset password email
+            const emailSent = await this.emailService.sendResetPasswordEmail(
+                user.email,
+                resetToken,
+                user.fullName
+            );
+
+            if (!emailSent) {
+                this.logger.warn(`Failed to send reset password email to ${user.email}`);
+            }
+
+            return { message: 'Nếu email tồn tại trong hệ thống, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu' };
+        } catch (error) {
+            this.logger.error('Error in forgotPassword:', error);
+            throw new BadRequestException(
+                errorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi khi xử lý yêu cầu đặt lại mật khẩu")
+            );
+        }
+    }
+
+    /**
+     * Reset password using token
+     * @description Reset user password using the token received via email
+     * @param resetPasswordDto DTO containing reset token and new password
+     * @returns Success message
+     */
+    async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
+        const { token, newPassword, confirmPassword } = resetPasswordDto;
+
+        // Validate password confirmation
+        if (newPassword !== confirmPassword) {
+            throw new BadRequestException(
+                errorResponse("PASSWORD_MISMATCH", "Mật khẩu mới và xác nhận mật khẩu không khớp")
+            );
+        }
+
+        const resetTokenKey = `reset_password:${token}`;
+
+        try {
+            // Get token data from Redis
+            const tokenData = await this.redisService.get(resetTokenKey);
+
+            if (!tokenData) {
+                throw new BadRequestException(
+                    errorResponse("INVALID_TOKEN", "Token không hợp lệ hoặc đã hết hạn")
+                );
+            }
+
+            // Find user
+            const user = await this.userRepository.findOne({
+                where: { 
+                    id: tokenData.userId, 
+                    email: tokenData.email,
+                    status: UserStatus.ACTIVE 
+                },
+            });
+
+            if (!user) {
+                throw new BadRequestException(
+                    errorResponse("USER_NOT_FOUND", "Người dùng không tồn tại hoặc không hoạt động")
+                );
+            }
+
+            // Hash new password
+            const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+            // Update user password
+            user.password = hashedPassword;
+            await this.userRepository.save(user);
+
+            // Remove token from Redis
+            await this.redisService.del(resetTokenKey);
+
+            this.logger.log(`Password reset successfully for user: ${user.email}`);
+
+            return { message: 'Mật khẩu đã được đặt lại thành công' };
+        } catch (error) {
+            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+                throw error;
+            }
+
+            this.logger.error('Error in resetPassword:', error);
+            throw new BadRequestException(
+                errorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi khi đặt lại mật khẩu")
+            );
+        }
     }
 }

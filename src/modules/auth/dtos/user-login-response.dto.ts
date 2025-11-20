@@ -20,6 +20,8 @@ export class UserLoginResponse {
   permissions: string[];
   @ApiProperty({ example: "1", description: "Unit ID" })
   unitId: string;
+  @ApiProperty({ example: "Khoa Công nghệ thông tin", description: "Unit name" })
+  unitName?: string;
   @ApiProperty({ example: ["GLOBAL", "UNIT", "CHILD_UNITS", "SELF"], description: "Access scope types" })
   accessScopeTypes: string[];
 }

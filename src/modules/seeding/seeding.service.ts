@@ -464,6 +464,10 @@ export class SeedingService implements OnModuleInit {
             name: "Xóa",
             code: PermissionConstants.PERM_REMOVE_ASSET,
           },
+          {
+            name: "Định danh",
+            code: PermissionConstants.PERM_IDENTIFY_ASSET,
+          },
         ],
       },
       {
@@ -495,7 +499,7 @@ export class SeedingService implements OnModuleInit {
             code: PermissionConstants.PERM_REMOVE_INVENTORY,
           },
           {
-            name: "Xem kết quả kiểm kê",
+            name: "Xem kết quả",
             code: PermissionConstants.PERM_VIEW_RESULT_INVENTORY,
           },
           {
@@ -503,7 +507,7 @@ export class SeedingService implements OnModuleInit {
             code: PermissionConstants.PERM_VIEW_INVENTORY,
           },
           {
-            name: "Thực hiện kiểm kê",
+            name: "Thực hiện",
             code: PermissionConstants.PERM_PERFORM_INVENTORY,
           },
         ],
@@ -528,7 +532,7 @@ export class SeedingService implements OnModuleInit {
             code: PermissionConstants.PERM_REJECT_LIQUIDATION,
           },
           {
-            name: "Hoàn thành đề xuất",
+            name: "Hoàn thành",
             code: PermissionConstants.PERM_FINALIZED_LIQUIDATION,
           },
           {
@@ -565,7 +569,7 @@ export class SeedingService implements OnModuleInit {
             code: PermissionConstants.PERM_REMOVE_TRANSACTION,
           },
           {
-            name: "Đề xuất bàn giao",
+            name: "Đề xuất",
             code: PermissionConstants.PERM_PROPOSE_TRANSACTION,
           },
           {
@@ -575,11 +579,7 @@ export class SeedingService implements OnModuleInit {
           {
             name: "Từ chối",
             code: PermissionConstants.PERM_REJECT_TRANSACTION,
-          },
-          {
-            name: "Cập nhật trạng thái",
-            code: PermissionConstants.PERM_UPDATE_TRANSACTION_STATUS,
-          },
+          }
         ],
       },
       {
@@ -612,10 +612,6 @@ export class SeedingService implements OnModuleInit {
           {
             name: "Đề xuất",
             code: PermissionConstants.PERM_PROPOSE_MOVEMENT,
-          },
-          {
-            name: "Thực hiện di chuyển",
-            code: PermissionConstants.PERM_EXECUTE_MOVEMENT,
           },
         ],
       },
@@ -747,7 +743,6 @@ export class SeedingService implements OnModuleInit {
           PermissionConstants.PERM_UPDATE_ASSET,
           PermissionConstants.PERM_VIEW_MOVEMENT,
           PermissionConstants.PERM_CREATE_MOVEMENT,
-          PermissionConstants.PERM_EXECUTE_MOVEMENT,
           PermissionConstants.PERM_VIEW_TRANSACTION,
         ]
       },
@@ -764,7 +759,6 @@ export class SeedingService implements OnModuleInit {
           PermissionConstants.PERM_UPDATE_MOVEMENT,
           PermissionConstants.PERM_APPROVE_MOVEMENT,
           PermissionConstants.PERM_REJECT_MOVEMENT,
-          PermissionConstants.PERM_EXECUTE_MOVEMENT,
           PermissionConstants.PERM_VIEW_TRANSACTION,
           PermissionConstants.PERM_CREATE_TRANSACTION,
           PermissionConstants.PERM_APPROVE_TRANSACTION,

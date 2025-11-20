@@ -10,9 +10,14 @@ import {
   UseGuards,
   Res,
   Header,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from "@nestjs/common";
 import { Response } from "express";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { CreateLiquidationProposalDto } from "./dto/create-liquidation.dto";
+import { ImportLiquidationResultDto } from "./dto/import-liquidation.dto";
 import {
   UpdateLiquidationStatusDto,
   UploadEvidenceDto,
@@ -40,11 +45,16 @@ import { User } from "src/entities/user.entity";
 import { Permissions } from "src/modules/auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
 import { LiquidationsService } from "./liquidations.service";
+import { AssetType } from "src/common/shared/AssetType";
+import { PermissionHelperService } from "src/common/services/permission-helper.service";
 
 @ApiTags("Liquidations")
 @Controller("api/v1/liquidations")
 export class LiquidationsController {
-  constructor(private readonly liquidationsService: LiquidationsService) {}
+  constructor(
+    private readonly liquidationsService: LiquidationsService,
+    private readonly permissionHelper: PermissionHelperService
+  ) {}
 
   @Post()
   @ApiOperation({
@@ -330,9 +340,159 @@ export class LiquidationsController {
     @Param("id") id: string,
     @Res() res: Response
   ) {
-    const buffer = await this.liquidationsService.exportToExcel(id);
+    const buffer = await this.liquidationsService.exportAssetsForLiquidation(id);
     
     const fileName = `Danh_muc_thanh_ly_${id}_${new Date().getTime()}.xlsx`;
+    
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`
+    );
+    res.setHeader("Content-Length", buffer.length);
+    
+    res.send(buffer);
+  }
+
+  @Post("import")
+  @ApiOperation({
+    summary: "Import danh sách tài sản thanh lý từ file Excel",
+    description:
+      "Import danh sách tài sản thanh lý từ file Excel theo định dạng chuẩn. File Excel phải có các cột: STT, Mã TSCĐ, Mã KT, Tên TSCĐ, Thông số KT, Mã vị trí, SL theo sổ sách, SL theo thực tế, Ghi chú",
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Import thành công",
+    type: ImportLiquidationResultDto,
+  })
+  @ApiResponse({ status: 400, description: "File không hợp lệ hoặc dữ liệu không đúng định dạng" })
+  @ApiResponse({ status: 401, description: "Chưa xác thực" })
+  @ApiResponse({ status: 403, description: "Không có quyền thực hiện" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor("file"))
+  @Permissions(
+    PermissionConstants.PERM_CREATE_LIQUIDATION,
+    PermissionConstants.PERM_PROPOSED_LIQUIDATION
+  )
+  async importFromExcel(
+    @UploadedFile() file: Express.Multer.File,
+    @Body("unitId") unitId: string,
+    @Body("assetType") assetType: AssetType,
+    @CurrentUser() currentUser: User
+  ): Promise<ImportLiquidationResultDto> {
+    if (!file) {
+      throw new BadRequestException("Vui lòng chọn file Excel để import");
+    }
+
+    // Validate file type
+    const allowedMimeTypes = [
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException("File phải có định dạng Excel (.xls, .xlsx)");
+    }
+
+    // Validate required parameters
+    if (!unitId) {
+      throw new BadRequestException("unitId là bắt buộc");
+    }
+
+    if (!assetType) {
+      throw new BadRequestException("assetType là bắt buộc");
+    }
+
+    return this.liquidationsService.importFromExcel(
+      file,
+      unitId,
+      assetType,
+      currentUser.id
+    );
+  }
+
+  @Get("import/template")
+  @ApiOperation({
+    summary: "Tải template Excel để import danh sách tài sản thanh lý",
+    description:
+      "Tải file Excel template có sẵn format và dữ liệu mẫu để người dùng có thể điền thông tin tài sản cần thanh lý. Có thể chỉ định loại tài sản để có header phù hợp.",
+  })
+  @ApiQuery({
+    name: "assetType",
+    description: "Loại tài sản để tạo template phù hợp",
+    required: false,
+    enum: AssetType,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "File template Excel đã được tạo thành công",
+    content: {
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        schema: {
+          type: "string",
+          format: "binary",
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Chưa xác thực" })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  async downloadImportTemplate(
+    @Query("assetType") assetType: AssetType,
+    @Res() res: Response
+  ) {
+    const buffer = await this.liquidationsService.generateImportTemplate(assetType);
+    
+    const fileName = `Template_Import_Thanh_Ly_${new Date().getTime()}.xlsx`;
+    
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`
+    );
+    res.setHeader("Content-Length", buffer.length);
+    
+    res.send(buffer);
+  }
+
+  @Get(":id/export-assets")
+  @ApiOperation({
+    summary: "Xuất danh sách tài sản trong đề xuất thanh lý",
+    description:
+      "Xuất file Excel chứa danh sách tài sản trong đề xuất thanh lý theo format chuẩn.",
+  })
+  @ApiParam({ name: "id", description: "ID của đề xuất thanh lý" })
+  @ApiResponse({
+    status: 200,
+    description: "File Excel đã được tạo thành công",
+    content: {
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        schema: {
+          type: "string",
+          format: "binary",
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: "Không tìm thấy đề xuất" })
+  @ApiResponse({ status: 401, description: "Chưa xác thực" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async exportAssetsForLiquidation(
+    @Param("id") id: string,
+    @Res() res: Response
+  ) {
+    const buffer = await this.liquidationsService.exportAssetsForLiquidation(id);
+    
+    const fileName = `Danh_sach_tai_san_thanh_ly_${id}_${new Date().getTime()}.xlsx`;
     
     res.setHeader(
       "Content-Type",
