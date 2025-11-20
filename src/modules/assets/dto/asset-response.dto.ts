@@ -36,6 +36,10 @@ export class AssetResponseDto {
   @Expose()
   currentRoomId?: string;
 
+  @ApiPropertyOptional({ description: 'Vị trí cụ thể trong phòng' })
+  @Expose()
+  locationInRoom?: string;
+
   @ApiProperty({ description: 'Đơn vị tính' })
   @Expose()
   unit: string;

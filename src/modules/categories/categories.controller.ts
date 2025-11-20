@@ -27,7 +27,7 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionConstants } from "src/common/utils/permission.constant";
 
 @ApiTags("Categories")
-@Controller("categories")
+@Controller("api/v1/categories")
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 

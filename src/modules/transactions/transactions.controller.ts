@@ -249,40 +249,4 @@ export class TransactionsController {
       receiveDto.note,
     );
   }
-
-  @Patch(':id/status')
-  @ApiOperation({
-    summary: 'Cập nhật trạng thái giao dịch',
-    description:
-      'Cập nhật trạng thái giao dịch theo workflow: DRAFT → PROPOSED → APPROVED hoặc REJECTED. Khi APPROVED, tài sản sẽ tự động được cập nhật vị trí và sổ tài sản.',
-  })
-  @ApiParam({ name: 'id', description: 'ID của giao dịch' })
-  @ApiResponse({
-    status: 200,
-    description: 'Trạng thái đã được cập nhật',
-    type: TransactionResponseDto,
-  })
-  @ApiResponse({ status: 400, description: 'Chuyển trạng thái không hợp lệ' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy giao dịch' })
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth()
-  @Permissions(PermissionConstants.PERM_UPDATE_TRANSACTION_STATUS)
-  updateStatus(
-    @Param('id') id: string,
-    @Body() updateDto: UpdateTransactionStatusDto,
-    @CurrentUser() currentUser: User,
-  ) {
-    // This is a generic status update method that can handle any status change
-    // For specific workflows, use the dedicated endpoints above
-    return this.transactionsService.updateTransactionStatus(
-      id,
-      updateDto.status,
-      currentUser.id,
-      updateDto.note || 'Cập nhật trạng thái',
-      {
-        approvalNote: updateDto.approvalNote,
-        rejectionReason: updateDto.rejectionReason,
-      },
-    );
-  }
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { MulterModule } from '@nestjs/platform-express';
 import { LiquidationsService } from './liquidations.service';
 import { LiquidationsController } from './liquidations.controller';
 import { LiquidationProposal } from 'src/entities/liquidation.entity';
@@ -21,6 +22,12 @@ import { AccessControlModule } from 'src/common/services/access-control.module';
       AssetBookItem,
       Unit
     ]),
+    MulterModule.register({
+      dest: './uploads/temp',
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB
+      },
+    }),
     AccessControlModule,
   ],
   controllers: [LiquidationsController],

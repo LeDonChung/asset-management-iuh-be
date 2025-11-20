@@ -19,6 +19,7 @@ import { InventorySubModule } from './modules/inventory-sub/inventory-sub.module
 import { InventoryGroupModule } from './modules/inventory-group/inventory-group.module';
 import { AssetBooksModule } from './modules/asset-books/asset-books.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { EmailModule } from './modules/email/email.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { LiquidationsModule } from './modules/liquidations/liquidations.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
@@ -63,6 +64,7 @@ import { MovementsModule } from './modules/movements/movements.module';
     InventoryGroupModule,
     AssetBooksModule,
     RedisModule,
+    EmailModule,
     AlertsModule,
     LiquidationsModule,
     TransactionsModule,

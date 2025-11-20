@@ -7,4 +7,5 @@ export enum AssetBookItemStatus {
     LOST = "LOST",
     PROPOSED_LIQUIDATION = "PROPOSED_LIQUIDATION",
     MOVED = "MOVED",
+    UNIDENTIFIED = "UNIDENTIFIED"
 }
