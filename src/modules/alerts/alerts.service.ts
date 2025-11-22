@@ -21,6 +21,7 @@ import { RfidTag } from "src/entities/rfid-tag.entity";
 import { UpdateAlertDto } from "./dto/update-alert.dto";
 import { UpdateAlertImageDto } from "./dto/update-alert-image.dto";
 import { FilesService } from "../files/files.service";
+import { EmailService } from "../email/email.service";
 import { AlertFilterDto } from "./dto/alert-filter.dto";
 import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import { FieldType } from "src/common/dto/filter.dto";
@@ -29,6 +30,7 @@ import { UnitResponseDto } from "../units/dto/unit-response.dto";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
 import { RoleBase } from "src/common/utils/role.enum";
 import { Unit } from "src/entities/unit.entity";
+import { SendAlertEmailResponseDto } from "./dto/send-alert-email.dto";
 
 @Injectable()
 export class AlertsService {
@@ -50,6 +52,7 @@ export class AlertsService {
     @InjectRepository(Unit)
     private readonly unitRepository: Repository<Unit>,
     private readonly filesService: FilesService,
+    private readonly emailService: EmailService,
     private readonly permissionHelperService: PermissionHelperService
   ) {}
 
@@ -502,6 +505,124 @@ export class AlertsService {
     } catch (error) {
       console.error("Error updating alert images:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Send alert notification email to relevant users
+   * @param alertId Alert ID to send notification for
+   * @returns Information about sent emails
+   */
+  async sendAlertEmail(alertId: string): Promise<SendAlertEmailResponseDto> {
+    try {
+      // 1. Tìm alert với các quan hệ cần thiết
+      const alert = await this.alertRepository.findOne({
+        where: { id: alertId },
+        relations: ['asset', 'room'],
+      });
+
+      if (!alert) {
+        throw new Error('Alert not found');
+      }
+
+      if (!alert.asset) {
+        throw new Error('Alert has no associated asset');
+      }
+
+      // 2. Tìm AssetBookItem mới nhất của tài sản (sổ tài sản)
+      const latestAssetBookItem = await this.assetBookItemRepository.findOne({
+        where: { assetId: alert.assetId },
+        relations: ['book', 'book.unit', 'book.unit.representative', 'room', 'room.unit', 'room.unit.representative'],
+        order: { assignedAt: 'DESC' },
+      });
+
+      if (!latestAssetBookItem) {
+        throw new Error('Asset not found in any asset book');
+      }
+
+      // 3. Lấy danh sách users cần gửi email (chỉ lấy representatives)
+      const usersToNotify = new Set<User>();
+
+      // 3.1. Thêm representative của đơn vị sử dụng tài sản (từ sổ tài sản)
+      if (latestAssetBookItem.book?.unit?.representative) {
+        const representative = latestAssetBookItem.book.unit.representative;
+        if (representative.email && representative.status === 'ACTIVE') {
+          usersToNotify.add(representative);
+        }
+      }
+
+      // 3.2. Thêm representative của phòng quản trị (unit của room)
+      if (latestAssetBookItem.room?.unit?.representative) {
+        const representative = latestAssetBookItem.room.unit.representative;
+        if (representative.email && representative.status === 'ACTIVE') {
+          usersToNotify.add(representative);
+        }
+      }
+
+      // 4. Gửi email cho từng user
+      const sentEmails: string[] = [];
+      const failedEmails: string[] = [];
+
+      const emailPromises = Array.from(usersToNotify).map(async (user) => {
+        try {
+          const emailSent = await this.emailService.sendEmail({
+            to: user.email,
+            subject: `⚠️ Cảnh báo: Phát hiện di chuyển tài sản không hợp lệ`,
+            template: 'alert-notification',
+            context: {
+              userName: user.fullName,
+              alertType: this.getAlertTypeText(alert.type),
+              assetName: alert.asset.name,
+              assetCode: alert.asset.fixedCode || 'N/A',
+              roomName: alert.room?.name || 'N/A',
+              detectedAt: alert.createdAt.toLocaleString('vi-VN'),
+              unitName: latestAssetBookItem.book?.unit?.name || 'N/A',
+              managementRoom: latestAssetBookItem.room?.unit?.name || 'N/A',
+              alertUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/alerts/${alert.id}`,
+              year: new Date().getFullYear(),
+            },
+          });
+
+          if (emailSent) {
+            sentEmails.push(user.email);
+          } else {
+            failedEmails.push(user.email);
+          }
+        } catch (error) {
+          console.error(`Failed to send email to ${user.email}:`, error);
+          failedEmails.push(user.email);
+        }
+      });
+
+      await Promise.all(emailPromises);
+
+      // 5. Trả về kết quả
+      return {
+        sentEmails,
+        failedEmails,
+        alertInfo: {
+          id: alert.id,
+          assetName: alert.asset.name,
+          assetCode: alert.asset.fixedCode || 'N/A',
+          roomName: alert.room?.name || 'N/A',
+          detectedAt: alert.createdAt,
+        },
+      };
+    } catch (error) {
+      console.error('Error sending alert email:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get human-readable alert type text
+   */
+  private getAlertTypeText(type: AlertType): string {
+    switch (type) {
+      case AlertType.UNAUTHORIZED_MOVEMENT:
+        return 'Di chuyển không hợp lệ';
+      default:
+        return 'Không xác định';
     }
   }
 }

@@ -40,6 +40,7 @@ export class MovementHistoryResponseDto {
   oldStatus: MoveStatus;
   newStatus: MoveStatus;
   note?: string;
+  evidenceUrl?: string;
   createdAt: Date;
   changer: {
     id: string;

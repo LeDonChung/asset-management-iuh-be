@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsEnum, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MoveStatus } from 'src/common/shared/MoveStatus';
@@ -50,4 +50,12 @@ export class CreateMovementDto {
   @IsOptional()
   @IsString()
   approvalNote?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ngày di chuyển (có thể là ngày trong quá khứ)',
+    example: '2024-01-15T10:30:00.000Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  createdAt?: string;
 }

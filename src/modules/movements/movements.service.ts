@@ -122,6 +122,7 @@ export class MovementsService {
         requestNote: createDto.requestNote,
         approverId,
         approvedAt,
+        createdAt: createDto.createdAt ? new Date(createDto.createdAt) : undefined,
         approvalNote,
       });
 
@@ -357,6 +358,7 @@ export class MovementsService {
           fullName: item.mover.fullName,
           email: item.mover.email,
         } : null,
+
       })) || [],
       histories: movement.histories?.map(history => ({
         id: history.id,
@@ -369,6 +371,7 @@ export class MovementsService {
           fullName: history.changer.fullName,
           email: history.changer.email,
         } : null,
+        evidenceUrl: history.evidenceUrl,
       })) || [],
     };
   }
@@ -520,13 +523,14 @@ export class MovementsService {
 
       await queryRunner.manager.save(movement);
 
-      // Create history record for approval
+      // Create history record for approval with evidence URL
       const approvalHistory = this.movementHistoryRepository.create({
         movementId: id,
         oldStatus: MoveStatus.PENDING_APPROVAL,
         newStatus: MoveStatus.APPROVED,
         changedBy: approverId,
         note: approveDto.approvalNote || 'Phê duyệt yêu cầu di chuyển',
+        evidenceUrl: approveDto.evidenceUrl,
       });
 
       await queryRunner.manager.save(approvalHistory);
