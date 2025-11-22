@@ -12,6 +12,20 @@ export class PermissionResponseDto {
     code: string;
 }
 
+export class AccessScopeResponseDto {
+    @ApiProperty({ example: "uuid" })
+    id: string;
+
+    @ApiProperty({ example: "GLOBAL", enum: ['GLOBAL', 'UNIT', 'CHILD_UNITS', 'SELF'] })
+    type: string;
+
+    @ApiProperty({ example: "uuid", required: false })
+    unitId?: string;
+
+    @ApiProperty({ example: "Global access to all units", required: false })
+    description?: string;
+}
+
 export class RoleResponseDto {
     @ApiProperty({ example: "uuid" })
     @Expose()
@@ -29,6 +43,11 @@ export class RoleResponseDto {
     @Expose()
     @Type(() => PermissionResponseDto)
     permissions?: PermissionResponseDto[];
+
+    @ApiProperty({ type: AccessScopeResponseDto, required: false })
+    @Expose()
+    @Type(() => AccessScopeResponseDto)
+    accessScope?: AccessScopeResponseDto;
 
     @ApiProperty({ example: true })
     @Expose()

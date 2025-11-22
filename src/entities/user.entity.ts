@@ -16,6 +16,9 @@ import { Unit } from './unit.entity';
 import { Asset } from './asset.entity';
 import { InventorySession } from './inventory-session.entity';
 import { Alert } from './alert.entity';
+import { AssetMovement } from './asset-movement.entity';
+import { AssetMovementHistory } from './asset-movement-history.entity';
+import { AssetMovementItem } from './asset-movement-item.entity';
 
 export enum UserStatus {
     ACTIVE = 'ACTIVE',
@@ -103,4 +106,17 @@ export class User {
 
     @OneToMany('AssetTransactionHistory', 'changer')
     transactionHistories?: any[];
+
+    // Asset Movement relationships
+    @OneToMany(() => AssetMovement, (movement) => movement.requester)
+    requestedMovements?: AssetMovement[];
+
+    @OneToMany(() => AssetMovement, (movement) => movement.approver)
+    approvedMovements?: AssetMovement[];
+
+    @OneToMany(() => AssetMovementHistory, (history) => history.changer)
+    movementHistories?: AssetMovementHistory[];
+
+    @OneToMany(() => AssetMovementItem, (item) => item.mover)
+    movedAssetItems?: AssetMovementItem[];
 }

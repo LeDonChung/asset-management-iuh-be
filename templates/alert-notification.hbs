@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cảnh báo Tài sản</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .alert-icon {
+            font-size: 32px;
+        }
+        .content {
+            padding: 30px;
+            color: #333;
+        }
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #1a1a1a;
+        }
+        .alert-box {
+            background-color: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .alert-type {
+            font-size: 16px;
+            font-weight: bold;
+            color: #dc2626;
+            margin-bottom: 15px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 12px;
+            margin-top: 15px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .info-value {
+            color: #1f2937;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            color: white;
+            padding: 14px 30px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 25px 0;
+            font-weight: 600;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        .instructions {
+            background-color: #f9fafb;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .instructions h3 {
+            color: #1f2937;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .instructions ol {
+            margin-left: 20px;
+            color: #4b5563;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .footer {
+            background-color: #f9fafb;
+            padding: 25px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 13px;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer-logo {
+            margin-bottom: 15px;
+        }
+        .footer-links {
+            margin-top: 15px;
+        }
+        .footer-links a {
+            color: #dc2626;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .content {
+                padding: 20px;
+            }
+            .header {
+                padding: 20px;
+            }
+            .info-grid {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .info-label {
+                font-weight: 700;
+                margin-top: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <span class="alert-icon">⚠️</span>
+                CẢNH BÁO TÀI SẢN
+            </h1>
+            <p>Hệ thống Quản lý Tài sản</p>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <p class="greeting">Xin chào <strong>{{userName}}</strong>,</p>
+            
+            <p>Hệ thống đã phát hiện một cảnh báo về tài sản cần được xử lý.</p>
+
+            <!-- Alert Information Box -->
+            <div class="alert-box">
+                <div class="alert-type">🚨 Loại cảnh báo: {{alertType}}</div>
+                
+                <div class="info-grid">
+                    <div class="info-label">Tài sản:</div>
+                    <div class="info-value"><strong>{{assetName}}</strong></div>
+                    
+                    <div class="info-label">Mã tài sản:</div>
+                    <div class="info-value">{{assetCode}}</div>
+                    
+                    <div class="info-label">Phòng phát hiện:</div>
+                    <div class="info-value">{{roomName}}</div>
+                    
+                    <div class="info-label">Thời gian:</div>
+                    <div class="info-value">{{detectedAt}}</div>
+                    
+                    <div class="info-label">Đơn vị quản lý:</div>
+                    <div class="info-value">{{unitName}}</div>
+                    
+                    <div class="info-label">Phòng quản trị:</div>
+                    <div class="info-value">{{managementRoom}}</div>
+                </div>
+            </div>
+
+            <!-- CTA Button -->
+            <div style="text-align: center;">
+                <a href="{{alertUrl}}" class="cta-button">
+                    Xem chi tiết và xử lý cảnh báo
+                </a>
+            </div>
+
+            <!-- Instructions -->
+            <div class="instructions">
+                <h3>📋 Hành động cần thực hiện:</h3>
+                <ol>
+                    <li>Truy cập vào hệ thống để xem chi tiết cảnh báo</li>
+                    <li>Xác minh thông tin về việc di chuyển tài sản</li>
+                    <li>Xử lý cảnh báo và cập nhật trạng thái phù hợp</li>
+                    <li>Ghi chú lý do nếu cần thiết</li>
+                </ol>
+            </div>
+
+            <p style="color: #6b7280; margin-top: 20px;">
+                <em>⏰ Vui lòng xử lý cảnh báo này trong thời gian sớm nhất để đảm bảo an toàn tài sản.</em>
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-logo">
+                <strong style="color: #dc2626; font-size: 16px;">🏛️ Industrial University of Ho Chi Minh City</strong>
+            </div>
+            <p>
+                Email này được gửi tự động từ Hệ thống Quản lý Tài sản.<br>
+                Vui lòng không trả lời email này.
+            </p>
+            <div class="footer-links">
+                <a href="mailto:support@assetmanagement.com">Hỗ trợ kỹ thuật</a> |
+                <a href="{{alertUrl}}">Xem cảnh báo</a>
+            </div>
+            <p style="margin-top: 15px; font-size: 12px;">
+                © {{year}} Asset Management System. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

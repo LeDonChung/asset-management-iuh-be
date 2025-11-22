@@ -4,15 +4,15 @@ import { AssetType } from 'src/common/shared/AssetType';
 import { AssetStatus } from 'src/common/shared/AssetStatus';
 
 export class CreateAssetDto {
-  @ApiProperty({ description: 'Mã kế toán: xx-yyyy/nn (e.g., 19-0205/00)' })
+  @ApiPropertyOptional({ description: 'Mã kế toán: xx-yyyy/nn (e.g., 19-0205/00). Nếu để trống sẽ tự sinh.' })
   @IsString()
-  @IsNotEmpty()
-  ktCode: string;
+  @IsOptional()
+  ktCode?: string;
 
-  @ApiProperty({ description: 'Mã tài sản cố định xxxx.yyyy' })
+  @ApiPropertyOptional({ description: 'Mã tài sản cố định xxxx.yyyy. Nếu để trống sẽ tự sinh.' })
   @IsString()
-  @IsNotEmpty()
-  fixedCode: string;
+  @IsOptional()
+  fixedCode?: string;
 
   @ApiProperty({ description: 'Tên tài sản' })
   @IsString()
@@ -33,6 +33,11 @@ export class CreateAssetDto {
   @IsUUID()
   @IsOptional()
   currentRoomId?: string;
+
+  @ApiPropertyOptional({ description: 'Vị trí cụ thể trong phòng (ví dụ: Bàn A1, Góc phòng, Kệ số 3)' })
+  @IsString()
+  @IsOptional()
+  locationInRoom?: string;
 
   @ApiProperty({ description: 'Đơn vị tính' })
   @IsString()
@@ -64,8 +69,13 @@ export class CreateAssetDto {
   @IsNotEmpty()
   categoryId: string;
 
+  @ApiPropertyOptional({ description: 'Mã RFID (chỉ dành cho tài sản cố định)' })
+  @IsString()
+  @IsOptional()
+  rfid?: string;
+
   @ApiPropertyOptional({ description: 'Trạng thái tài sản', enum: AssetStatus, default: AssetStatus.IN_USE })
   @IsEnum(AssetStatus)
   @IsOptional()
-  status?: AssetStatus = AssetStatus.IN_USE;
+  status?: AssetStatus = AssetStatus.UNIDENTIFIED;
 }

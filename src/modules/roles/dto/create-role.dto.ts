@@ -15,5 +15,15 @@ export class CreateRoleDto {
     })
     @IsArray()
     @IsOptional()
+    @IsUUID('4', { each: true, message: 'Each permission ID must be a valid UUID' })
     permissionIds?: string[];
+
+    @ApiProperty({ 
+        example: 'uuid3', 
+        description: 'Access scope ID to define the permission scope for this role',
+        required: false
+    })
+    @IsOptional()
+    @IsUUID('4', { message: 'Access scope ID must be a valid UUID' })
+    accessScopeId?: string;
 }

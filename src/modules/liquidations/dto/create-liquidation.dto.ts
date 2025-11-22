@@ -10,8 +10,8 @@ import {
 } from "class-validator";
 import { Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { LiquidationStatus } from "../../common/shared/LiquidationStatus";
 import { AssetType } from "src/common/shared/AssetType";
+import { LiquidationStatus } from "src/common/shared/LiquidationStatus";
 
 export class CreateLiquidationItemDto {
   @ApiProperty({

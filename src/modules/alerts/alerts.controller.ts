@@ -16,6 +16,7 @@ import { UpdateAlertImageDto } from "./dto/update-alert-image.dto";
 import { FilesService } from "../files/files.service";
 import { AlertFilterDto } from "./dto/alert-filter.dto";
 import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
+import { SendAlertEmailDto, SendAlertEmailResponseDto } from "./dto/send-alert-email.dto";
 
 @ApiTags('Alerts')
 @Controller('api/v1/alerts')
@@ -122,5 +123,27 @@ export class AlertsController {
         await this.alertsService.updateAlertsImage(file, parsedAlertIds);
     }
 
+    @Post('send-email')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Gửi email thông báo cảnh báo',
+        description: 'Tìm tài sản trong sổ mới nhất, lấy đơn vị và phòng quản trị để gửi email cho users liên quan'
+    })
+    @ApiBody({ type: SendAlertEmailDto })
+    @ApiResponse({ 
+        status: 200, 
+        description: 'Gửi email thành công',
+        type: SendAlertEmailResponseDto 
+    })
+    @ApiResponse({ status: 404, description: 'Không tìm thấy cảnh báo' })
+    @ApiResponse({ status: 500, description: 'Lỗi khi gửi email' })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    @Permissions(PermissionConstants.PERM_RESOLVE_ALERT)
+    async sendAlertEmail(
+        @Body() sendAlertEmailDto: SendAlertEmailDto
+    ): Promise<SendAlertEmailResponseDto> {
+        return this.alertsService.sendAlertEmail(sendAlertEmailDto.alertId);
+    }
 
 }

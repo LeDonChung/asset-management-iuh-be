@@ -10,7 +10,9 @@ import { Room } from 'src/entities/room.entity';
 import { RfidTag } from 'src/entities/rfid-tag.entity';
 import { InventoryResult } from 'src/entities/inventory-result';
 import { InventorySession } from 'src/entities/inventory-session.entity';
+import { InventoryGroupAssignment } from 'src/entities/inventory-group-assignment';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
+import { AccessControlModule } from 'src/common/services/access-control.module';
 
 @Module({
   imports: [
@@ -24,7 +26,9 @@ import { PermissionHelperService } from 'src/common/services/permission-helper.s
       FixedAsset,
       InventoryResult,
       InventorySession,
+      InventoryGroupAssignment,
     ]),
+    AccessControlModule,
   ],
   controllers: [AssetBooksController],
   providers: [AssetBooksService, PermissionHelperService],
