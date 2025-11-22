@@ -42,6 +42,14 @@ export class ApproveMovementDto {
   @IsOptional()
   @IsString()
   approvalNote?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Đường dẫn minh chứng (ảnh, file đính kèm)',
+    example: 'https://example.com/evidence/approve-123.jpg'
+  })
+  @IsOptional()
+  @IsString()
+  evidenceUrl?: string;
 }
 
 export class RejectMovementDto {

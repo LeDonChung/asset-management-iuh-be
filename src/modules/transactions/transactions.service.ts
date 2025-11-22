@@ -531,13 +531,37 @@ export class TransactionsService {
     approveDto: ApproveTransactionDto,
     approverId: string,
   ): Promise<TransactionResponseDto> {
-    return this.updateTransactionStatus(
-      id,
-      TransactionStatus.APPROVED,
-      approverId,
-      `Giao dịch đã được phê duyệt. ${approveDto.approvalNote || ''}`,
-      { approverId }
-    );
+    const transaction = await this.transactionRepo.findOne({
+      where: { id },
+      relations: ['items.asset'],
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Không tìm thấy giao dịch');
+    }
+
+    if (transaction.status !== TransactionStatus.PROPOSED) {
+      throw new BadRequestException('Chỉ có thể phê duyệt giao dịch ở trạng thái đề xuất');
+    }
+
+    const oldStatus = transaction.status;
+    transaction.status = TransactionStatus.APPROVED;
+    transaction.approverId = approverId;
+    await this.transactionRepo.save(transaction);
+
+    // Create history record with evidence URL
+    const history = this.transactionHistoryRepo.create({
+      transactionId: id,
+      oldStatus,
+      newStatus: TransactionStatus.APPROVED,
+      changedBy: approverId,
+      note: `Giao dịch đã được phê duyệt. ${approveDto.approvalNote || ''}`,
+      evidenceUrl: approveDto.evidenceUrl,
+    });
+
+    await this.transactionHistoryRepo.save(history);
+
+    return this.getTransactionById(id);
   }
 
   async rejectTransaction(

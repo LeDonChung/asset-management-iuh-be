@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsUUID, IsOptional, IsString, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsUUID, IsOptional, IsString, IsArray, ValidateNested, IsEnum, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TransactionStatus } from 'src/common/shared/TransactionStatus';
 
@@ -73,4 +73,13 @@ export class CreateTransactionDto {
   @ValidateNested({ each: true })
   @Type(() => CreateTransactionItemDto)
   items: CreateTransactionItemDto[];
+
+  @ApiProperty({
+    description: 'Ngày tạo yêu cầu bàn giao (có thể là ngày trong quá khứ)',
+    required: false,
+    example: '2024-01-15T10:30:00.000Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  createdAt?: string;
 }
