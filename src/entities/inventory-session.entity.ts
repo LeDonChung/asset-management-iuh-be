@@ -29,17 +29,6 @@ export class InventorySession {
   @Column({ comment: "Tên kỳ kiểm kê, ví dụ: Kiểm kê cuối năm" })
   name: string;
 
-  @Column({ comment: "Đợt" })
-  period: number;
-
-  @Column({
-    name: "isGlobal",
-    default: false,
-    comment:
-      "true: Một kỳ cho toàn bộ các đơn vị sử dụng, false: Một kì cho một đơn vị sử dụng",
-  })
-  isGlobal: boolean;
-
   @Column({
     name: "startDate",
     type: "date",

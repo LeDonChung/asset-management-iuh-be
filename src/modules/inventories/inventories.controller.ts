@@ -10,6 +10,7 @@ import {
   HttpStatus,
   UseGuards,
   Query,
+  Res,
 } from "@nestjs/common";
 import { InventoriesService } from "./inventories.service";
 import { CreateInventoryDto } from "./dto/create-inventory.dto";
@@ -44,6 +45,12 @@ import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-
 import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
 import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
 import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
+import { CopyInventoryDto } from "./dto/copy-inventory.dto";
+import { CopyInventoryResponseDto } from "./dto/copy-inventory-response.dto";
+import { MultiRoomInventoryFilterDto } from "./dto/multi-room-inventory-filter.dto";
+import { MultiRoomInventoryResponseDto } from "./dto/multi-room-inventory-response.dto";
+import { ExportInventoryExcelDto, ExportMultiRoomInventoryExcelDto } from "./dto/export-inventory-excel.dto";
+import { Response } from 'express';
 
 @ApiTags("Inventories")
 @Controller("api/v1/inventories")
@@ -108,6 +115,29 @@ export class InventoriesController {
     return this.inventoriesService.create(createInventoryDto, currentUser);
   }
 
+  @Post(':id/copy')
+  @ApiOperation({ summary: "Sao chép kỳ kiểm kê từ kỳ có sẵn" })
+  @ApiParam({ name: "id", description: "ID của kỳ kiểm kê nguồn", type: "string" })
+  @ApiResponse({
+    status: 201,
+    description: "Kỳ kiểm kê được sao chép thành công",
+    type: CopyInventoryResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ hoặc năm đích đã có kỳ kiểm kê" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy kỳ kiểm kê nguồn" })
+  @ApiResponse({ status: 401, description: "Người dùng không hợp lệ" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_CREATE_INVENTORY)
+  @ApiBearerAuth()
+  async copyInventorySession(
+    @Param('id') sourceSessionId: string,
+    @Body() copyInventoryDto: CopyInventoryDto,
+    @CurrentUser() currentUser: User
+  ): Promise<CopyInventoryResponseDto> {
+    return this.inventoriesService.copyInventorySession(sourceSessionId, copyInventoryDto, currentUser);
+  }
+
   @Post('filter')
   @ApiOperation({ summary: "Lấy danh sách tất cả kỳ kiểm kê với bộ lọc và phân trang" })
   @ApiResponse({
@@ -134,6 +164,26 @@ export class InventoriesController {
   @ApiBearerAuth()
   async findAllSimple(): Promise<InventorySessionResponseDto[]> {
     return this.inventoriesService.findAll();
+  }
+
+  // === MULTI-ROOM INVENTORY RESULTS ENDPOINT ===
+
+  @Get("multi-room-results")
+  @ApiOperation({ summary: "Lấy kết quả kiểm kê nhiều phòng với pagination" })
+  @ApiResponse({
+    status: 200,
+    description: "Kết quả kiểm kê nhiều phòng với phân trang",
+    type: MultiRoomInventoryResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Tham số không hợp lệ" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
+  @ApiBearerAuth()
+  async getMultiRoomInventoryResults(
+    @Query() filterDto: MultiRoomInventoryFilterDto
+  ): Promise<MultiRoomInventoryResponseDto> {
+    return this.inventoriesService.getMultiRoomInventoryResults(filterDto);
   }
 
   @Get(":id")
@@ -503,6 +553,110 @@ export class InventoriesController {
   @ApiBearerAuth()
   async getAllTempAdjacentInventoryResults(): Promise<TempAdjacentInventoryResponseDto[]> {
     return this.inventoriesService.getAllTempAdjacentInventoryResults();
+  }
+
+  // === EXPORT EXCEL ENDPOINTS ===
+
+  @Post("export-excel/room")
+  @ApiOperation({ 
+    summary: "Xuất file Excel kết quả kiểm kê cho một phòng cụ thể",
+    description: "Xuất file Excel chứa kết quả kiểm kê của một phòng với các tùy chọn lọc theo loại tài sản, trạng thái"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "File Excel được tạo thành công",
+    content: {
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        schema: {
+          type: "string",
+          format: "binary",
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy phòng hoặc kết quả kiểm kê" })
+  @ApiResponse({ status: 401, description: "Chưa xác thực" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
+  @ApiBearerAuth()
+  async exportRoomInventoryToExcel(
+    @Body() exportDto: ExportInventoryExcelDto,
+    @Res() res: Response,
+    @CurrentUser() currentUser: User
+  ): Promise<void> {
+    const buffer = await this.inventoriesService.exportRoomInventoryToExcel(exportDto, currentUser);
+    
+    const fileName = exportDto.fileName 
+      ? `${exportDto.fileName}.xlsx` 
+      : `Ket_qua_kiem_ke_phong_${exportDto.roomId}_${new Date().getTime()}.xlsx`;
+    
+    // Encode filename to handle Vietnamese characters
+    const encodedFileName = encodeURIComponent(fileName);
+    
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodedFileName}`
+    );
+    res.setHeader("Content-Length", buffer.length);
+    
+    res.send(buffer);
+  }
+
+  @Post("export-excel/multi-room")
+  @ApiOperation({ 
+    summary: "Xuất file Excel kết quả kiểm kê cho nhiều phòng của đơn vị",
+    description: "Xuất file Excel chứa kết quả kiểm kê của nhiều phòng trong một đơn vị với các tùy chọn lọc"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "File Excel được tạo thành công",
+    content: {
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        schema: {
+          type: "string",
+          format: "binary",
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy đơn vị hoặc kết quả kiểm kê" })
+  @ApiResponse({ status: 401, description: "Chưa xác thực" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_INVENTORY)
+  @ApiBearerAuth()
+  async exportMultiRoomInventoryToExcel(
+    @Body() exportDto: ExportMultiRoomInventoryExcelDto,
+    @Res() res: Response,
+    @CurrentUser() currentUser: User
+  ): Promise<void> {
+    const buffer = await this.inventoriesService.exportMultiRoomInventoryToExcel(exportDto, currentUser);
+    
+    const fileName = exportDto.fileName 
+      ? `${exportDto.fileName}.xlsx` 
+      : `Ket_qua_kiem_ke_don_vi_${exportDto.unitId}_${new Date().getTime()}.xlsx`;
+    
+    // Encode filename to handle Vietnamese characters  
+    const encodedFileName = encodeURIComponent(fileName);
+    
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodedFileName}`
+    );
+    res.setHeader("Content-Length", buffer.length);
+    
+    res.send(buffer);
   }
 
   

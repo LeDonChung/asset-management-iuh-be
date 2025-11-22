@@ -54,4 +54,6 @@ export class AssetBookResponseDto {
 export class AssetItemResponseDto  extends AssetResponseDto{
     @ApiProperty({ description: 'Note' })
     note: string;
+    @ApiProperty({ description: 'Status in Asset Book', enum: AssetBookItemStatus })
+    bookItemStatus: AssetBookItemStatus;
 }

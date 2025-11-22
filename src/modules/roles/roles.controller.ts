@@ -69,6 +69,15 @@ export class RolesController {
     return this.rolesService.findAllInventoryRoles();
   }
 
+  @Get("access-scopes")
+  @HttpCode(HttpStatus.OK)
+  @ApiResponse({ status: 200, description: 'Get all available access scopes' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async getAvailableAccessScopes() {
+    return this.rolesService.getAvailableAccessScopes();
+  }
+
   @Get(":id")
   @HttpCode(HttpStatus.OK)
   @ApiNotFoundResponse({ description: "Not Found" })

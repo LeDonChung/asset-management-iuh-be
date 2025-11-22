@@ -31,6 +31,10 @@ import { LiquidationProposalItem } from "src/entities/liquidation-proposal-item"
 import { AssetTransaction } from "src/entities/asset-transaction.entity";
 import { AssetTransactionHistory } from "src/entities/asset-transaction-history.entity";
 import { AssetTransactionItem } from "src/entities/asset-transaction-item.entity";
+import { AccessScope } from "src/entities/access-scope.entity";
+import { AssetMovement } from "src/entities/asset-movement.entity";
+import { AssetMovementHistory } from "src/entities/asset-movement-history.entity";
+import { AssetMovementItem } from "src/entities/asset-movement-item.entity";
 
 export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
   imports: [],
@@ -38,7 +42,7 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
     return {
       type: "postgres",
       host: process.env.DB_HOST || "localhost",
-      port: parseInt(process.env.DB_PORT) || 5432,
+      port: parseInt(process.env.DB_PORT) || 5431,
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME || "asset",
@@ -84,6 +88,10 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
         AssetTransaction,
         AssetTransactionHistory,
         AssetTransactionItem,
+        AssetMovement,
+        AssetMovementHistory,
+        AssetMovementItem,
+        AccessScope,
       ],
       synchronize: false,
       logging: false,
@@ -97,7 +105,7 @@ export const TypeOrmAsyncConfig: TypeOrmModuleAsyncOptions = {
 const dataSource = new DataSource({
   type: "postgres",
   host: process.env.DB_HOST || "localhost",
-  port: parseInt(process.env.DB_PORT) || 5432,
+  port: parseInt(process.env.DB_PORT) || 5431,
   username: process.env.DB_USERNAME || "postgres",
   password: process.env.DB_PASSWORD || "postgres",
   database: process.env.DB_NAME || "asset",
@@ -137,6 +145,10 @@ const dataSource = new DataSource({
     AssetTransaction,
     AssetTransactionHistory,
     AssetTransactionItem,
+    AssetMovement,
+    AssetMovementHistory,
+    AssetMovementItem,
+    AccessScope
   ],
   migrations: [__dirname + "/../../migrations/*{.ts,.js}"],
   migrationsTableName: "typeorm_migrations",

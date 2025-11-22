@@ -17,6 +17,7 @@ import {
   ProposeTransactionDto,
   ApproveTransactionDto,
   RejectTransactionDto,
+  ReceiveTransactionDto,
 } from './dto/update-transaction.dto';
 import { TransactionFilterDto } from './dto/filter-transaction.dto';
 import { TransactionResponseDto, SimplifiedTransactionResponseDto } from './dto/response-transaction.dto';
@@ -44,7 +45,7 @@ export class TransactionsController {
   @ApiOperation({
     summary: 'Tạo mới giao dịch bàn giao',
     description:
-      'Tạo giao dịch bàn giao tài sản giữa các đơn vị hoặc phòng ban. Hỗ trợ 3 loại: TRANSFER (bàn giao giữa đơn vị), INTERNAL_MOVE (di chuyển nội bộ), ALLOCATION (phân bổ tài sản mới).',
+      'Tạo giao dịch bàn giao tài sản giữa các đơn vị. Tài sản sẽ tự động được chuyển về kho của đơn vị đích.',
   })
   @ApiResponse({
     status: 201,
@@ -125,8 +126,7 @@ export class TransactionsController {
   @Permissions(PermissionConstants.PERM_UPDATE_TRANSACTION)
   async update(
     @Param('id') id: string,
-    @Body() updateDto: UpdateTransactionDto,
-    @CurrentUser() currentUser: User,
+    @Body() updateDto: UpdateTransactionDto
   ) {
     return this.transactionsService.updateTransaction(
       id,
@@ -221,39 +221,32 @@ export class TransactionsController {
     );
   }
 
-  @Patch(':id/status')
+  @Patch(':id/receive')
   @ApiOperation({
-    summary: 'Cập nhật trạng thái giao dịch',
+    summary: 'Tiếp nhận tài sản đã bàn giao',
     description:
-      'Cập nhật trạng thái giao dịch theo workflow: DRAFT → PROPOSED → APPROVED hoặc REJECTED. Khi APPROVED, tài sản sẽ tự động được cập nhật vị trí và sổ tài sản.',
+      'Xác nhận đơn vị đích đã tiếp nhận tài sản từ trạng thái APPROVED sang RECEIVED.',
   })
   @ApiParam({ name: 'id', description: 'ID của giao dịch' })
   @ApiResponse({
     status: 200,
-    description: 'Trạng thái đã được cập nhật',
+    description: 'Đã xác nhận tiếp nhận tài sản thành công',
     type: TransactionResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Chuyển trạng thái không hợp lệ' })
+  @ApiResponse({ status: 400, description: 'Không thể tiếp nhận giao dịch' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giao dịch' })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth()
-  @Permissions(PermissionConstants.PERM_UPDATE_TRANSACTION_STATUS)
-  updateStatus(
+  // @Permissions(PermissionConstants.PERM_RECEIVE_TRANSACTION)
+  receiveTransaction(
     @Param('id') id: string,
-    @Body() updateDto: UpdateTransactionStatusDto,
+    @Body() receiveDto: ReceiveTransactionDto,
     @CurrentUser() currentUser: User,
   ) {
-    // This is a generic status update method that can handle any status change
-    // For specific workflows, use the dedicated endpoints above
-    return this.transactionsService.updateTransactionStatus(
+    return this.transactionsService.receiveTransaction(
       id,
-      updateDto.status,
       currentUser.id,
-      updateDto.note || 'Cập nhật trạng thái',
-      {
-        approvalNote: updateDto.approvalNote,
-        rejectionReason: updateDto.rejectionReason,
-      },
+      receiveDto.note,
     );
   }
 }

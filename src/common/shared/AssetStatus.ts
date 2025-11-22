@@ -3,5 +3,6 @@ export enum AssetStatus {
     DAMAGED = 'DAMAGED', // hư hỏng
     LOST = 'LOST', // đã mất
     PROPOSED_LIQUIDATION = 'PROPOSED_LIQUIDATION', // đề xuất thanh lý
-    LIQUIDATED = 'LIQUIDATED', // đã thanh lý
+    LIQUIDATED = 'LIQUIDATED', // đã thanh lý,
+    UNIDENTIFIED = 'UNIDENTIFIED', // chưa định danh
   }

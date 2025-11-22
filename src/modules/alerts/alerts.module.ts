@@ -11,8 +11,10 @@ import { RfidTag } from "src/entities/rfid-tag.entity";
 import { AssetBookItem } from "src/entities/asset-book-item.entity";
 import { MulterModule } from "@nestjs/platform-express";
 import { FilesModule } from "../files/files.module";
+import { EmailModule } from "../email/email.module";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
 import { Unit } from "src/entities/unit.entity";
+import { AccessControlModule } from "src/common/services/access-control.module";
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { Unit } from "src/entities/unit.entity";
       },
     }),
     FilesModule,
+    EmailModule,
+    AccessControlModule,
   ],
   controllers: [AlertsController],
   providers: [AlertsService, PermissionHelperService],

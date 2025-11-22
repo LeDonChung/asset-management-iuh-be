@@ -23,6 +23,7 @@ import { AssetBookItem } from './asset-book-item.entity';
 import { Alert } from './alert.entity';
 import { AssetTransactionItem } from './asset-transaction-item.entity';
 import { AssetTransactionHistory } from './asset-transaction-history.entity';
+import { AssetMovementItem } from './asset-movement-item.entity';
 
 
 @Entity('assets')
@@ -114,6 +115,9 @@ export class Asset {
     @JoinColumn({ name: 'current_room_id' })
     currentRoom: Room;
 
+    @Column({ name: 'location_in_room', nullable: true, comment: 'Vị trí cụ thể trong phòng' })
+    locationInRoom: string;
+
     @OneToMany(() => InventoryResult, (result) => result.asset)
     inventoryResults?: InventoryResult[];
 
@@ -126,6 +130,10 @@ export class Asset {
     // Asset Transaction relationships
     @OneToMany(() => AssetTransactionItem, (item) => item.asset)
     transactionItems?: AssetTransactionItem[];
+
+    // Asset Movement relationships
+    @OneToMany(() => AssetMovementItem, (item) => item.asset)
+    movementItems?: AssetMovementItem[];
 }
 
 // Child entities for inheritance

@@ -130,6 +130,15 @@ export class ApproveTransactionDto {
   @IsOptional()
   @IsString()
   approvalNote?: string;
+
+  @ApiProperty({
+    description: 'Đường dẫn minh chứng (ảnh, file đính kèm)',
+    required: false,
+    example: 'https://example.com/evidence/approve-123.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  evidenceUrl?: string;
 }
 
 export class RejectTransactionDto {
@@ -138,4 +147,14 @@ export class RejectTransactionDto {
   })
   @IsString()
   rejectionReason: string;
+}
+
+export class ReceiveTransactionDto {
+  @ApiProperty({
+    description: 'Ghi chú khi tiếp nhận tài sản',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

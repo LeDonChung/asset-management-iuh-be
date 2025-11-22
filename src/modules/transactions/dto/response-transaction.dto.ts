@@ -144,6 +144,12 @@ export class TransactionHistoryResponseDto {
   note?: string;
 
   @ApiProperty({
+    description: 'Đường dẫn minh chứng (nếu có)',
+  })
+  @Expose()
+  evidenceUrl?: string;
+
+  @ApiProperty({
     description: 'Ngày tạo',
   })
   @Expose()

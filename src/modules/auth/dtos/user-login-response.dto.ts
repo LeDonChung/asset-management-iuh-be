@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { AccessScope, AccessScopeType } from "src/entities/access-scope.entity";
 
 export class UserLoginResponse {
   @ApiProperty({ example: "1", description: "User ID" })
@@ -19,4 +20,8 @@ export class UserLoginResponse {
   permissions: string[];
   @ApiProperty({ example: "1", description: "Unit ID" })
   unitId: string;
+  @ApiProperty({ example: "Khoa Công nghệ thông tin", description: "Unit name" })
+  unitName?: string;
+  @ApiProperty({ example: ["GLOBAL", "UNIT", "CHILD_UNITS", "SELF"], description: "Access scope types" })
+  accessScopeTypes: string[];
 }
