@@ -4,7 +4,6 @@ import { SeedingService } from './seeding.service';
 import { User } from '../../entities/user.entity';
 import { Role } from '../../entities/role.entity';
 import { Permission } from '../../entities/permission.entity';
-import { ManagerPermission } from 'src/entities/manager-permission.entity';
 import { Category } from 'src/entities/category.entity';
 import { Unit } from 'src/entities/unit.entity';
 import { Room } from 'src/entities/room.entity';
