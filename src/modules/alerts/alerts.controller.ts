@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards, Us
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiParam, ApiResponse, ApiTags, ApiOperation } from "@nestjs/swagger";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { AlertsService } from "./alerts.service";
+import { MovementsService } from "../movements/movements.service";
 import { CreateAlertDto } from "./dto/create-alert.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -23,6 +24,7 @@ import { SendAlertEmailDto, SendAlertEmailResponseDto } from "./dto/send-alert-e
 export class AlertsController {
     constructor(
         private readonly alertsService: AlertsService,
+        private readonly movementsService: MovementsService,
     ) { }
 
     @Post("filter")
@@ -144,6 +146,26 @@ export class AlertsController {
         @Body() sendAlertEmailDto: SendAlertEmailDto
     ): Promise<SendAlertEmailResponseDto> {
         return this.alertsService.sendAlertEmail(sendAlertEmailDto.alertId);
+    }
+
+    @Post(':id/move')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Tạo yêu cầu di chuyển cho tài sản trong alert và phê duyệt ngay',
+        description: 'Tạo yêu cầu di chuyển một tài sản phát hiện trong alert tới phòng được chọn, sau đó phê duyệt tự động bằng logic trong MovementsService'
+    })
+    @ApiParam({ name: 'id', description: 'ID của alert' })
+    @ApiBody({ schema: { type: 'object', properties: { toRoomId: { type: 'string' }, note: { type: 'string' } } } })
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
+    @ApiBearerAuth()
+    @Permissions(PermissionConstants.PERM_RESOLVE_ALERT)
+    async moveAssetFromAlert(
+        @Param('id') alertId: string,
+        @Body('toRoomId') toRoomId: string,
+        @Body('note') note: string,
+        @CurrentUser() user: User,
+    ) {
+        return this.alertsService.moveAssetToRoom(alertId, toRoomId, note, user);
     }
 
 }

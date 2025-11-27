@@ -22,6 +22,8 @@ import { UpdateAlertDto } from "./dto/update-alert.dto";
 import { UpdateAlertImageDto } from "./dto/update-alert-image.dto";
 import { FilesService } from "../files/files.service";
 import { EmailService } from "../email/email.service";
+import { MovementsService } from "../movements/movements.service";
+import { MoveStatus } from "src/common/shared/MoveStatus";
 import { AlertFilterDto } from "./dto/alert-filter.dto";
 import { PaginatedResponseDto } from "src/common/dto/pagination.dto";
 import { FieldType } from "src/common/dto/filter.dto";
@@ -54,6 +56,8 @@ export class AlertsService {
     private readonly filesService: FilesService,
     private readonly emailService: EmailService,
     private readonly permissionHelperService: PermissionHelperService
+  ,
+  private readonly movementsService: MovementsService
   ) {}
 
   async create(createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
@@ -612,6 +616,66 @@ export class AlertsService {
       console.error('Error sending alert email:', error);
       throw error;
     }
+  }
+
+  async moveAssetToRoom(alertId: string, toRoomId: string, note: string | undefined, currentUser: User) {
+    const alert = await this.alertRepository.findOne({ where: { id: alertId }, relations: ['asset', 'room'] });
+    if (!alert) {
+      throw new Error('Alert not found');
+    }
+
+    if (!alert.asset) {
+      throw new Error('Alert has no associated asset to move');
+    }
+
+    const asset = await this.assetRepository.findOne({ where: { id: alert.assetId }, relations: ['currentRoom'] });
+    if (!asset) {
+      throw new Error('Asset not found');
+    }
+
+    const destRoom = await this.roomRepository.findOne({ where: { id: toRoomId } });
+    if (!destRoom) {
+      throw new Error('Destination room not found');
+    }
+
+    const fromRoomId = asset.currentRoom ? asset.currentRoom.id : alert.roomId;
+
+    const createMovementDto = {
+      items: [
+        {
+          assetId: alert.assetId,
+          fromRoomId: fromRoomId,
+          toRoomId: toRoomId,
+          note: note || `Di chuyển theo cảnh báo ${alert.id}`,
+        },
+      ],
+      requestNote: note || `Tự động di chuyển tài sản phát hiện từ cảnh báo ${alert.id}`,
+      status: MoveStatus.DRAFT,
+      approvalNote: 'Tự động phê duyệt từ alert',
+      createdAt: new Date().toISOString(),
+    } as any;
+
+    let movement = await this.movementsService.createMovement(createMovementDto, currentUser.id, currentUser);
+
+    try {
+      movement = await this.movementsService.proposeMovement(movement.id, { 
+        note: 'Tự động đề xuất sau xử lý cảnh báo' 
+      } as any, currentUser.id);
+
+      movement = await this.movementsService.approveMovement(movement.id, { 
+        approvalNote: 'Phê duyệt tự động sau xử lý cảnh báo' 
+      } as any, currentUser.id);
+    } catch (err) {
+      console.error('Failed to propose/approve movement from alert:', err);
+      throw new Error('Không thể phê duyệt movement tự động: ' + err.message);
+    }
+
+    alert.status = AlertStatus.CONFIRMED;
+    alert.resolverId = currentUser.id;
+    alert.note = note || alert.note;
+    await this.alertRepository.save(alert);
+
+    return movement;
   }
 
   /**
