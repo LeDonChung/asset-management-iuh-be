@@ -15,6 +15,7 @@ import { EmailModule } from "../email/email.module";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
 import { Unit } from "src/entities/unit.entity";
 import { AccessControlModule } from "src/common/services/access-control.module";
+import { MovementsModule } from "../movements/movements.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AccessControlModule } from "src/common/services/access-control.module";
     FilesModule,
     EmailModule,
     AccessControlModule,
+    MovementsModule,
   ],
   controllers: [AlertsController],
   providers: [AlertsService, PermissionHelperService],
