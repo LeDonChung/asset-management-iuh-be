@@ -8,6 +8,7 @@ import { Category } from 'src/entities/category.entity';
 import { Unit } from 'src/entities/unit.entity';
 import { Room } from 'src/entities/room.entity';
 import { AccessScope } from 'src/entities/access-scope.entity';
+import { ManagerPermission } from 'src/entities/manager-permission.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User, Role, Permission, ManagerPermission, Category, Unit, Room, AccessScope ])],
