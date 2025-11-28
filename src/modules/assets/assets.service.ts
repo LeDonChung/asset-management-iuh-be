@@ -633,8 +633,8 @@ export class AssetsService {
           try {
             // Mapping dữ liệu từ Excel theo cấu trúc bạn cung cấp (13 cột A-M, có thể mở rộng thêm N)
             const assetData: ImportAssetDto = {
-              ktCode: row[0]?.toString() || "", // A: Mã kế toán
-              fixedCode: row[1]?.toString() || "", // B: Mã tài sản
+              ktCode: row[0]?.toString().trim() || undefined, // A: Mã kế toán - chỉ set nếu có giá trị
+              fixedCode: row[1]?.toString().trim() || undefined, // B: Mã tài sản - chỉ set nếu có giá trị
               location: row[2]?.toString() || "", // C: Vị trí
               name: row[3]?.toString() || "", // D: Tên tài sản
               type: this.mapAssetType(row[4]?.toString() || ""), // E: Loại tài sản
@@ -650,11 +650,8 @@ export class AssetsService {
               status: AssetStatus.IN_USE,
             };
 
-            // Validation cơ bản
-            if (!assetData.ktCode || !assetData.fixedCode || !assetData.name) {
-              throw new Error(
-                "Mã kế toán, mã tài sản và tên tài sản là bắt buộc"
-              );
+            if (!assetData.name || !assetData.name.trim()) {
+              throw new Error("Tên tài sản là bắt buộc");
             }
 
             // Tìm room theo location code
