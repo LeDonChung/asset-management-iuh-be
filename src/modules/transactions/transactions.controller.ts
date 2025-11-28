@@ -237,7 +237,7 @@ export class TransactionsController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy giao dịch' })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth()
-  // @Permissions(PermissionConstants.PERM_RECEIVE_TRANSACTION)
+  @Permissions(PermissionConstants.PERM_RECEIVE_TRANSACTION)
   receiveTransaction(
     @Param('id') id: string,
     @Body() receiveDto: ReceiveTransactionDto,
