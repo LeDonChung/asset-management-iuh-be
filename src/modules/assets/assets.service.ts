@@ -82,7 +82,7 @@ export class AssetsService {
   /**
    * Generate ktCode theo định dạng: xx-yyyy/nn
    * xx: số năm đưa vào sử dụng (ví dụ: 19 cho năm 2019, 25 cho năm 2025)
-   * yyyy: mã danh mục lấy từ category.code
+   * yyyy: số thứ tự tài sản thuộc danh mục đó trong năm (0001, 0002, 0003...)
    * nn: gói mua (bắt đầu từ 00)
    */
   private async generateKtCode(yearPrefix: string, categoryId?: string, purchasePackage = 0): Promise<string> {
@@ -92,25 +92,24 @@ export class AssetsService {
     const currentYear = new Date().getFullYear();
     const xx = currentYear.toString().slice(-2); // Ví dụ: 2025 -> 25
     
-    // Lấy mã danh mục từ category.code
-    let yyyy = '0000'; // Mặc định
+    // Tính số thứ tự tài sản thuộc danh mục trong năm hiện tại
+    let yyyy = '0001'; // Mặc định bắt đầu từ 0001
+    
     if (categoryId) {
-      const category = await this.categoryRepository.findOne({ where: { id: categoryId } });
-      if (category && category.code) {
-        // Lấy 4 chữ số từ category.code, nếu không đủ thì pad
-        const digits = category.code.replace(/\D/g, ''); // Loại bỏ ký tự không phải số
-        if (digits.length >= 4) {
-          yyyy = digits.substring(0, 4);
-        } else if (digits.length > 0) {
-          yyyy = digits.padStart(4, '0');
-        } else {
-          // Nếu không có số trong code, dùng hash của tên category
-          yyyy = Math.abs(category.code.split('').reduce((a, b) => {
-            a = ((a << 5) - a) + b.charCodeAt(0);
-            return a & a;
-          }, 0)).toString().padStart(4, '0').substring(0, 4);
-        }
-      }
+      // Đếm số tài sản thuộc danh mục này trong năm hiện tại
+      // Sử dụng ktCode pattern để lọc theo năm và danh mục
+      const yearPrefix = xx; // 2 chữ số cuối của năm
+      
+      // Tìm tất cả tài sản có ktCode bắt đầu bằng "xx-" trong năm hiện tại
+      const assetsInYear = await this.assetRepository
+        .createQueryBuilder('asset')
+        .where('asset.categoryId = :categoryId', { categoryId })
+        .andWhere('asset.ktCode LIKE :yearPattern', { yearPattern: `${yearPrefix}-%` })
+        .getCount();
+      
+      // Số thứ tự tiếp theo = số tài sản hiện có + 1
+      const nextSequence = assetsInYear + 1;
+      yyyy = nextSequence.toString().padStart(4, '0');
     }
     
     return `${xx}-${yyyy}/${nn}`;
@@ -633,7 +632,7 @@ export class AssetsService {
           try {
             // Mapping dữ liệu từ Excel theo cấu trúc bạn cung cấp (13 cột A-M, có thể mở rộng thêm N)
             const assetData: ImportAssetDto = {
-              ktCode: row[0]?.toString().trim() || undefined, // A: Mã kế toán - chỉ set nếu có giá trị
+              ktCode: await this.validateKtCodeFromExcel(row[0]?.toString().trim()), // A: Mã kế toán - validate trùng lặp
               fixedCode: row[1]?.toString().trim() || undefined, // B: Mã tài sản - chỉ set nếu có giá trị
               location: row[2]?.toString() || "", // C: Vị trí
               name: row[3]?.toString() || "", // D: Tên tài sản
@@ -844,6 +843,32 @@ export class AssetsService {
       .substring(0, 20); // Giới hạn độ dài
 
     return code || "CATEGORY_" + Date.now();
+  }
+
+  /**
+   * Validate ktCode từ Excel, nếu đã tồn tại thì trả về undefined để tự sinh
+   */
+  private async validateKtCodeFromExcel(inputKtCode: string | undefined): Promise<string | undefined> {
+    // Nếu không có ktCode từ Excel, trả về undefined để hệ thống tự sinh
+    if (!inputKtCode || !inputKtCode.trim()) {
+      return undefined;
+    }
+
+    const ktCode = inputKtCode.trim();
+    
+    // Kiểm tra xem ktCode đã tồn tại chưa
+    const existingAsset = await this.assetRepository.findOne({
+      where: { ktCode }
+    });
+
+    // Nếu chưa tồn tại, sử dụng ktCode từ Excel
+    if (!existingAsset) {
+      return ktCode;
+    }
+
+    // Nếu đã tồn tại, trả về undefined để hệ thống tự sinh ktCode mới
+    console.warn(`ktCode ${ktCode} already exists, system will generate new ktCode automatically`);
+    return undefined;
   }
 
   async classifyRfids(
