@@ -4,15 +4,15 @@ import { AssetType } from 'src/common/shared/AssetType';
 import { AssetStatus } from 'src/common/shared/AssetStatus';
 
 export class ImportAssetDto {
-  @ApiProperty({ description: 'Mã kế toán: xx-yyyy/nn (e.g., 19-0205/00)' })
+  @ApiPropertyOptional({ description: 'Mã kế toán: xx-yyyy/nn (e.g., 19-0205/00). Nếu không có, hệ thống sẽ tự sinh' })
   @IsString()
-  @IsNotEmpty()
-  ktCode: string;
+  @IsOptional()
+  ktCode?: string;
 
-  @ApiProperty({ description: 'Mã tài sản cố định xxxx.yyyy' })
+  @ApiPropertyOptional({ description: 'Mã tài sản cố định xxxx.yyyy. Nếu không có, hệ thống sẽ tự sinh' })
   @IsString()
-  @IsNotEmpty()
-  fixedCode: string;
+  @IsOptional()
+  fixedCode?: string;
 
   @ApiProperty({ description: 'Vị trí (Room Code)' })
   @IsString()

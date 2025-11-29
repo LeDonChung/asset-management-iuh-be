@@ -27,7 +27,7 @@ services:
     container_name: asset-management-redis
     restart: unless-stopped
     ports:
-      - "6378:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -60,10 +60,15 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       
       # SMTP Configuration (Optional - configure if needed)
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=587
-      - SMTP_USER=your-email@gmail.com
-      - SMTP_PASS=your-app-password
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-your-email@gmail.com}
+      - SMTP_PASS=${SMTP_PASS:-your-app-password}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Asset Management}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-your-email@gmail.com}
+      - SUPPORT_EMAIL=${SUPPORT_EMAIL:-your-email@gmail.com}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3002}
 
       # CLOUDFLARE
       - CLOUDFLARE_R2_ENDPOINT=${CLOUDFLARE_R2_ENDPOINT}
