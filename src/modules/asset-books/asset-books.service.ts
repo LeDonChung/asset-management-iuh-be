@@ -53,7 +53,7 @@ export class AssetBooksService {
         lookedAt: IsNull(),
         items: {
           roomId,
-          asset: { type: assetType, status: AssetStatus.IN_USE },
+          asset: { type: assetType },
           status: AssetBookItemStatus.IN_USE,
         },
       },
