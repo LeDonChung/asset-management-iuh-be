@@ -6,20 +6,17 @@
 #include <ArduinoJson.h>
 #include <base64.h>
 
-// Forward declaration for camera server function from app_httpd.cpp
 void startCameraServer();
 
-// =================== CẤU HÌNH =====================
 #define PIR_PIN 15              // Chân PIR
 #define WIFI_SSID "Ruby tu C13 den C25"
 #define WIFI_PASS "VietnhatC136868"
 
 
-// WebSocket Configuration (thay thế BLE)
-const char* socketServer = "34.61.204.169";
-const int socketPort = 3001;
-// const char* socketServer = "192.168.1.30";
+// const char* socketServer = "34.61.204.169";
 // const int socketPort = 3001;
+const char* socketServer = "192.168.1.25";
+const int socketPort = 3001;
 SocketIoClient webSocket;
 
 // Camera config (ESP32-CAM AI-Thinker)
@@ -40,21 +37,17 @@ SocketIoClient webSocket;
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
 
-// WebSocket connection state
 bool socketConnected = false;
 unsigned long lastSocketReconnect = 0;
 const unsigned long SOCKET_RECONNECT_INTERVAL = 5000;
 
-// Device identification
 String deviceId = "ESP32_CAM_01";
 String deviceReceive = "ESP32_RFID_01";
 String deviceType = "camera";
 String roomId = "4ac93e15-5e46-4ea5-ba51-ad8c6a48a262";
 
-// Alert IDs for updating after image upload
-String currentAlertIds[15];  // Lưu trữ tối đa 10 alertIds
+String currentAlertIds[15];
 int alertIdsCount = 0;
-// =================== HÀM =====================
 void connectWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Đang kết nối WiFi");
@@ -97,7 +90,7 @@ bool initCamera() {
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_QVGA;
-  config.jpeg_quality = 30;
+  config.jpeg_quality = 12;
   config.fb_count = 1;
   config.fb_location = CAMERA_FB_IN_PSRAM;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
@@ -111,11 +104,6 @@ bool initCamera() {
   Serial.println("' to connect");
   return true;
 }
-
-// =================== IMAGE CAPTURE AND SOCKET FUNCTIONS =====================
-
-
-// Các hàm HTTP upload cũ đã được thay thế bằng Socket communication
 
 void captureAndUploadImage() {
   camera_fb_t* fb = esp_camera_fb_get();
@@ -314,8 +302,6 @@ void loop() {
     sendCommandStartMotionScan();
 
     Serial.println("⏳ Chờ lệnh chụp ảnh từ server...");
-
-    
   }
 
   // Delay 200 milliseconds
