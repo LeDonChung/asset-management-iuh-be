@@ -17,14 +17,14 @@ String deviceType = "rfid";
 char* ssid = "Ruby tu C13 den C25";
 char* password = "VietnhatC136868";
 
-char* server = "34.61.204.169";
+char* server = "192.168.1.25";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "7b54d540-c47c-4cdb-817d-949ce5a1d527";
+String roomId = "fa328422-9a23-487a-96e3-6d6753f18799";
 
 #define RXD2 16
 #define TXD2 17
@@ -231,7 +231,7 @@ void sendReaderIdentifier() {
 volatile bool isScan = false;
 volatile bool isBuzzer = false;
 volatile bool isMotionScan = false;
-volatile bool isAlert = false;
+volatile bool isAlert = true;
 unsigned long motionScanStart = 0;
 
 void sendStartAlert() {
