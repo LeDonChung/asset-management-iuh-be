@@ -87,11 +87,12 @@ export class AlertsController {
         return this.alertsService.resolveAlert(alertId, updateAlertDto, user);
     }
 
-    @Post('/get-user-rfid-alerts')
+    @Post('/get-user-rfid-alerts/:roomId')
     @HttpCode(HttpStatus.OK)
+    @ApiParam({ name: 'roomId', description: 'ID của phòng cần kiểm tra', required: true })
     @ApiResponse({ status: 200, type: [UserAlertResponseDto] })
-    async getUserRfidAlerts(@Body() rfids: string[]): Promise<UserAlertResponseDto[]> {
-        return this.alertsService.getUserRfidAlerts(rfids);
+    async getUserRfidAlerts(@Param('roomId') roomId: string, @Body() rfids: string[]): Promise<UserAlertResponseDto[]> {
+        return this.alertsService.getUserRfidAlerts(rfids, roomId);
     }
 
     @Post('/update-alerts-image')
