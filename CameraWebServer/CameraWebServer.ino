@@ -9,13 +9,13 @@
 void startCameraServer();
 
 #define PIR_PIN 15              // Chân PIR
-#define WIFI_SSID "Ruby tu C13 den C25"
-#define WIFI_PASS "VietnhatC136868"
+#define WIFI_SSID "ThahhTuyenn"
+#define WIFI_PASS "12345678"
 
 
 // const char* socketServer = "34.61.204.169";
 // const int socketPort = 3001;
-const char* socketServer = "192.168.1.25";
+const char* socketServer = "172.20.10.12";
 const int socketPort = 3001;
 SocketIoClient webSocket;
 

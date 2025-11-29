@@ -14,10 +14,10 @@ String deviceType = "rfid";
 #include <WiFi.h>
 #include <SocketIoClient.h>
 
-char* ssid = "Ruby tu C13 den C25";
-char* password = "VietnhatC136868";
+char* ssid = "ThahhTuyenn";
+char* password = "12345678";
 
-char* server = "192.168.1.25";
+char* server = "172.20.10.12";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 

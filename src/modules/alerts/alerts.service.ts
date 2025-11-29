@@ -100,60 +100,72 @@ export class AlertsService {
     }
   }
 
-  async getUserRfidAlerts(rfids: string[]): Promise<UserAlertResponseDto[]> {
+  async getUserRfidAlerts(rfids: string[], roomId: string): Promise<UserAlertResponseDto[]> {
     try {
-      // Tìm tài khoản đơn vị sử dụng tài sản có RFID trong danh sách rfids trong sổ tài sản
       const results: UserAlertResponseDto[] = [];
+      const emailPromises: Promise<void>[] = [];
+
+      if (!roomId) {
+        console.warn('roomId is undefined or empty');
+        return results;
+      }
 
       for (const rfid of rfids) {
-        // Tìm RFID tag
         const rfidTag = await this.rfidTagRepository.findOne({
           where: { rfidId: rfid },
-          relations: ["asset"],
+          relations: ["asset", "asset.currentRoom"],
         });
 
-        if (!rfidTag) {
-          // Nếu không tìm thấy RFID tag, vẫn trả về với danh sách user rỗng
-          results.push({
-            rfid,
-            userIds: [],
-            allowMove: true,
-            assetId: null,
-          });
+        if (!rfidTag || !rfidTag.asset) {
+          // Nếu không tìm thấy RFID tag hoặc tài sản, bỏ qua
           continue;
         }
 
-        // Tìm tài sản trong sổ tài sản (asset book items)
-        const assetBookItems = await this.assetBookItemRepository.find({
-          where: {
-            assetId: rfidTag.assetId,
-          },
-          relations: ["book", "book.unit", "book.unit.users"],
+        // Lấy email của user chủ của đơn vị sử dụng tài sản từ assetBookItem
+        const assetBookItem = await this.assetBookItemRepository.findOne({
+          where: { assetId: rfidTag.assetId },
+          relations: ["book", "book.unit", "book.unit.representative"],
         });
-
-        // Lấy danh sách user ID từ các đơn vị sử dụng tài sản
-        const userIds: string[] = [];
-
-        for (const item of assetBookItems) {
-          if (item.book?.unit) {
-            // Thêm representative ID nếu có
-            if (item.book.unit.representativeId) {
-              userIds.push(item.book.unit.representativeId);
-            }
-          }
-        }
-
-        // Loại bỏ duplicate user IDs
-        const uniqueUserIds = [...new Set(userIds)];
-
+        const email = assetBookItem?.book?.unit?.representative?.email || '';
+        
+        // Được phép di chuyển khi khác phòng hiện tại
+        const currentRoomId = rfidTag.asset?.currentRoom?.id;
+        console.log(`RFID: ${rfid}, Asset ID: ${rfidTag.assetId}, Current Room ID: ${currentRoomId}, Checked Room ID: ${roomId}`);
+        
+        // Nếu roomId undefined, coi như không cho phép di chuyển (hoặc logic khác tùy yêu cầu)
+        const allowMove = roomId ? roomId !== currentRoomId : false;
+        
         results.push({
           rfid,
-          userIds: uniqueUserIds,
-          allowMove: rfidTag.asset ? rfidTag.asset.allowMove : true,
+          allowMove,
+          email,
           assetId: rfidTag.assetId,
         });
-      }
 
+        // Gửi email bất đồng bộ khi phát hiện di chuyển bất thường (allowMove = false)
+        if (!allowMove && email) {
+          // Tạo promise gửi email nhưng không await tại đây
+          const emailPromise = this.sendUnauthorizedMovementEmail(
+            email,
+            rfidTag,
+            assetBookItem,
+            roomId
+          );
+          emailPromises.push(emailPromise);
+        }
+      }
+      
+      // Gửi tất cả emails bất đồng bộ trong background, không chờ kết quả
+      if (emailPromises.length > 0) {
+        Promise.allSettled(emailPromises).then((results) => {
+          const successful = results.filter(r => r.status === 'fulfilled').length;
+          const failed = results.filter(r => r.status === 'rejected').length;
+          console.log(`Email notification summary: ${successful} sent, ${failed} failed`);
+        }).catch(err => {
+          console.error('Error in email batch processing:', err);
+        });
+      }
+      
       return results;
     } catch (error) {
       console.error("Error getting user RFID alerts:", error);
@@ -687,6 +699,50 @@ export class AlertsService {
         return 'Di chuyển không hợp lệ';
       default:
         return 'Không xác định';
+    }
+  }
+
+  /**
+   * Gửi email thông báo di chuyển không hợp lệ (chạy bất đồng bộ)
+   * @param email Email người nhận
+   * @param rfidTag RFID tag information
+   * @param assetBookItem Asset book item information
+   * @param roomId Room ID where unauthorized movement detected
+   */
+  private async sendUnauthorizedMovementEmail(
+    email: string,
+    rfidTag: RfidTag,
+    assetBookItem: AssetBookItem,
+    roomId: string
+  ): Promise<void> {
+    try {
+      const room = await this.roomRepository.findOne({
+        where: { id: roomId },
+        relations: ['unit'],
+      });
+
+      await this.emailService.sendEmail({
+        to: email,
+        subject: `⚠️ Cảnh báo: Phát hiện di chuyển tài sản không hợp lệ`,
+        template: 'alert-notification',
+        context: {
+          userName: assetBookItem?.book?.unit?.representative?.fullName || 'Quý khách',
+          alertType: 'Di chuyển không hợp lệ',
+          assetName: rfidTag.asset.name,
+          assetCode: rfidTag.asset.fixedCode || 'N/A',
+          roomName: room?.name || 'N/A',
+          detectedAt: new Date().toLocaleString('vi-VN'),
+          unitName: assetBookItem?.book?.unit?.name || 'N/A',
+          managementRoom: room?.unit?.name || 'N/A',
+          alertUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/alert`,
+          year: new Date().getFullYear(),
+        },
+      });
+      
+      console.log(`✓ Email sent to ${email} for asset ${rfidTag.assetId} unauthorized movement`);
+    } catch (emailError) {
+      console.error(`✗ Failed to send email to ${email}:`, emailError.message);
+      throw emailError; // Re-throw để Promise.allSettled có thể catch
     }
   }
 }
