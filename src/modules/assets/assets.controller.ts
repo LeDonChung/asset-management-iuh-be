@@ -36,6 +36,7 @@ import { WarehouseAssetFilterDto } from "./dto/warehouse-asset-filter.dto";
 import { WarehouseAssetResponseDto } from "./dto/warehouse-asset-response.dto";
 import { BulkLocationUpdateDto, BulkLocationUpdateResultDto } from "./dto/bulk-location-update.dto";
 import { UnidentifiedAssetFilterDto } from "./dto/unidentified-asset-filter.dto";
+import { AssetHistoryResponseDto } from "./dto/asset-history-response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { User } from "src/entities/user.entity";
@@ -126,6 +127,24 @@ export class AssetsController {
   @ApiBearerAuth()
   async findOne(@Param("id") id: string): Promise<AssetResponseDto> {
     return this.assetsService.findOne(id);
+  }
+
+  @Get(":id/history")
+  @ApiOperation({ 
+    summary: "Lấy lịch sử di chuyển và giao dịch của tài sản",
+    description: "Trả về tất cả lịch sử giao dịch, di chuyển và thanh lý của tài sản"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Asset history retrieved successfully",
+    type: AssetHistoryResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Asset not found" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_VIEW_ASSET)
+  @ApiBearerAuth()
+  async getAssetHistory(@Param("id") id: string): Promise<AssetHistoryResponseDto> {
+    return this.assetsService.getAssetHistory(id);
   }
 
   @Patch(":id")

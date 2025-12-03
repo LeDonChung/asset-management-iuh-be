@@ -99,7 +99,6 @@ export class AssetBooksService {
     if (!unit) {
       throw new NotFoundException(`Unit with ID ${unitId} not found`);
     }
-    // Tiến hành tạo sổ tài sản cho đơn vị này trong năm hiện tại
     const assetBooks = await this.assetBookRepository.find({
       where: { unitId, year: new Date().getFullYear() },
     });
@@ -117,14 +116,13 @@ export class AssetBooksService {
 
     const savedAssetBook = await this.assetBookRepository.save(assetBook);
 
-    // Lấy tất cả các tài sản trong đơn vị này
     const assets = await this.assetRepository.find({
       where: { currentRoom: { unitId: unitId } },
     });
     if (assets.length === 0) {
       throw new BadRequestException(`No assets found for unit ${unit.name}`);
     }
-    // Tiến hành tạo sổ tài sản
+
     const assetBookItems = this.assetBookItemRepository.create(
       assets.map((asset) => ({
         assetId: asset.id,
@@ -151,13 +149,11 @@ export class AssetBooksService {
       status = AssetBookStatus.OPEN,
     } = createAssetBookDto;
 
-    // Kiểm tra xem đơn vị có tồn tại không
     const unit = await this.unitRepository.findOne({ where: { id: unitId } });
     if (!unit) {
       throw new NotFoundException(`Unit with ID ${unitId} not found`);
     }
 
-    // Kiểm tra xem đã có sổ tài sản cho đơn vị này trong năm này chưa
     const existingBook = await this.assetBookRepository.findOne({
       where: { unitId, year },
     });
@@ -169,7 +165,6 @@ export class AssetBooksService {
     }
 
     return await this.dataSource.transaction(async (manager) => {
-      // Tạo sổ tài sản
       const assetBook = manager.create(AssetBook, {
         unitId,
         year,
@@ -178,10 +173,8 @@ export class AssetBooksService {
 
       const savedAssetBook = await manager.save(assetBook);
 
-      // Tạo các mục trong sổ tài sản nếu có
       if (items && items.length > 0) {
         for (const itemDto of items) {
-          // Kiểm tra asset có tồn tại không
           const asset = await manager.findOne(Asset, {
             where: { id: itemDto.assetId },
           });
@@ -191,7 +184,6 @@ export class AssetBooksService {
             );
           }
 
-          // Kiểm tra room có tồn tại không
           const room = await manager.findOne(Room, {
             where: { id: itemDto.roomId },
           });
@@ -355,7 +347,6 @@ export class AssetBooksService {
       }
     }
 
-    // Chuyển đổi Map thành array AssetTypeResponse
     const assetTypes: AssetTypeResponse[] = Array.from(
       assetTypeMap.entries()
     ).map(([type, items]) => ({
@@ -396,11 +387,9 @@ export class AssetBooksService {
         ],
       };
 
-      // Build the query manually to avoid duplicate joins
       const queryBuilder =
         this.assetBookRepository.createQueryBuilder("assetBook");
 
-      // Add relations manually to avoid conflicts
       queryBuilder
         .leftJoinAndSelect("assetBook.unit", "unit")
         .leftJoinAndSelect("assetBook.items", "items")
@@ -408,7 +397,6 @@ export class AssetBooksService {
         .leftJoinAndSelect("items.room", "room")
         .leftJoinAndSelect("asset.rfidTag", "rfidTag");
 
-      // Apply filters using the FilterUtil
       FilterUtil.applyFiltersToQuery(
         queryBuilder,
         filterDto,
@@ -416,23 +404,18 @@ export class AssetBooksService {
         "assetBook"
       );
 
-      // Get pagination settings with defaults
       const page = filterDto.pagination?.currentPage || 1;
       const limit = filterDto.pagination?.itemsPerPage || 5;
       const skip = (page - 1) * limit;
 
-      // Apply pagination
       queryBuilder.skip(skip).take(limit);
 
-      // Execute query and get count
       const [entities, total] = await queryBuilder.getManyAndCount();
 
-      // Transform to response DTOs using our custom transformation
       const data = entities.map((entity) =>
         this.transformToResponseDto(entity)
       );
 
-      // Calculate pagination metadata
       const pagination = {
         page,
         limit,
@@ -448,7 +431,6 @@ export class AssetBooksService {
 
       return new PaginatedResponseDto(data, pagination);
     } catch (e) {
-      console.log(e);
       throw e;
     }
   }
@@ -457,11 +439,9 @@ export class AssetBooksService {
     filterDto: AssetBookFilterDto
   ): Promise<PaginatedResponseDto<AssetItemResponseDto>> {
     try {
-      // Build query to get assets from asset book items
       const queryBuilder =
         this.assetBookItemRepository.createQueryBuilder("item");
 
-      // Join with asset book, asset, room, and unit
       queryBuilder
         .leftJoinAndSelect("item.asset", "asset")
         .leftJoinAndSelect("item.room", "room")
@@ -470,7 +450,6 @@ export class AssetBooksService {
         .leftJoinAndSelect("asset.category", "category")
         .leftJoinAndSelect("asset.rfidTag", "rfidTag");
 
-      // Apply filters
       if (filterDto.unitId) {
         queryBuilder.andWhere("book.unitId = :unitId", {
           unitId: filterDto.unitId,
@@ -493,15 +472,19 @@ export class AssetBooksService {
         });
       }
 
+      if (filterDto.status) {
+        queryBuilder.andWhere("item.status = :status", {
+          status: filterDto.status,
+        });
+      }
+
       if (filterDto.campusId) {
-        // Filter by campus through unit hierarchy
         queryBuilder.andWhere(
           "(unit.parentUnitId = :campusId OR unit.id = :campusId)",
           { campusId: filterDto.campusId }
         );
       }
 
-      // Apply global search if provided
       if (filterDto.search) {
         queryBuilder.andWhere(
           "(asset.fixedCode ILIKE :search OR asset.ktCode ILIKE :search OR asset.name ILIKE :search OR asset.origin ILIKE :search OR room.roomCode ILIKE :search)",
@@ -509,21 +492,15 @@ export class AssetBooksService {
         );
       }
 
-      // Add distinct to prevent duplicates
       queryBuilder.distinct(true);
 
-      // Add default sorting
       if (filterDto.sorting && filterDto.sorting.length > 0) {
-        // Sắp xếp theo priority (thấp hơn chạy trước)
         filterDto.sorting
           .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
           .forEach((sort) => {
             if (sort.field) {
-              // Xác định alias tự động (tên bảng tương ứng với field)
-              // Ví dụ: origin, name, type → nằm ở asset
               let alias = "asset";
 
-              // Bạn có thể mở rộng nếu cần sắp xếp theo room / unit
               if (["roomCode", "name"].includes(sort.field)) {
                 alias = "room";
               } else if (["year"].includes(sort.field)) {
@@ -537,22 +514,17 @@ export class AssetBooksService {
             }
           });
       } else {
-        // Sorting mặc định
         queryBuilder.addOrderBy("asset.status", "ASC");
       }
 
-      // Get pagination settings with defaults
       const page = filterDto.pagination?.currentPage || 1;
       const limit = filterDto.pagination?.itemsPerPage || 5;
       const skip = (page - 1) * limit;
 
-      // Apply pagination
       queryBuilder.skip(skip).take(limit);
 
-      // Execute query and get count
       const [items, total] = await queryBuilder.getManyAndCount();
 
-      // Transform to AssetResponseDto
       const data: AssetItemResponseDto[] = items.map((item) => ({
         id: item.asset.id,
         ktCode: item.asset.ktCode,
@@ -595,21 +567,15 @@ export class AssetBooksService {
 
       return new PaginatedResponseDto(data, pagination);
     } catch (e) {
-      console.log(e);
       throw e;
     }
   }
 
-  /**
-   * Lấy danh sách tài sản được đề xuất thanh lý từ inventory results
-   * Chỉ lấy những tài sản trong đơn vị mà user có quyền truy cập
-   */
   async findLiquidationProposedAssets(
     filterDto: LiquidationProposedFilterDto,
     currentUser: User
   ): Promise<PaginatedResponseDto<LiquidationProposedInventoryResultDto>> {
     try {
-      // Get the latest inventory session first
       const latestInventorySession = await this.inventorySessionRepository
         .createQueryBuilder("session")
         .orderBy("session.year", "DESC")
@@ -617,7 +583,6 @@ export class AssetBooksService {
         .getOne();
 
       if (!latestInventorySession) {
-        // Return empty result if no inventory session exists
         return new PaginatedResponseDto([], {
           page: 1,
           limit: filterDto.pagination?.itemsPerPage || 20,
@@ -628,11 +593,9 @@ export class AssetBooksService {
         });
       }
 
-      // Get accessible unit IDs for current user
       const unitAccessFilter =
         await this.permissionHelper.createUnitAccessFilter(currentUser);
 
-      // Check if user has no access to any units
       if (
         unitAccessFilter.value.includes("00000000-0000-0000-0000-000000000000")
       ) {
@@ -646,7 +609,6 @@ export class AssetBooksService {
         });
       }
 
-      // Build custom query with proper joins and filters
       let queryBuilder = this.inventoryResultRepository
         .createQueryBuilder("inventoryResult")
         .leftJoinAndSelect("inventoryResult.asset", "asset")
@@ -673,7 +635,6 @@ export class AssetBooksService {
           sessionId: latestInventorySession.id,
         });
 
-      // Apply unit access filter
       if (unitAccessFilter.operator === "in") {
         queryBuilder = queryBuilder.andWhere(
           "currentRoom.unitId IN (:...unitIds)",
@@ -685,9 +646,7 @@ export class AssetBooksService {
         });
       }
 
-      // Apply optional filters
       if (filterDto.roomId) {
-        // Check if user has access to this specific room's unit
         const accessibleUnitIds =
           await this.permissionHelper.getAccessibleUnitIds(currentUser);
 
@@ -702,7 +661,6 @@ export class AssetBooksService {
             { roomId: filterDto.roomId }
           );
         } else {
-          // If user doesn't have access to this room's unit, return empty result
           return new PaginatedResponseDto([], {
             page: 1,
             limit: filterDto.pagination?.itemsPerPage || 20,
@@ -720,7 +678,6 @@ export class AssetBooksService {
         });
       }
 
-      // Apply search filter
       if (filterDto.search) {
         queryBuilder = queryBuilder.andWhere(
           "(asset.name ILIKE :search OR asset.assetCode ILIKE :search OR asset.serialNumber ILIKE :search OR room.name ILIKE :search OR room.code ILIKE :search)",
@@ -728,9 +685,7 @@ export class AssetBooksService {
         );
       }
 
-      // Apply sorting if provided
       if (filterDto.sorting && filterDto.sorting.length > 0) {
-        // Sort by priority first
         const sortedConfigs = [...filterDto.sorting].sort(
           (a, b) => (a.priority || 0) - (b.priority || 0)
         );
@@ -738,7 +693,6 @@ export class AssetBooksService {
         sortedConfigs.forEach((sortConfig, index) => {
           if (!sortConfig.field) return;
 
-          // Map frontend field names to backend field paths
           let fieldPath = sortConfig.field;
           switch (sortConfig.field) {
             case "asset.name":
@@ -774,24 +728,20 @@ export class AssetBooksService {
           }
         });
       } else {
-        // Default sorting
         queryBuilder = queryBuilder.orderBy(
           "inventoryResult.createdAt",
           "DESC"
         );
       }
 
-      // Apply pagination
       const page = filterDto.pagination?.currentPage || 1;
       const limit = filterDto.pagination?.itemsPerPage || 20;
       const skip = (page - 1) * limit;
 
       queryBuilder = queryBuilder.skip(skip).take(limit);
 
-      // Execute query
       const [results, total] = await queryBuilder.getManyAndCount();
 
-      // Transform to response DTOs using class-transformer
       const transformedResults = results.map((result) => ({
         ...result,
         room: result.room
@@ -818,7 +768,7 @@ export class AssetBooksService {
             url: fileUrl.url,
             createdAt: fileUrl.createdAt,
           })) || [],
-        assignment: undefined, // Remove assignment from response
+        assignment: undefined,
       }));
 
       const data = plainToInstance(
@@ -829,7 +779,6 @@ export class AssetBooksService {
         }
       ) as LiquidationProposedInventoryResultDto[];
 
-      // Calculate pagination metadata
       const pagination = {
         page,
         limit,
@@ -841,14 +790,10 @@ export class AssetBooksService {
 
       return new PaginatedResponseDto(data, pagination);
     } catch (e) {
-      console.log(e);
       throw e;
     }
   }
 
-  /**
-   * Tạo sổ tài sản từ kết quả kiểm kê của đơn vị phân công
-   */
   async createAssetBookFromInventoryResults(
     createDto: CreateAssetBookFromInventoryDto,
     currentUser: User
@@ -856,7 +801,6 @@ export class AssetBooksService {
     const { assignmentId, year, roomIds, note } = createDto;
 
     try {
-      // Lấy thông tin assignment và kiểm tra tồn tại
       const assignment = await this.inventoryGroupAssignmentRepository.findOne({
         where: { id: assignmentId },
         relations: [
@@ -874,7 +818,6 @@ export class AssetBooksService {
         );
       }
 
-      // Kiểm tra quyền truy cập đơn vị
       const accessibleUnitIds =
         await this.permissionHelper.getAccessibleUnitIds(currentUser);
       if (!accessibleUnitIds.includes(assignment.unitId)) {
@@ -883,7 +826,6 @@ export class AssetBooksService {
         );
       }
 
-      // Kiểm tra sổ tài sản đã tồn tại chưa
       const existingAssetBook = await this.assetBookRepository.findOne({
         where: { unitId: assignment.unitId, year },
       });
@@ -894,7 +836,6 @@ export class AssetBooksService {
         );
       }
 
-      // Lấy kết quả kiểm kê đã hoàn thành
       const inventoryResultsQuery = this.inventoryResultRepository
         .createQueryBuilder("result")
         .leftJoinAndSelect("result.asset", "asset")
@@ -909,9 +850,8 @@ export class AssetBooksService {
             InventoryResultStatus.BROKEN,
           ],
         })
-        .andWhere("result.countedQuantity > 0"); // Chỉ lấy tài sản có số lượng thực tế > 0
+        .andWhere("result.countedQuantity > 0");
 
-      // Lọc theo phòng nếu có
       if (roomIds && roomIds.length > 0) {
         inventoryResultsQuery.andWhere("result.roomId IN (:...roomIds)", {
           roomIds,
@@ -927,7 +867,6 @@ export class AssetBooksService {
       }
 
       return await this.dataSource.transaction(async (manager) => {
-        // Tạo sổ tài sản
         const assetBook = manager.create(AssetBook, {
           unitId: assignment.unitId,
           year,
@@ -940,11 +879,9 @@ export class AssetBooksService {
 
         const savedAssetBook = await manager.save(assetBook);
 
-        // Tạo các mục trong sổ tài sản từ kết quả kiểm kê
         const assetBookItems: AssetBookItem[] = [];
 
         for (const result of inventoryResults) {
-          // Xác định trạng thái asset book item dựa trên kết quả kiểm kê
           let itemStatus = AssetBookItemStatus.IN_USE;
           let itemNote = result.note || "";
 
@@ -974,7 +911,7 @@ export class AssetBooksService {
             bookId: savedAssetBook.id,
             assetId: result.assetId,
             roomId: result.roomId,
-            quantity: result.countedQuantity, // Sử dụng số lượng thực tế từ kiểm kê
+            quantity: result.countedQuantity,
             status: itemStatus,
             assignedAt: new Date(),
             note: itemNote,
@@ -985,7 +922,6 @@ export class AssetBooksService {
 
         await manager.save(assetBookItems);
 
-        // Trả về thông tin asset book đã tạo thay vì gọi findOne
         const createdAssetBook = await manager.findOne(AssetBook, {
           where: { id: savedAssetBook.id },
           relations: [
@@ -1006,7 +942,6 @@ export class AssetBooksService {
         return this.transformToResponseDto(createdAssetBook);
       });
     } catch (error) {
-      console.error("Error creating asset book from inventory results:", error);
       throw error;
     }
   }
@@ -1061,7 +996,7 @@ export class AssetBooksService {
       // ================================
       try {
         ws.pageSetup = {
-          paperSize: 9, // A4
+          paperSize: 9,
           orientation: "landscape",
           margins: {
             left: 0.7,
@@ -1071,7 +1006,6 @@ export class AssetBooksService {
             header: 0.3,
             footer: 0.3,
           },
-          // scale: 80, // Thu nhỏ 80%
           horizontalCentered: true,
           verticalCentered: false,
           fitToPage: true, // Tự động fit vào trang
@@ -1087,17 +1021,12 @@ export class AssetBooksService {
           },
         ];
       } catch (setupError) {
-        console.warn("Page setup error, using minimal setup:", setupError);
-        // Fallback to minimal setup
         ws.pageSetup = {
           paperSize: 9,
           orientation: "landscape",
         };
       }
 
-      // ================================
-      //      DEFAULT FONT
-      // ================================
       ws.eachRow((row) => {
         row.eachCell((cell) => {
           cell.font = { name: "Times New Roman" };
@@ -1140,9 +1069,6 @@ export class AssetBooksService {
         });
       }
 
-      // ================================
-      //    HEADER TRÊN CÙNG
-      // ================================
       const set = (
         cell: string,
         value: string | null | undefined,
@@ -1150,11 +1076,10 @@ export class AssetBooksService {
         height?: number
       ) => {
         const c = ws.getCell(cell);
-        c.value = value || ""; // Handle null/undefined values
+        c.value = value || "";
         c.font = { name: "Times New Roman", ...font };
         c.alignment = { horizontal: "center" };
 
-        // c.row có thể là string, cần convert sang number
         if (height !== undefined) {
           const rowNumber = typeof c.row === "string" ? parseInt(c.row) : c.row;
           ws.getRow(rowNumber).height = height;
@@ -1185,9 +1110,6 @@ export class AssetBooksService {
         size: 12,
       });
 
-      // ================================
-      //       TIÊU ĐỀ CHÍNH
-      // ================================
       ws.mergeCells("A10", "P10");
       set(`A10`, `SỔ TÀI SẢN NĂM ${year}`, { size: 20, bold: true });
 
@@ -1254,7 +1176,6 @@ export class AssetBooksService {
       };
       ws.getCell("A42").alignment = { horizontal: "center" };
 
-      // Khoa …
       ws.mergeCells("A43:P43");
       ws.getCell("A43").value = unit.name;
       ws.getCell("A43").font = {
@@ -1348,7 +1269,6 @@ export class AssetBooksService {
           ws.mergeCells(`N${currentRow}:P${currentRow}`);
           ws.getCell(currentRow, 14).value = item.note || "";
 
-          // Style cho tất cả cells từ A đến P
           for (let col = 1; col <= 16; col++) {
             const cell = ws.getCell(currentRow, col);
             cell.font = { name: "Times New Roman", size: 10 };
@@ -1394,14 +1314,10 @@ export class AssetBooksService {
       const buffer = await workbook.xlsx.writeBuffer();
       return Buffer.from(buffer);
     } catch (e) {
-      console.error("Export error:", e);
       throw e;
     }
   }
 
-  /**
-   * Xuất sổ tài sản ra file Excel
-   */
   async exportAssetBookToExcel(
     type: AssetType,
     unitId: string,
@@ -1409,14 +1325,12 @@ export class AssetBooksService {
     currentUser: User
   ): Promise<Buffer> {
     try {
-      // Kiểm tra quyền truy cập của user
       const accessibleUnitIds =
         await this.permissionHelper.getAccessibleUnitIds(currentUser);
       if (!accessibleUnitIds.includes(unitId)) {
         throw new BadRequestException("Bạn không có quyền truy cập đơn vị này");
       }
 
-      // Lấy thông tin đơn vị
       const unit = await this.unitRepository.findOne({
         where: { id: unitId },
         relations: ["parentUnit"],
@@ -1426,10 +1340,6 @@ export class AssetBooksService {
         throw new NotFoundException(`Không tìm thấy đơn vị với ID ${unitId}`);
       }
 
-      console.log("Unit data:", { id: unit.id, name: unit.name, type });
-      console.log("Year:", year);
-
-      // Lấy sổ tài sản
       const assetBook = await this.assetBookRepository.findOne({
         where: { unitId, year },
         relations: [
@@ -1448,21 +1358,17 @@ export class AssetBooksService {
         );
       }
 
-      // Lọc tài sản theo loại
       const filteredItems = assetBook.items.filter(
         (item) =>
           item.asset.type === type && item.status === AssetBookItemStatus.IN_USE
       );
 
-      // Tạo workbook Excel
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Sổ tài sản");
 
-      // Thông tin header
       const assetTypeText =
         type === AssetType.FIXED_ASSET ? "Tài sản cố định" : "Công cụ dụng cụ";
 
-      // Merge cells và thêm tiêu đề
       worksheet.mergeCells("A1:H1");
       worksheet.getCell("A1").value = "SỔ THEO DÕI TÀI SẢN";
       worksheet.getCell("A1").font = { bold: true, size: 16 };
@@ -1483,10 +1389,8 @@ export class AssetBooksService {
       worksheet.getCell("A4").font = { bold: true, size: 12 };
       worksheet.getCell("A4").alignment = { horizontal: "center" };
 
-      // Thêm dòng trống
       worksheet.addRow([]);
 
-      // Header của bảng
       const headerRow = worksheet.addRow([
         "STT",
         "Mã tài sản",
@@ -1498,7 +1402,6 @@ export class AssetBooksService {
         "Ghi chú",
       ]);
 
-      // Style cho header
       headerRow.eachCell((cell, colNumber) => {
         cell.font = { bold: true };
         cell.fill = {
@@ -1515,7 +1418,6 @@ export class AssetBooksService {
         cell.alignment = { horizontal: "center", vertical: "middle" };
       });
 
-      // Thêm dữ liệu
       filteredItems.forEach((item, index) => {
         const assetCode =
           type === AssetType.FIXED_ASSET
@@ -1533,7 +1435,6 @@ export class AssetBooksService {
           item.note || "",
         ]);
 
-        // Style cho data rows
         dataRow.eachCell((cell, colNumber) => {
           cell.border = {
             top: { style: "thin" },
@@ -1542,9 +1443,7 @@ export class AssetBooksService {
             right: { style: "thin" },
           };
 
-          // Căn lề
           if (colNumber === 1 || colNumber === 6) {
-            // STT và Số lượng
             cell.alignment = { horizontal: "center", vertical: "middle" };
           } else {
             cell.alignment = { horizontal: "left", vertical: "middle" };
@@ -1552,19 +1451,17 @@ export class AssetBooksService {
         });
       });
 
-      // Tự động điều chỉnh độ rộng cột
       worksheet.columns = [
-        { width: 5 }, // STT
-        { width: 15 }, // Mã tài sản
-        { width: 30 }, // Tên tài sản
-        { width: 25 }, // Thông số kỹ thuật
-        { width: 12 }, // Đơn vị tính
-        { width: 10 }, // Số lượng
-        { width: 15 }, // Phòng
-        { width: 20 }, // Ghi chú
+        { width: 5 },
+        { width: 15 },
+        { width: 30 },
+        { width: 25 },
+        { width: 12 },
+        { width: 10 },
+        { width: 15 },
+        { width: 20 },
       ];
 
-      // Thêm thông tin thống kê ở cuối
       const totalRow = worksheet.addRow([]);
       const summaryRow = worksheet.addRow([
         "",
@@ -1581,11 +1478,9 @@ export class AssetBooksService {
       summaryRow.getCell(6).font = { bold: true };
       summaryRow.getCell(6).alignment = { horizontal: "center" };
 
-      // Xuất ra buffer
       const buffer = await workbook.xlsx.writeBuffer();
       return Buffer.from(buffer);
     } catch (error) {
-      console.error("Error exporting asset book to Excel:", error);
       throw error;
     }
   }
