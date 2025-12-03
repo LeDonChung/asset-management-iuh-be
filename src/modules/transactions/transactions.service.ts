@@ -51,7 +51,6 @@ export class TransactionsService {
     createDto: CreateTransactionDto,
     requesterId: string,
   ): Promise<TransactionResponseDto> {
-    // Validate assets exist and are available for transfer
     const assetIds = createDto.items.map(item => item.assetId);
     const assets = await this.assetRepo.findByIds(assetIds);
     
@@ -59,7 +58,6 @@ export class TransactionsService {
       throw new BadRequestException('Một số tài sản không tồn tại');
     }
 
-    // Check if assets are in valid state for transfer
     const invalidAssets = assets.filter(asset => 
       ![AssetStatus.IN_USE].includes(asset.status)
     );
@@ -70,12 +68,10 @@ export class TransactionsService {
       );
     }
 
-    // Validate fromUnitId and toUnitId are different (for TRANSFER)
     if (createDto.fromUnitId === createDto.toUnitId) {
       throw new BadRequestException('Đơn vị bàn giao và đơn vị tiếp nhận phải khác nhau');
     }
 
-    // Validate that assets belong to fromUnit by checking current asset books
     const currentYear = new Date().getFullYear();
     const fromAssetBook = await this.findOrCreateAssetBook(createDto.fromUnitId, currentYear);
     
@@ -92,13 +88,11 @@ export class TransactionsService {
       );
     }
 
-    // Tìm phòng kho mặc định của đơn vị đích
     const warehouseRoom = await this.findUnitWarehouseRoom(createDto.toUnitId);
     if (!warehouseRoom) {
       throw new BadRequestException('Không tìm thấy phòng kho mặc định cho đơn vị đích');
     }
 
-    // Create transfer transaction với trạng thái từ DTO hoặc mặc định DRAFT
     const transaction = this.transactionRepo.create({
       type: TransactionType.TRANSFER,
       fromUnitId: createDto.fromUnitId,
@@ -110,20 +104,18 @@ export class TransactionsService {
 
     const savedTransaction = await this.transactionRepo.save(transaction);
 
-    // Create transaction items - tự động set toRoomId = kho đơn vị đích cho tất cả items
     const items = createDto.items.map(item =>
       this.transactionItemRepo.create({
         transactionId: savedTransaction.id,
         assetId: item.assetId,
         fromRoomId: item.fromRoomId,
-        toRoomId: warehouseRoom.id, // Tất cả tài sản đều chuyển về kho đơn vị đích
+        toRoomId: warehouseRoom.id,
         note: item.note,
       })
     );
 
     await this.transactionItemRepo.save(items);
 
-    // Create history record for TRANSFER
     const statusText = createDto.status === TransactionStatus.PROPOSED ? 'đề xuất' : 'nháp';
     await this.createTransactionHistory(
       savedTransaction.id,
@@ -158,12 +150,9 @@ export class TransactionsService {
         relations: ['fromUnit', 'toUnit', 'requester', 'items'],
       };
 
-      // **1. SUPER ADMIN: Xem tất cả giao dịch**
       if (this.permissionHelper.isAdmin(currentUser)) {
-        // Admin có thể xem tất cả, chỉ áp dụng filters từ request
         const quickFilterConditions: any[] = [];
         
-        // Handle additional filters from request
         if (filterDto.type) {
           quickFilterConditions.push({
             field: 'type',
@@ -191,7 +180,6 @@ export class TransactionsService {
           });
         }
 
-        // Merge với existing conditions
         filterDto.conditions = [
           ...(filterDto.conditions || []),
           ...quickFilterConditions,
@@ -206,13 +194,10 @@ export class TransactionsService {
         );
       }
 
-      // **2. PHÒNG QUẢN TRỊ (ADMIN_DEPT/CHILD_UNITS): Xem tất cả giao dịch của đơn vị con (trừ DRAFT)**
       else if (this.permissionHelper.isAdminDeptUser(currentUser)) {
-        // Lấy tất cả unit IDs mà admin dept có quyền quản lý
         const accessibleUnitIds = await this.permissionHelper.getAccessibleUnitIds(currentUser);
         
         if (accessibleUnitIds.length === 0) {
-          console.log('No accessible units for Admin Dept user');
           return new PaginatedResponseDto([], {
             page: 1,
             limit: filterDto.pagination?.itemsPerPage || 5,
@@ -223,7 +208,6 @@ export class TransactionsService {
           });
         }
 
-        // Sử dụng query builder để xử lý logic OR phức tạp
         const queryBuilder = this.transactionRepo
           .createQueryBuilder('transaction')
           .leftJoinAndSelect('transaction.fromUnit', 'fromUnit')
@@ -242,7 +226,6 @@ export class TransactionsService {
             ]
           });
 
-        // Handle additional filters from request
         if (filterDto.type) {
           queryBuilder.andWhere('transaction.type = :type', { type: filterDto.type });
         }
@@ -252,11 +235,9 @@ export class TransactionsService {
         }
 
         if (filterDto.fromUnitId) {
-          // Kiểm tra xem user có quyền xem unit này không
           if (accessibleUnitIds.includes(filterDto.fromUnitId)) {
             queryBuilder.andWhere('transaction.fromUnitId = :fromUnitId', { fromUnitId: filterDto.fromUnitId });
           } else {
-            // Nếu không có quyền, trả về kết quả rỗng
             return new PaginatedResponseDto([], {
               page: 1,
               limit: filterDto.pagination?.itemsPerPage || 5,
@@ -268,7 +249,6 @@ export class TransactionsService {
           }
         }
 
-        // Apply search if provided
         if (filterDto.search) {
           queryBuilder.andWhere(
             '(transaction.requestNote LIKE :search OR fromUnit.name LIKE :search OR toUnit.name LIKE :search OR requester.fullName LIKE :search)',
@@ -276,10 +256,8 @@ export class TransactionsService {
           );
         }
 
-        // Apply sorting
         queryBuilder.orderBy('transaction.createdAt', 'DESC');
 
-        // Apply pagination
         const page = filterDto.pagination?.currentPage || 1;
         const limit = filterDto.pagination?.itemsPerPage || 5;
         const offset = (page - 1) * limit;
@@ -291,7 +269,6 @@ export class TransactionsService {
 
         const totalPages = Math.ceil(total / limit);
 
-        // Transform to response DTOs for Admin Dept
         const transformedData = plainToInstance(SimplifiedTransactionResponseDto, results, {
           excludeExtraneousValues: true,
         });
@@ -309,7 +286,6 @@ export class TransactionsService {
         );
       }
 
-      // **3. ĐỚN VỊ SỬ DỤNG (USER_DEPT/UNIT): Chỉ xem giao dịch mình tạo và giao dịch mình nhận (đã approved)**
       else if (this.permissionHelper.isUserDeptUser(currentUser)) {
         if (!currentUser.unitId) {
           return new PaginatedResponseDto([], {
@@ -322,7 +298,6 @@ export class TransactionsService {
           });
         }
 
-        // Tạo query builder thủ công để handle logic OR phức tạp
         const queryBuilder = this.transactionRepo
           .createQueryBuilder('transaction')
           .leftJoinAndSelect('transaction.fromUnit', 'fromUnit')
@@ -335,7 +310,6 @@ export class TransactionsService {
             approvedStatuses: [TransactionStatus.APPROVED, TransactionStatus.RECEIVED, TransactionStatus.REJECTED],
           });
 
-        // Apply additional filters
         if (filterDto.type) {
           queryBuilder.andWhere('transaction.type = :type', { type: filterDto.type });
         }
@@ -345,11 +319,9 @@ export class TransactionsService {
         }
 
         if (filterDto.fromUnitId) {
-          // User chỉ có thể filter theo unit của mình
           if (filterDto.fromUnitId === currentUser.unitId) {
             queryBuilder.andWhere('transaction.fromUnitId = :fromUnitId', { fromUnitId: filterDto.fromUnitId });
           } else {
-            // Nếu filter unit khác, trả về rỗng
             return new PaginatedResponseDto([], {
               page: 1,
               limit: filterDto.pagination?.itemsPerPage || 5,
@@ -361,7 +333,6 @@ export class TransactionsService {
           }
         }
 
-        // Apply search if provided
         if (filterDto.search) {
           queryBuilder.andWhere(
             '(transaction.requestNote LIKE :search OR fromUnit.name LIKE :search OR toUnit.name LIKE :search OR requester.fullName LIKE :search)',
@@ -369,10 +340,8 @@ export class TransactionsService {
           );
         }
 
-        // Apply sorting
         queryBuilder.orderBy('transaction.createdAt', 'DESC');
 
-        // Apply pagination
         const page = filterDto.pagination?.currentPage || 1;
         const limit = filterDto.pagination?.itemsPerPage || 5;
         const offset = (page - 1) * limit;
@@ -384,7 +353,6 @@ export class TransactionsService {
 
         const totalPages = Math.ceil(total / limit);
 
-        // Transform to response DTOs for User Dept  
         const transformedData = plainToInstance(SimplifiedTransactionResponseDto, results, {
           excludeExtraneousValues: true,
         });
@@ -402,7 +370,6 @@ export class TransactionsService {
         );
       }
 
-      // **4. Các user khác không có quyền xem**
       else {
         return new PaginatedResponseDto([], {
           page: 1,
@@ -414,7 +381,6 @@ export class TransactionsService {
         });
       }
     } catch (e) {
-      console.log(e);
       throw e;
     }
   }
@@ -463,11 +429,9 @@ export class TransactionsService {
       );
     }
 
-    // Update transaction fields
     Object.assign(transaction, updateDto);
     await this.transactionRepo.save(transaction);
 
-    // Update items if provided
     if (updateDto.items && updateDto.items.length > 0) {
       await this.transactionItemRepo.delete({ transactionId: id });
       
@@ -511,10 +475,6 @@ export class TransactionsService {
     transaction.status = TransactionStatus.PROPOSED;
     await this.transactionRepo.save(transaction);
 
-    // For PROPOSED status, assets remain IN_USE but transaction is pending approval
-    // No asset status changes needed until APPROVED
-
-    // Create history record
     await this.createTransactionHistory(
       id,
       oldStatus,
@@ -549,7 +509,6 @@ export class TransactionsService {
     transaction.approverId = approverId;
     await this.transactionRepo.save(transaction);
 
-    // Create history record with evidence URL
     const history = this.transactionHistoryRepo.create({
       transactionId: id,
       oldStatus,
@@ -600,7 +559,6 @@ export class TransactionsService {
       throw new BadRequestException('Chỉ có thể tiếp nhận giao dịch đã được phê duyệt');
     }
 
-    // Tìm phòng kho của đơn vị đích
     const warehouseRoom = await this.findUnitWarehouseRoom(transaction.toUnitId);
     if (!warehouseRoom) {
       throw new BadRequestException('Không tìm thấy phòng kho mặc định của đơn vị đích');
@@ -608,7 +566,6 @@ export class TransactionsService {
 
     const warehouseInfo = `kho ${warehouseRoom.name} của ${transaction.toUnit.name}`;
 
-    // Cập nhật sổ tài sản và phòng của tài sản
     await this.handleAssetTransferOnReceive(transaction, warehouseRoom.id);
 
     return this.updateTransactionStatus(
@@ -640,28 +597,22 @@ export class TransactionsService {
 
     const oldStatus = transaction.status;
 
-    // Update transaction
     Object.assign(transaction, { status: newStatus, ...additionalFields });
     await this.transactionRepo.save(transaction);
 
-    // Update asset status and asset books based on new transaction status
     const assets = transaction.items.map(item => item.asset);
 
     switch (newStatus) {
       case TransactionStatus.APPROVED:
-        // Khi chấp nhận: chỉ ghi lại lịch sử
         await this.createTransactionHistory(id, oldStatus, newStatus, updaterId, note);
         break;
       case TransactionStatus.RECEIVED:
-        // Khi tiếp nhận: chỉ ghi lại lịch sử
         await this.createTransactionHistory(id, oldStatus, newStatus, updaterId, note);
         break;
       case TransactionStatus.REJECTED:
-        // Khi từ chối: chỉ ghi lại lịch sử
         await this.handleRejectedTransaction(id, oldStatus, newStatus, updaterId, note);
         break;
       default:
-        // Cho PROPOSED: chỉ tạo history
         await this.createTransactionHistory(id, oldStatus, newStatus, updaterId, note);
     }
 
@@ -675,7 +626,6 @@ export class TransactionsService {
     updaterId: string,
     note: string,
   ): Promise<void> {
-    // Chỉ ghi lại lịch sử, không thay đổi tài sản hay sổ tài sản
     await this.createTransactionHistory(
       transactionId,
       oldStatus,
@@ -714,7 +664,7 @@ export class TransactionsService {
       assetBook = this.assetBookRepo.create({
         unitId,
         year,
-        status: 'OPEN' as any // AssetBookStatus.OPEN
+        status: 'OPEN' as any
       });
       assetBook = await this.assetBookRepo.save(assetBook);
     }
@@ -730,8 +680,8 @@ export class TransactionsService {
       [TransactionStatus.DRAFT]: [TransactionStatus.PROPOSED],
       [TransactionStatus.PROPOSED]: [TransactionStatus.APPROVED, TransactionStatus.REJECTED],
       [TransactionStatus.APPROVED]: [TransactionStatus.RECEIVED, TransactionStatus.REJECTED],
-      [TransactionStatus.RECEIVED]: [], // Trạng thái kết thúc
-      [TransactionStatus.REJECTED]: [], // Không thể chuyển trạng thái sau khi đã từ chối
+      [TransactionStatus.RECEIVED]: [],
+      [TransactionStatus.REJECTED]: [],
     };
 
     const allowedTransitions = validTransitions[currentStatus] || [];
@@ -743,17 +693,12 @@ export class TransactionsService {
     }
   }
 
-  /**
-   * Tìm phòng kho mặc định của đơn vị
-   * Phòng kho có đặc điểm: building = "INVENTORY", name = "Kho"
-   */
   private async findUnitWarehouseRoom(unitId: string): Promise<Room | null> {
     const unit = await this.unitRepo.findOne({ where: { id: unitId } });
     if (!unit) {
       return null;
     }
 
-    // Tìm phòng kho theo convention: name = "Kho", building = "INVENTORY"
     const warehouseRoom = await this.roomRepo.findOne({
       where: {
         unitId: unitId,
@@ -766,24 +711,16 @@ export class TransactionsService {
     return warehouseRoom;
   }
 
-  /**
-   * Xử lý việc chuyển giao tài sản khi nhận transaction
-   * - Cập nhật AssetBookItem cũ thành TRANSFERRED
-   * - Tạo AssetBookItem mới cho đơn vị đích
-   * - Cập nhật phòng hiện tại của tài sản
-   */
   private async handleAssetTransferOnReceive(
     transaction: AssetTransaction,
     warehouseRoomId: string,
   ): Promise<void> {
     const currentYear = new Date().getFullYear();
     
-    // 1. Tìm hoặc tạo sổ tài sản của đơn vị nguồn và đơn vị đích
     const fromAssetBook = await this.findOrCreateAssetBook(transaction.fromUnitId, currentYear);
     const toAssetBook = await this.findOrCreateAssetBook(transaction.toUnitId, currentYear);
 
     for (const item of transaction.items) {
-      // 2. Cập nhật AssetBookItem cũ của đơn vị nguồn thành TRANSFERRED
       await this.assetBookItemRepo
         .createQueryBuilder()
         .update(AssetBookItem)
@@ -793,7 +730,6 @@ export class TransactionsService {
         .andWhere('status = :currentStatus', { currentStatus: AssetBookItemStatus.IN_USE })
         .execute();
 
-      // 3. Tạo AssetBookItem mới cho đơn vị đích
       const newAssetBookItem = this.assetBookItemRepo.create({
         bookId: toAssetBook.id,
         assetId: item.assetId,
@@ -805,7 +741,6 @@ export class TransactionsService {
       });
       await this.assetBookItemRepo.save(newAssetBookItem);
 
-      // 4. Cập nhật phòng hiện tại của tài sản (currentRoomId)
       await this.assetRepo
         .createQueryBuilder()
         .update('assets')

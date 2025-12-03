@@ -2,6 +2,7 @@ import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsEnum, IsString, IsNumber, IsUUID } from 'class-validator';
 import { BaseFilterDto } from 'src/common/dto/base-filter.dto';
 import { AssetType } from 'src/common/shared/AssetType';
+import { AssetBookItemStatus } from 'src/common/shared/AssetBookItemStatus';
 
 export class AssetBookFilterDto extends BaseFilterDto {
 
@@ -29,5 +30,13 @@ export class AssetBookFilterDto extends BaseFilterDto {
   @IsOptional()
   @IsEnum(AssetType)
   assetType: AssetType;
+
+  @ApiPropertyOptional({ 
+    description: 'Status in Asset Book (Trạng thái trong sổ)',
+    enum: AssetBookItemStatus
+  })
+  @IsOptional()
+  @IsEnum(AssetBookItemStatus)
+  status?: AssetBookItemStatus;
 
 }
