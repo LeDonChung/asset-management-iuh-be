@@ -294,8 +294,13 @@ export class MovementsService {
         'approver',
         'items',
         'items.asset',
+        'items.asset.currentRoom',
+        'items.asset.currentRoom.unit',
+        'items.asset.category',
         'items.fromRoom',
+        'items.fromRoom.unit',
         'items.toRoom',
+        'items.toRoom.unit',
         'items.mover',
         'histories',
         'histories.changer',
@@ -342,16 +347,48 @@ export class MovementsService {
           name: item.asset.name,
           ktCode: item.asset.ktCode,
           fixedCode: item.asset.fixedCode,
+          specs: item.asset.specs,
+          unit: item.asset.unit,
+          quantity: item.asset.quantity,
+          entrydate: item.asset.entrydate instanceof Date ? item.asset.entrydate.toISOString().split('T')[0] : item.asset.entrydate,
+          origin: item.asset.origin,
+          purchasePackage: item.asset.purchasePackage,
+          type: item.asset.type,
+          status: item.asset.status,
+          currentRoom: item.asset.currentRoom ? {
+            id: item.asset.currentRoom.id,
+            name: item.asset.currentRoom.name,
+            roomCode: item.asset.currentRoom.roomCode,
+            unit: item.asset.currentRoom.unit ? {
+              id: item.asset.currentRoom.unit.id,
+              name: item.asset.currentRoom.unit.name,
+              unitCode: item.asset.currentRoom.unit.unitCode,
+            } : null,
+          } : null,
+          category: item.asset.category ? {
+            id: item.asset.category.id,
+            name: item.asset.category.name,
+          } : null,
         } : null,
         fromRoom: item.fromRoom ? {
           id: item.fromRoom.id,
           name: item.fromRoom.name,
           code: item.fromRoom.roomCode,
+          unit: item.fromRoom.unit ? {
+            id: item.fromRoom.unit.id,
+            name: item.fromRoom.unit.name,
+            unitCode: item.fromRoom.unit.unitCode,
+          } : null,
         } : null,
         toRoom: item.toRoom ? {
           id: item.toRoom.id,
           name: item.toRoom.name,
           code: item.toRoom.roomCode,
+          unit: item.toRoom.unit ? {
+            id: item.toRoom.unit.id,
+            name: item.toRoom.unit.name,
+            unitCode: item.toRoom.unit.unitCode,
+          } : null,
         } : null,
         mover: item.mover ? {
           id: item.mover.id,
@@ -386,8 +423,8 @@ export class MovementsService {
       throw new NotFoundException('Không tìm thấy yêu cầu di chuyển');
     }
 
-    if (movement.status !== MoveStatus.DRAFT) {
-      throw new BadRequestException('Chỉ có thể cập nhật yêu cầu di chuyển ở trạng thái nháp');
+    if (movement.status !== MoveStatus.DRAFT && movement.status !== MoveStatus.REJECTED) {
+      throw new BadRequestException('Chỉ có thể cập nhật yêu cầu di chuyển ở trạng thái nháp (DRAFT) hoặc bị từ chối (REJECTED)');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -494,7 +531,15 @@ export class MovementsService {
   }
 
   async proposeMovement(id: string, proposeDto: ProposeMovementDto, userId: string): Promise<MovementResponseDto> {
-    return this.updateMovementStatus(id, MoveStatus.PENDING_APPROVAL, userId, proposeDto.note || 'Gửi đề xuất di chuyển');
+    return this.updateMovementStatus(
+      id, 
+      MoveStatus.PENDING_APPROVAL, 
+      userId, 
+      proposeDto.note || 'Gửi đề xuất di chuyển',
+      {
+        evidenceUrl: proposeDto.evidenceUrl,
+      }
+    );
   }
 
   async approveMovement(id: string, approveDto: ApproveMovementDto, approverId: string): Promise<MovementResponseDto> {
@@ -515,7 +560,6 @@ export class MovementsService {
     await queryRunner.startTransaction();
 
     try {
-      // Update movement to APPROVED
       movement.status = MoveStatus.APPROVED;
       movement.approverId = approverId;
       movement.approvalNote = approveDto.approvalNote;
@@ -523,7 +567,6 @@ export class MovementsService {
 
       await queryRunner.manager.save(movement);
 
-      // Create history record for approval with evidence URL
       const approvalHistory = this.movementHistoryRepository.create({
         movementId: id,
         oldStatus: MoveStatus.PENDING_APPROVAL,
@@ -535,12 +578,10 @@ export class MovementsService {
 
       await queryRunner.manager.save(approvalHistory);
 
-      // Update asset locations, asset book and complete movement
       if (movement.items && movement.items.length > 0) {
         const currentYear = new Date().getFullYear();
 
         for (const item of movement.items) {
-          // Load asset with current room to get unitId
           const asset = await queryRunner.manager.findOne(Asset, {
             where: { id: item.assetId },
             relations: ['currentRoom', 'currentRoom.unit']
@@ -550,13 +591,11 @@ export class MovementsService {
             throw new NotFoundException(`Không tìm thấy thông tin đầy đủ của tài sản ${item.assetId}`);
           }
 
-          // Update asset currentRoomId
           await queryRunner.manager.update(Asset, 
             { id: item.assetId }, 
             { currentRoomId: item.toRoomId }
           );
   
-          // Update movement item
           await queryRunner.manager.update(AssetMovementItem,
             { id: item.id },
             { 
@@ -565,7 +604,6 @@ export class MovementsService {
             }
           );
 
-          // Update AssetBookItem - cập nhật roomId trong sổ tài sản
           const assetBook = await this.findOrCreateAssetBook(
             queryRunner.manager,
             asset.currentRoom.unit.id,
@@ -584,23 +622,6 @@ export class MovementsService {
             .andWhere('status = :status', { status: AssetBookItemStatus.IN_USE })
             .execute();
         }
-  
-        // Update movement status to COMPLETED
-        movement.status = MoveStatus.COMPLETED;
-        movement.completedAt = new Date();
-  
-        await queryRunner.manager.save(movement);
-  
-        // Create history record for completion
-        const completionHistory = this.movementHistoryRepository.create({
-          movementId: id,
-          oldStatus: MoveStatus.APPROVED,
-          newStatus: MoveStatus.COMPLETED,
-          changedBy: approverId,
-          note: 'Hoàn thành di chuyển tài sản',
-        });
-  
-        await queryRunner.manager.save(completionHistory);
       }
 
       await queryRunner.commitTransaction();
@@ -620,8 +641,8 @@ export class MovementsService {
       throw new NotFoundException('Không tìm thấy yêu cầu di chuyển');
     }
 
-    if (![MoveStatus.PENDING_APPROVAL, MoveStatus.APPROVED].includes(movement.status)) {
-      throw new BadRequestException('Chỉ có thể từ chối yêu cầu di chuyển ở trạng thái chờ phê duyệt hoặc đã phê duyệt');
+    if (movement.status !== MoveStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('Chỉ có thể từ chối yêu cầu di chuyển ở trạng thái chờ phê duyệt');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -665,6 +686,7 @@ export class MovementsService {
     additionalData?: {
       approvalNote?: string;
       rejectionReason?: string;
+      evidenceUrl?: string;
     }
   ): Promise<MovementResponseDto> {
     const movement = await this.movementRepository.findOne({ where: { id } });
@@ -700,9 +722,6 @@ export class MovementsService {
           movement.approvedAt = new Date();
           movement.approverId = userId;
           break;
-        case MoveStatus.COMPLETED:
-          movement.completedAt = new Date();
-          break;
         case MoveStatus.CANCELLED:
           movement.cancelledAt = new Date();
           break;
@@ -717,6 +736,7 @@ export class MovementsService {
         newStatus: status,
         changedBy: userId,
         note: note || `Cập nhật trạng thái từ ${oldStatus} sang ${status}`,
+        evidenceUrl: additionalData?.evidenceUrl,
       });
 
       await queryRunner.manager.save(history);
@@ -736,8 +756,8 @@ export class MovementsService {
     const transitions: Record<MoveStatus, MoveStatus[]> = {
       [MoveStatus.DRAFT]: [MoveStatus.PENDING_APPROVAL, MoveStatus.CANCELLED],
       [MoveStatus.PENDING_APPROVAL]: [MoveStatus.APPROVED, MoveStatus.REJECTED, MoveStatus.CANCELLED],
-      [MoveStatus.APPROVED]: [MoveStatus.COMPLETED, MoveStatus.REJECTED, MoveStatus.CANCELLED],
-      [MoveStatus.REJECTED]: [MoveStatus.CANCELLED],
+      [MoveStatus.APPROVED]: [MoveStatus.CANCELLED],
+      [MoveStatus.REJECTED]: [MoveStatus.PENDING_APPROVAL, MoveStatus.CANCELLED],
       [MoveStatus.COMPLETED]: [],
       [MoveStatus.CANCELLED]: [],
     };
