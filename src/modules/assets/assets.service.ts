@@ -33,6 +33,7 @@ import { BulkLocationUpdateDto, BulkLocationUpdateResultDto } from "./dto/bulk-l
 import { AssetBookItem } from "src/entities/asset-book-item.entity";
 import { AssetBook } from "src/entities/asset-book.entity";
 import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
+import { AssetBookStatus } from "src/common/shared/AssetBookStatus";
 import { AssetHistoryResponseDto, TransactionHistoryItemDto, MovementHistoryItemDto, LiquidationHistoryItemDto } from "./dto/asset-history-response.dto";
 import { AssetTransactionItem } from "src/entities/asset-transaction-item.entity";
 import { AssetTransactionHistory } from "src/entities/asset-transaction-history.entity";
@@ -177,9 +178,11 @@ export class AssetsService {
         asset.fixedCode = await this.generateFixedCode(createAssetDto.categoryId);
       }
 
+      let room: Room | null = null;
       if (createAssetDto.currentRoomId != undefined) {
-        const room = await this.roomRepository.findOne({
+        room = await this.roomRepository.findOne({
           where: { id: createAssetDto.currentRoomId },
+          relations: ['unit'],
         });
         if (!room) {
           throw new NotFoundException(
@@ -203,6 +206,18 @@ export class AssetsService {
 
       if (currentUser) {
         asset.creator = currentUser;
+      }
+
+      let shouldAddToBook = false;
+      
+      if (asset.type === AssetType.FIXED_ASSET) {
+        if (createAssetDto.rfid && createAssetDto.currentRoomId) {
+          shouldAddToBook = true;
+        }
+      } else if (asset.type === AssetType.TOOLS_EQUIPMENT) {
+        if (createAssetDto.currentRoomId) {
+          shouldAddToBook = true;
+        }
       }
 
       if (createAssetDto.rfid && asset.type === AssetType.FIXED_ASSET) {
@@ -231,7 +246,13 @@ export class AssetsService {
         await this.rfidTagRepository.save(rfidTag);
         
         savedAsset.status = AssetStatus.IN_USE;
-        return plainToInstance(AssetResponseDto, await this.assetRepository.save(savedAsset), {
+        const finalAsset = await this.assetRepository.save(savedAsset);
+        
+        if (shouldAddToBook && room && room.unitId) {
+          await this.addAssetToBook(finalAsset, room, createAssetDto.quantity || 1);
+        }
+        
+        return plainToInstance(AssetResponseDto, finalAsset, {
           excludeExtraneousValues: true,
         });
       }
@@ -241,11 +262,53 @@ export class AssetsService {
       }
 
       const savedAsset = await this.assetRepository.save(asset);
+      
+      if (shouldAddToBook && room && room.unitId) {
+        await this.addAssetToBook(savedAsset, room, createAssetDto.quantity || 1);
+      }
+      
       return plainToInstance(AssetResponseDto, savedAsset, {
         excludeExtraneousValues: true,
       });
     } catch (error) {
       throw new BadRequestException("Failed to create asset: " + error.message);
+    }
+  }
+
+  private async addAssetToBook(asset: Asset, room: Room, quantity: number): Promise<void> {
+    try {
+      const currentYear = new Date().getFullYear();
+      
+      let assetBook = await this.assetBookRepository.findOne({
+        where: {
+          unitId: room.unitId,
+          year: currentYear,
+          status: AssetBookStatus.OPEN,
+        },
+      });
+
+      if (!assetBook) {
+        assetBook = this.assetBookRepository.create({
+          unitId: room.unitId,
+          year: currentYear,
+          status: AssetBookStatus.OPEN,
+        });
+        assetBook = await this.assetBookRepository.save(assetBook);
+      }
+
+      const assetBookItem = this.assetBookItemRepository.create({
+        bookId: assetBook.id,
+        assetId: asset.id,
+        roomId: room.id,
+        quantity: quantity,
+        assignedAt: new Date(),
+        status: AssetBookItemStatus.IN_USE,
+        note: '',
+      });
+
+      await this.assetBookItemRepository.save(assetBookItem);
+    } catch (error) {
+      console.error('Error adding asset to book:', error);
     }
   }
 
@@ -328,14 +391,12 @@ export class AssetsService {
           }
         }
 
-        if (updateAssetDto.rfid !== undefined) {
-          const currentRfid = asset.type === AssetType.FIXED_ASSET 
-            ? (asset as FixedAsset).rfidTag?.rfidId 
-            : null;
+        if (updateAssetDto.rfid !== undefined && asset.type === AssetType.FIXED_ASSET) {
+          const currentRfid = (asset as FixedAsset).rfidTag?.rfidId;
           
-          if (updateAssetDto.rfid !== currentRfid) {
+          if (currentRfid && updateAssetDto.rfid !== currentRfid) {
             throw new BadRequestException(
-              'Không thể cập nhật mã RFID khi tài sản đã được phân bổ cho phòng sử dụng. Vui lòng thu hồi tài sản trước khi cập nhật.'
+              'Không thể thay đổi mã RFID khi tài sản đã có RFID và được phân bổ cho phòng. Vui lòng thu hồi tài sản trước khi cập nhật.'
             );
           }
         }
@@ -369,7 +430,31 @@ export class AssetsService {
         asset.category = category;
       }
 
-      if (updateAssetDto.rfid !== undefined && asset.type === AssetType.FIXED_ASSET && !hasCurrentRoom) {
+      const allowedFields = ['name', 'specs', 'entrydate', 'locationInRoom', 'unit', 'quantity', 'origin', 'purchasePackage', 'status'];
+      const updateData: any = {};
+      
+      for (const field of allowedFields) {
+        if (updateAssetDto[field] !== undefined) {
+          if (field === 'entrydate') {
+            updateData[field] = new Date(updateAssetDto[field]);
+          } else {
+            updateData[field] = updateAssetDto[field];
+          }
+        }
+      }
+
+      if (!hasCurrentRoom) {
+        const additionalFields = ['type', 'ktCode', 'fixedCode'];
+        for (const field of additionalFields) {
+          if (updateAssetDto[field] !== undefined) {
+            updateData[field] = updateAssetDto[field];
+          }
+        }
+      }
+
+      // Xử lý RFID trước khi save asset
+      let shouldUpdateStatus = false;
+      if (updateAssetDto.rfid !== undefined && asset.type === AssetType.FIXED_ASSET) {
         if (updateAssetDto.rfid) {
           const existingRfid = await this.rfidTagRepository.findOne({
             where: { rfidId: updateAssetDto.rfid },
@@ -396,12 +481,11 @@ export class AssetsService {
             rfidTag.assignedDate = new Date().toISOString();
           }
           
-          rfidTag.asset = asset;
-          rfidTag.assetId = asset.id;
+          rfidTag.assetId = id;
           await this.rfidTagRepository.save(rfidTag);
           
-          asset.status = AssetStatus.IN_USE;
-        } else {
+          shouldUpdateStatus = true;
+        } else if (!hasCurrentRoom) {
           const currentRfid = await this.rfidTagRepository.findOne({
             where: { assetId: id }
           });
@@ -410,31 +494,14 @@ export class AssetsService {
           }
           
           if (!asset.currentRoom) {
-            asset.status = AssetStatus.UNIDENTIFIED;
+            updateData.status = AssetStatus.UNIDENTIFIED;
           }
         }
       }
 
-      const allowedFields = ['name', 'specs', 'entrydate', 'locationInRoom', 'unit', 'quantity', 'origin', 'purchasePackage', 'status'];
-      const updateData: any = {};
-      
-      for (const field of allowedFields) {
-        if (updateAssetDto[field] !== undefined) {
-          if (field === 'entrydate') {
-            updateData[field] = new Date(updateAssetDto[field]);
-          } else {
-            updateData[field] = updateAssetDto[field];
-          }
-        }
-      }
-
-      if (!hasCurrentRoom) {
-        const additionalFields = ['type', 'ktCode', 'fixedCode'];
-        for (const field of additionalFields) {
-          if (updateAssetDto[field] !== undefined) {
-            updateData[field] = updateAssetDto[field];
-          }
-        }
+      // Update status if RFID was added
+      if (shouldUpdateStatus) {
+        updateData.status = AssetStatus.IN_USE;
       }
 
       const updatedAsset = await this.assetRepository.save({
@@ -442,7 +509,28 @@ export class AssetsService {
         ...updateData,
       });
 
-      return plainToInstance(AssetResponseDto, updatedAsset, {
+      const assetWithRelations = await this.assetRepository.findOne({
+        where: { id: updatedAsset.id },
+        relations: ['rfidTag', 'currentRoom', 'currentRoom.unit'],
+      });
+
+      if (assetWithRelations && assetWithRelations.type === AssetType.FIXED_ASSET) {
+        const fixedAsset = assetWithRelations as FixedAsset;
+        const hasRfid = fixedAsset.rfidTag?.rfidId;
+        const hasRoom = fixedAsset.currentRoom;
+        
+        if (hasRfid && hasRoom && hasRoom.unitId) {
+          const existingBookItem = await this.assetBookItemRepository.findOne({
+            where: { assetId: fixedAsset.id },
+          });
+          
+          if (!existingBookItem) {
+            await this.addAssetToBook(fixedAsset, hasRoom, fixedAsset.quantity || 1);
+          }
+        }
+      }
+
+      return plainToInstance(AssetResponseDto, assetWithRelations || updatedAsset, {
         excludeExtraneousValues: true,
       });
     } catch (error) {
@@ -1201,8 +1289,7 @@ export class AssetsService {
       .leftJoinAndSelect('asset.category', 'category')
       .leftJoinAndSelect('asset.currentRoom', 'currentRoom')
       .leftJoinAndSelect('asset.rfidTag', 'rfidTag')
-      .leftJoin('asset.creator', 'creator')
-      .where('asset.current_room_id IS NULL');
+      .leftJoin('asset.creator', 'creator');
 
     if (this.permissionHelper.isAdmin(currentUser)) {
     }
@@ -1275,15 +1362,18 @@ export class AssetsService {
       };
     }
 
+    // Lọc theo loại tài sản nếu có
     if (filterDto.type) {
       queryBuilder.andWhere('asset.type = :type', { type: filterDto.type });
       
+      // Nếu là tài sản cố định, chỉ lấy những tài sản chưa có RFID
       if (filterDto.type === AssetType.FIXED_ASSET) {
-        queryBuilder.andWhere('rfidTag.id IS NULL');
+        queryBuilder.andWhere('rfidTag.rfidId IS NULL');
       }
     } else {
+      // Mặc định: lấy tất cả CCDC chưa có phòng HOẶC TSCD chưa có RFID
       queryBuilder.andWhere(
-        '(asset.type = :toolsType OR (asset.type = :fixedType AND rfidTag.asset_id IS NULL))',
+        '((asset.type = :toolsType AND asset.current_room_id IS NULL) OR (asset.type = :fixedType AND rfidTag.rfidId IS NULL))',
         { 
           toolsType: AssetType.TOOLS_EQUIPMENT,
           fixedType: AssetType.FIXED_ASSET

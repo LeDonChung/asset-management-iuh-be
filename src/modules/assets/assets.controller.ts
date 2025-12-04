@@ -77,7 +77,7 @@ export class AssetsController {
   @ApiResponse({ status: 400, description: "Bad request" })
   @ApiBody({ type: UnidentifiedAssetFilterDto })
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  // @Permissions(PermissionConstants.PERM_IDENTIFY_ASSET)
+  @Permissions(PermissionConstants.PERM_IDENTIFY_ASSET)
   @ApiBearerAuth()
   async findUnidentifiedAssets(
     @Body() filterDto: UnidentifiedAssetFilterDto,

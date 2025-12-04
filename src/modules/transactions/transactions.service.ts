@@ -423,29 +423,44 @@ export class TransactionsService {
       throw new NotFoundException('Không tìm thấy giao dịch');
     }
 
-    if (transaction.status !== TransactionStatus.DRAFT) {
+    if (transaction.status !== TransactionStatus.DRAFT && transaction.status !== TransactionStatus.REJECTED) {
       throw new BadRequestException(
-        'Chỉ có thể cập nhật giao dịch ở trạng thái nháp (DRAFT)'
+        'Chỉ có thể cập nhật giao dịch ở trạng thái nháp (DRAFT) hoặc bị từ chối (REJECTED)'
       );
     }
 
-    Object.assign(transaction, updateDto);
+    if (updateDto.fromUnitId) transaction.fromUnitId = updateDto.fromUnitId;
+    if (updateDto.toUnitId) transaction.toUnitId = updateDto.toUnitId;
+    if (updateDto.requestNote !== undefined) transaction.requestNote = updateDto.requestNote;
+    
     await this.transactionRepo.save(transaction);
 
+    // Cập nhật items nếu có
     if (updateDto.items && updateDto.items.length > 0) {
-      await this.transactionItemRepo.delete({ transactionId: id });
+      // Xóa tất cả items cũ
+      if (transaction.items && transaction.items.length > 0) {
+        await this.transactionItemRepo.remove(transaction.items);
+      }
       
-      const newItems = updateDto.items.map(item =>
-        this.transactionItemRepo.create({
-          transactionId: id,
-          assetId: item.assetId,
-          fromRoomId: item.fromRoomId,
-          toRoomId: item.toRoomId,
-          note: item.note,
-        })
-      );
+      // Tạo items mới với transaction relation
+      const newItems = [];
+      for (const itemDto of updateDto.items) {
+        if (!itemDto.assetId) continue;
+        
+        const item = this.transactionItemRepo.create({
+          transaction: transaction, // Set relation trực tiếp
+          assetId: itemDto.assetId,
+          fromRoomId: itemDto.fromRoomId,
+          toRoomId: itemDto.toRoomId,
+          note: itemDto.note,
+        });
+        
+        newItems.push(item);
+      }
       
-      await this.transactionItemRepo.save(newItems);
+      if (newItems.length > 0) {
+        await this.transactionItemRepo.save(newItems);
+      }
     }
 
     return this.getTransactionById(id);
@@ -465,9 +480,9 @@ export class TransactionsService {
       throw new NotFoundException('Không tìm thấy giao dịch');
     }
 
-    if (transaction.status !== TransactionStatus.DRAFT) {
+    if (transaction.status !== TransactionStatus.DRAFT && transaction.status !== TransactionStatus.REJECTED) {
       throw new BadRequestException(
-        'Chỉ có thể gửi đề xuất cho giao dịch ở trạng thái nháp'
+        'Chỉ có thể gửi đề xuất cho giao dịch ở trạng thái nháp (DRAFT) hoặc bị từ chối (REJECTED)'
       );
     }
 
