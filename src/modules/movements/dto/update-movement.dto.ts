@@ -28,6 +28,14 @@ export class UpdateMovementStatusDto {
   @IsOptional()
   @IsString()
   rejectionReason?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Đường dẫn minh chứng (ảnh, file đính kèm)',
+    example: 'https://example.com/evidence/complete-123.jpg'
+  })
+  @IsOptional()
+  @IsString()
+  evidenceUrl?: string;
 }
 
 export class ProposeMovementDto {
@@ -35,6 +43,14 @@ export class ProposeMovementDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Đường dẫn minh chứng (ảnh, file đính kèm)',
+    example: 'https://example.com/evidence/propose-123.jpg'
+  })
+  @IsOptional()
+  @IsString()
+  evidenceUrl?: string;
 }
 
 export class ApproveMovementDto {

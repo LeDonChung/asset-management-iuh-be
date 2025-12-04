@@ -17,16 +17,48 @@ export class MovementItemResponseDto {
     name: string;
     ktCode: string;
     fixedCode: string;
+    specs?: string;
+    unit?: string;
+    quantity?: number;
+    entrydate?: string;
+    origin?: string;
+    purchasePackage?: number;
+    type?: string;
+    status?: string;
+    currentRoom?: {
+      id: string;
+      name: string;
+      roomCode: string;
+      unit?: {
+        id: string;
+        name: string;
+        unitCode: number;
+      };
+    };
+    category?: {
+      id: string;
+      name: string;
+    };
   };
   fromRoom?: {
     id: string;
     name: string;
     code: string;
+    unit?: {
+      id: string;
+      name: string;
+      unitCode: number;
+    };
   };
   toRoom?: {
     id: string;
     name: string;
     code: string;
+    unit?: {
+      id: string;
+      name: string;
+      unitCode: number;
+    };
   };
   mover?: {
     id: string;
