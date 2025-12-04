@@ -14,7 +14,7 @@ String deviceType = "rfid";
 #include <WiFi.h>
 #include <SocketIoClient.h>
 
-char* ssid = "ThahhTuyenn";
+char* ssid = "iPhone";
 char* password = "12345678";
 
 // char* server = "172.20.10.12";
@@ -26,7 +26,7 @@ SocketIoClient webSocket;
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "20693cbe-8ed3-4ed4-806c-cd79113dc80e";
+String roomId = "c7246d36-d0c8-4bee-8b15-c4b136f7542c";
 
 #define RXD2 16
 #define TXD2 17
