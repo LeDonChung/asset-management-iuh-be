@@ -63,7 +63,6 @@ export class AlertsService {
   async create(createAlertDto: CreateAlertDto): Promise<AlertResponseDto> {
     try {
       const { assetId, roomId } = createAlertDto;
-      // kiểm tra assetId và roomId có tồn tại trong database không
       const asset = await this.assetRepository.findOne({
         where: { id: assetId },
       });
@@ -77,7 +76,6 @@ export class AlertsService {
         throw new Error("Room not found");
       }
 
-      // Nếu cả asset và room đều tồn tại, tiến hành tạo alert
       const alert = this.alertRepository.create({
         assetId: asset.id,
         roomId: room.id,
@@ -95,7 +93,6 @@ export class AlertsService {
 
       return await this.transformToResponseDto(alertResponse);
     } catch (error) {
-      console.error("Error creating alert:", error);
       throw error;
     }
   }
@@ -106,7 +103,6 @@ export class AlertsService {
       const emailPromises: Promise<void>[] = [];
 
       if (!roomId) {
-        console.warn('roomId is undefined or empty');
         return results;
       }
 
@@ -117,22 +113,16 @@ export class AlertsService {
         });
 
         if (!rfidTag || !rfidTag.asset) {
-          // Nếu không tìm thấy RFID tag hoặc tài sản, bỏ qua
           continue;
         }
 
-        // Lấy email của user chủ của đơn vị sử dụng tài sản từ assetBookItem
         const assetBookItem = await this.assetBookItemRepository.findOne({
           where: { assetId: rfidTag.assetId },
           relations: ["book", "book.unit", "book.unit.representative"],
         });
         const email = assetBookItem?.book?.unit?.representative?.email || '';
         
-        // Được phép di chuyển khi khác phòng hiện tại
         const currentRoomId = rfidTag.asset?.currentRoom?.id;
-        console.log(`RFID: ${rfid}, Asset ID: ${rfidTag.assetId}, Current Room ID: ${currentRoomId}, Checked Room ID: ${roomId}`);
-        
-        // Nếu roomId undefined, coi như không cho phép di chuyển (hoặc logic khác tùy yêu cầu)
         const allowMove = roomId ? roomId !== currentRoomId : false;
         
         results.push({
@@ -142,9 +132,7 @@ export class AlertsService {
           assetId: rfidTag.assetId,
         });
 
-        // Gửi email bất đồng bộ khi phát hiện di chuyển bất thường (allowMove = false)
         if (!allowMove && email) {
-          // Tạo promise gửi email nhưng không await tại đây
           const emailPromise = this.sendUnauthorizedMovementEmail(
             email,
             rfidTag,
@@ -155,20 +143,16 @@ export class AlertsService {
         }
       }
       
-      // Gửi tất cả emails bất đồng bộ trong background, không chờ kết quả
       if (emailPromises.length > 0) {
         Promise.allSettled(emailPromises).then((results) => {
           const successful = results.filter(r => r.status === 'fulfilled').length;
           const failed = results.filter(r => r.status === 'rejected').length;
-          console.log(`Email notification summary: ${successful} sent, ${failed} failed`);
         }).catch(err => {
-          console.error('Error in email batch processing:', err);
         });
       }
       
       return results;
     } catch (error) {
-      console.error("Error getting user RFID alerts:", error);
       throw error;
     }
   }
@@ -180,7 +164,6 @@ export class AlertsService {
       const alerts: Alert[] = [];
       const lstError = [];
 
-      // Lấy danh sách assetId và roomId từ createAlertDtos để truy vấn một lần (tránh query trong vòng lặp)
       const lstAssetId = createAlertDtos.map((dto) => dto.assetId);
       const lstRoomId = createAlertDtos.map((dto) => dto.roomId);
       const assets = await this.assetRepository.findByIds(lstAssetId);
@@ -215,7 +198,6 @@ export class AlertsService {
       const responsePromises = savedAlertData.map((alert) => this.transformToResponseDto(alert));
       return await Promise.all(responsePromises);
     } catch (error) {
-      console.error("Error creating multiple alerts:", error);
       throw error;
     }
   }
@@ -230,7 +212,6 @@ export class AlertsService {
       const responsePromises = alerts.map((alert) => this.transformToResponseDto(alert));
       return await Promise.all(responsePromises);
     } catch (error) {
-      console.error("Error fetching alerts:", error);
       throw error;
     }
   }
@@ -264,9 +245,7 @@ export class AlertsService {
         relations: ["asset", "room", "resolver"],
       };
 
-      // Handle quick filters for backward compatibility
       if (filterDto.statusFilter || filterDto.createdFrom || filterDto.createdTo) {
-        // Add quick filter conditions to the existing conditions
         const quickFilterConditions = [];
 
         if (filterDto.createdFrom) {
@@ -298,38 +277,30 @@ export class AlertsService {
           });
         }
 
-        // Merge with existing conditions
         filterDto.conditions = [
           ...(filterDto.conditions || []),
           ...quickFilterConditions,
         ];
       }
 
-      // Build query manually to handle async transformation
       const queryBuilder = FilterUtil.buildBaseQuery(this.alertRepository, config, "alert");
       
-      // Apply filters
       FilterUtil.applyFiltersToQuery(queryBuilder, filterDto, config, "alert");
 
-      // Apply role-based filtering
       await this.applyRoleBasedFiltering(queryBuilder, currentUser);
 
-      // Get pagination settings with defaults
       const page = filterDto.pagination?.currentPage || 1;
       const limit = filterDto.pagination?.itemsPerPage || 5;
       const skip = (page - 1) * limit;
 
-      // Apply pagination
       queryBuilder.skip(skip).take(limit);
 
-      // Execute query and get count
       const [entities, total] = await queryBuilder.getManyAndCount();
 
-      // Transform to response DTOs with async support
       const responsePromises = entities.map((alert) => this.transformToResponseDto(alert));
       const data = await Promise.all(responsePromises);
 
-      // Calculate pagination metadata
+      
       const pagination = {
         page,
         limit,
@@ -341,21 +312,14 @@ export class AlertsService {
 
       return new PaginatedResponseDto(data, pagination);
     } catch (error) {
-      console.error("Error in findAllWithFilter:", error);
       throw error;
     }
   }
 
-  /**
-   * Apply role-based filtering to the query builder
-   * @param queryBuilder Query builder instance
-   * @param currentUser Current user
-   */
   private async applyRoleBasedFiltering(
     queryBuilder: SelectQueryBuilder<Alert>,
     currentUser: User
   ): Promise<void> {
-    // Load user with roles if not already loaded
     const userWithRoles = await this.userRepository.findOne({
       where: { id: currentUser.id },
       relations: ['roles', 'unit']
@@ -367,18 +331,14 @@ export class AlertsService {
 
     const roleCodes = userWithRoles.roles.map(role => role.code);
 
-    // Admin có thể thấy tất cả alerts
     if (roleCodes.includes(RoleBase.ADMIN)) {
-      return; // Không thêm điều kiện gì, thấy tất cả
+      return;
     }
 
-    // Admin Dept chỉ thấy alerts của các assets thuộc đơn vị trong cơ sở của mình
     if (roleCodes.includes(RoleBase.ADMIN_DEPT)) {
       if (userWithRoles.unitId) {
-        // Lấy tất cả unit IDs thuộc campus này (bao gồm cả campus và tất cả children)
         const allUnitIds = await this.getAllChildUnitIds(userWithRoles.unitId);
         
-        // Sử dụng alias 'asset' đã có từ relations config
         queryBuilder
           .leftJoin('asset.currentRoom', 'assetRoom')
           .leftJoin('assetRoom.unit', 'roomUnit')
@@ -387,10 +347,8 @@ export class AlertsService {
       return;
     }
 
-    // User Dept chỉ thấy alerts của assets thuộc đơn vị của mình
     if (roleCodes.includes(RoleBase.USER_DEPT)) {
       if (userWithRoles.unitId) {
-        // Sử dụng alias 'asset' đã có từ relations config
         queryBuilder
           .leftJoin('asset.currentRoom', 'assetRoom')
           .leftJoin('assetRoom.unit', 'roomUnit')
@@ -443,7 +401,6 @@ export class AlertsService {
       const savedAlert = await this.alertRepository.save(alert);
       return await this.transformToResponseDto(savedAlert);
     } catch (error) {
-      console.error("Error resolving alert:", error);
       throw error;
     }
   }
@@ -451,7 +408,6 @@ export class AlertsService {
   private async transformToResponseDto(alert: Alert): Promise<AlertResponseDto> {
     let rfidId = null;
 
-    // If asset is a FixedAsset, try to get RFID from database
     if (alert.asset && alert.asset.type === "FIXED_ASSET") {
       try {
         const rfidTag = await this.rfidTagRepository.findOne({
@@ -459,7 +415,6 @@ export class AlertsService {
         });
         rfidId = rfidTag?.rfidId || null;
       } catch (error) {
-        console.warn(`Could not fetch RFID for asset ${alert.asset.id}:`, error);
       }
     }
 
@@ -524,14 +479,8 @@ export class AlertsService {
     }
   }
 
-  /**
-   * Send alert notification email to relevant users
-   * @param alertId Alert ID to send notification for
-   * @returns Information about sent emails
-   */
   async sendAlertEmail(alertId: string): Promise<SendAlertEmailResponseDto> {
     try {
-      // 1. Tìm alert với các quan hệ cần thiết
       const alert = await this.alertRepository.findOne({
         where: { id: alertId },
         relations: ['asset', 'room'],
@@ -545,7 +494,6 @@ export class AlertsService {
         throw new Error('Alert has no associated asset');
       }
 
-      // 2. Tìm AssetBookItem mới nhất của tài sản (sổ tài sản)
       const latestAssetBookItem = await this.assetBookItemRepository.findOne({
         where: { assetId: alert.assetId },
         relations: ['book', 'book.unit', 'book.unit.representative', 'room', 'room.unit', 'room.unit.representative'],
@@ -556,10 +504,8 @@ export class AlertsService {
         throw new Error('Asset not found in any asset book');
       }
 
-      // 3. Lấy danh sách users cần gửi email (chỉ lấy representatives)
       const usersToNotify = new Set<User>();
 
-      // 3.1. Thêm representative của đơn vị sử dụng tài sản (từ sổ tài sản)
       if (latestAssetBookItem.book?.unit?.representative) {
         const representative = latestAssetBookItem.book.unit.representative;
         if (representative.email && representative.status === 'ACTIVE') {
@@ -567,7 +513,6 @@ export class AlertsService {
         }
       }
 
-      // 3.2. Thêm representative của phòng quản trị (unit của room)
       if (latestAssetBookItem.room?.unit?.representative) {
         const representative = latestAssetBookItem.room.unit.representative;
         if (representative.email && representative.status === 'ACTIVE') {
@@ -575,7 +520,6 @@ export class AlertsService {
         }
       }
 
-      // 4. Gửi email cho từng user
       const sentEmails: string[] = [];
       const failedEmails: string[] = [];
 
@@ -612,7 +556,6 @@ export class AlertsService {
 
       await Promise.all(emailPromises);
 
-      // 5. Trả về kết quả
       return {
         sentEmails,
         failedEmails,
@@ -690,9 +633,6 @@ export class AlertsService {
     return movement;
   }
 
-  /**
-   * Get human-readable alert type text
-   */
   private getAlertTypeText(type: AlertType): string {
     switch (type) {
       case AlertType.UNAUTHORIZED_MOVEMENT:
@@ -702,13 +642,6 @@ export class AlertsService {
     }
   }
 
-  /**
-   * Gửi email thông báo di chuyển không hợp lệ (chạy bất đồng bộ)
-   * @param email Email người nhận
-   * @param rfidTag RFID tag information
-   * @param assetBookItem Asset book item information
-   * @param roomId Room ID where unauthorized movement detected
-   */
   private async sendUnauthorizedMovementEmail(
     email: string,
     rfidTag: RfidTag,

@@ -13,10 +13,10 @@ void startCameraServer();
 #define WIFI_PASS "12345678"
 
 
-// const char* socketServer = "34.61.204.169";
-// const int socketPort = 3001;
-const char* socketServer = "172.20.10.12";
+const char* socketServer = "34.61.204.169";
 const int socketPort = 3001;
+// const char* socketServer = "172.20.10.12";
+// const int socketPort = 3001;
 SocketIoClient webSocket;
 
 // Camera config (ESP32-CAM AI-Thinker)

@@ -17,14 +17,16 @@ String deviceType = "rfid";
 char* ssid = "ThahhTuyenn";
 char* password = "12345678";
 
-char* server = "172.20.10.12";
+// char* server = "172.20.10.12";
+// uint16_t port = 3001;
+char* server = "34.61.204.169";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "fa328422-9a23-487a-96e3-6d6753f18799";
+String roomId = "20693cbe-8ed3-4ed4-806c-cd79113dc80e";
 
 #define RXD2 16
 #define TXD2 17

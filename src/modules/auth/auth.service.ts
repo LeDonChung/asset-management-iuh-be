@@ -100,13 +100,6 @@ export class AuthService {
         return user;
     }
 
-    /**
-     * Change user password
-     * @description Change user password based on the provided ChangePasswordDto.
-     * @param changePasswordDto Data Transfer Object containing username, current password, new password, and confirm password
-     * @param currentUser 
-     * @returns A message indicating the result of the password change operation
-     */
     async changePassword(
         changePasswordDto: ChangePasswordDto,
         currentUser?: User
@@ -147,13 +140,6 @@ export class AuthService {
         return { message: 'Password changed successfully' };
     }
 
-    /**
-     * Update user profile
-     * @description Update user profile based on the provided UpdateProfileDto.
-     * @param updateProfileDto Data to update user profile
-     * @param currentUser 
-     * @returns 
-     */
     async updateProfile(
         updateProfileDto: UpdateProfileDto,
         currentUser?: User
@@ -189,12 +175,6 @@ export class AuthService {
         };
     }
 
-    /**
-     * Send forgot password email
-     * @description Generate reset token and send password reset email
-     * @param forgotPasswordDto DTO containing email address
-     * @returns Success message
-     */
     async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string }> {
         const { email } = forgotPasswordDto;
 
@@ -240,12 +220,6 @@ export class AuthService {
         }
     }
 
-    /**
-     * Reset password using token
-     * @description Reset user password using the token received via email
-     * @param resetPasswordDto DTO containing reset token and new password
-     * @returns Success message
-     */
     async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
         const { token, newPassword, confirmPassword } = resetPasswordDto;
 

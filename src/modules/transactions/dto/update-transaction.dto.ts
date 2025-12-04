@@ -7,10 +7,10 @@ export class UpdateTransactionItemDto {
   @ApiProperty({
     description: 'ID của tài sản',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    required: true,
   })
-  @IsOptional()
   @IsUUID()
-  assetId?: string;
+  assetId: string;
 
   @ApiProperty({
     description: 'ID phòng hiện tại của tài sản này',

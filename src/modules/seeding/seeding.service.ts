@@ -728,6 +728,7 @@ export class SeedingService implements OnModuleInit {
           PermissionConstants.PERM_REMOVE_CATEGORY,
           PermissionConstants.PERM_VIEW_INVENTORY,
           PermissionConstants.PERM_CREATE_INVENTORY,
+          PermissionConstants.PERM_VIEW_RESULT_INVENTORY,
           PermissionConstants.PERM_UPDATE_INVENTORY,
           PermissionConstants.PERM_REMOVE_INVENTORY,
           PermissionConstants.PERM_VIEW_UNIT,

@@ -243,8 +243,6 @@ export class MovementsController {
     @Body() updateDto: UpdateMovementStatusDto,
     @CurrentUser() currentUser: User,
   ) {
-    // This is a generic status update method that can handle any status change
-    // For specific workflows, use the dedicated endpoints above
     return this.movementsService.updateMovementStatus(
       id,
       updateDto.status,
@@ -253,6 +251,7 @@ export class MovementsController {
       {
         approvalNote: updateDto.approvalNote,
         rejectionReason: updateDto.rejectionReason,
+        evidenceUrl: updateDto.evidenceUrl,
       },
     );
   }
