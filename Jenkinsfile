@@ -76,11 +76,6 @@ pipeline {
                         sh """
                             scp -i $KEY -o StrictHostKeyChecking=no docker-compose.yml $USER@$remoteHost:${deployDir}/docker-compose.yml || true
                         """
-
-                        // Gửi script init-db.sql nếu có
-                        sh """
-                            scp -i $KEY -o StrictHostKeyChecking=no -r scripts/ $USER@$remoteHost:${deployDir}/ || true
-                        """
         
                         // SSH vào server để deploy
                         sh """
@@ -94,6 +89,9 @@ pipeline {
                                 cd ${deployDir}
                                 git fetch origin
                                 git checkout ${BRANCH_DEPLOY}
+                                
+                                # Fix permissions before cleaning
+                                chmod -R 755 . || true
                                 
                                 # Reset any local changes to avoid conflicts
                                 git reset --hard HEAD
