@@ -123,7 +123,7 @@ export class AlertsService {
         const email = assetBookItem?.book?.unit?.representative?.email || '';
         
         const currentRoomId = rfidTag.asset?.currentRoom?.id;
-        const allowMove = roomId ? roomId !== currentRoomId : false;
+        const allowMove = roomId !== currentRoomId;
         
         results.push({
           rfid,
