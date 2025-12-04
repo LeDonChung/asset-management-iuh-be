@@ -9,7 +9,7 @@
 void startCameraServer();
 
 #define PIR_PIN 15              // Chân PIR
-#define WIFI_SSID "ThahhTuyenn"
+#define WIFI_SSID "iPhone"
 #define WIFI_PASS "12345678"
 
 
@@ -44,7 +44,7 @@ const unsigned long SOCKET_RECONNECT_INTERVAL = 5000;
 String deviceId = "ESP32_CAM_01";
 String deviceReceive = "ESP32_RFID_01";
 String deviceType = "camera";
-String roomId = "4ac93e15-5e46-4ea5-ba51-ad8c6a48a262";
+String roomId = "93e27d51-a082-4095-b77d-2d6df390b1d7";
 
 String currentAlertIds[15];
 int alertIdsCount = 0;
