@@ -26,12 +26,16 @@ SocketIoClient webSocket;
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "c7246d36-d0c8-4bee-8b15-c4b136f7542c";
+String roomId = "bac6e3ef-56a3-4935-b007-638c8219f050";
 
 #define RXD2 16
 #define TXD2 17
 #define BUZZER_PIN 18
-
+unsigned long lastBeepTime = 0;
+bool beepState = false;
+const unsigned long BEEP_INTERVAL = 300;
+unsigned long buzzerStartTime = 0;
+const unsigned long BUZZER_DURATION = 60000; // 1 phút = 60000 ms
 // RENAME SERIAL02 TO RFID
 #define RFID Serial2
 uint16_t currentMTU = 517;  // mặc định
@@ -577,6 +581,7 @@ void receiveCommandCheckRfidWarning(const char* payload, size_t length) {
     if (alertIds.size() > 0) {
       if (!isBuzzer) {
         isBuzzer = true;
+        buzzerStartTime = millis();
 
         // ✅ Gửi yêu cầu chụp ảnh qua Socket.IO với danh sách alertId
         if (WiFi.status() == WL_CONNECTED) {
@@ -846,108 +851,6 @@ void clearTags() {
     epcArray[i] = "";
   }
 }
-// void handlerMotionRealtime() {
-//   static byte response[64];
-//   static int responseIndex = 0;
-//   static String motionRFIDs[15];
-//   static int motionRFIDCount = 0;
-//   startScan();
-//   // Scan
-//   while (RFID.available()) {
-//     byte b = RFID.read();
-//     if (responseIndex < sizeof(response)) {
-//       response[responseIndex++] = b;
-//     } else {
-//       responseIndex = 0;
-//       continue;
-//     }
-//     if (responseIndex >= 2 && responseIndex >= response[1] + 2) {
-//       if (response[0] == 0xA0 && response[3] == 0x89 && checkResponseChecksum(response, responseIndex)) {
-//         if (response[1] == 0x13) {
-//           String epc = "";
-//           for (int i = 7; i < 19; i++) {
-//             char hexPart[3];
-//             sprintf(hexPart, "%02X", response[i]);
-//             epc += String(hexPart);
-//           }
-//           Serial.print("📡 RFID phát hiện: ");
-//           Serial.println(epc);
-//           // Thêm vào mảng nếu chưa có
-//           bool tagExists = false;
-//           for (int i = 0; i < motionRFIDCount; i++) {
-//             if (motionRFIDs[i] == epc) {
-//               tagExists = true;
-//               break;
-//             }
-//           }
-//           if (!tagExists && motionRFIDCount < 15) {
-//             motionRFIDs[motionRFIDCount++] = epc;
-//           }
-//         }
-//       }
-//       responseIndex = 0;
-//     }
-//   }
-//   endScan();
-  
-//   // Kiểm tra từng thẻ trong mảng motionRFIDs. Nếu từng thẻ tồn tại trong epcArray thì sẽ xóa trong motionRFIDs đi và chỉ giữ lại thẻ mới
-  
-//   for (int i = 0; i < motionRFIDCount; i++) {
-//     if (checkTagExists(motionRFIDs[i])) {
-//       for (int j = i; j < motionRFIDCount - 1; j++) {
-//         motionRFIDs[j] = motionRFIDs[j + 1];
-//       }
-//       motionRFIDCount--;
-//       i--;
-//     } else {
-//       addTag(motionRFIDs[i]);
-//     }
-//   }
-
-//   // 3. Gửi dữ liệu lên server nếu có thẻ mới
-//   // ✅ Gửi data chỉ khi có RFIDs
-//   if (motionRFIDCount > 0) {
-//     // Thực hiện hành động khi phát hiện RFID
-//     String rfidList = "[";
-//     for (int i = 0; i < motionRFIDCount; i++) {
-//       rfidList += "\"" + motionRFIDs[i] + "\"";
-//       if (i < motionRFIDCount - 1) rfidList += ",";
-//     }
-//     rfidList += "]";
-
-//     // Gửi scan result lên server
-//     if (WiFi.status() == WL_CONNECTED) {
-//       // Tạo object với format mới: { rfids: [], roomId: "" }
-//       DynamicJsonDocument warningDoc(512);
-//       JsonArray rfidsArray = warningDoc.createNestedArray("rfids");
-//       for (int i = 0; i < motionRFIDCount; i++) {
-//         rfidsArray.add(motionRFIDs[i]);
-//       }
-//       warningDoc["roomId"] = roomId;
-//       warningDoc["deviceId"] = deviceId;
-
-//       String warningJson;
-//       serializeJson(warningDoc, warningJson);
-//       webSocket.emit("send_command_check_rfid_warning", warningJson.c_str());
-
-//       Serial.println("📤 Gửi warning (" + String(motionRFIDCount) + " RFIDs): " + warningJson);
-//       // 3. Lưu trữ các thẻ đã quét vào mảng tạm thời
-//       for (int i = 0; i < motionRFIDCount; i++) {
-//         addTag(motionRFIDs[i]);
-//       }
-//     } else {
-//       Serial.println("❌ WiFi disconnected, không thể gửi warning");
-//     }
-//   } else {
-//     Serial.println("🔍 Scan hoàn thành - không phát hiện RFID nào");
-//   }
-  
-//   // ✅ LUÔN reset tags sau mỗi lần scan, bất kể có data hay không
-//   motionRFIDCount = 0;
-//   for (int i = 0; i < 15; i++) {
-//     motionRFIDs[i] = "";
-//   }
-// }
 void handlerMotionRealtime() {
   static byte response[64];
   static int responseIndex = 0;
@@ -1069,8 +972,20 @@ void loop() {
   }
 
   if (isBuzzer) {
-    digitalWrite(BUZZER_PIN, HIGH);
+    unsigned long now = millis();
+
+    if (now - buzzerStartTime >= BUZZER_DURATION) {
+      isBuzzer = false;
+      digitalWrite(BUZZER_PIN, LOW);
+    } else {
+      if (now - lastBeepTime >= BEEP_INTERVAL) {
+        beepState = !beepState;
+        digitalWrite(BUZZER_PIN, beepState ? HIGH : LOW);
+        lastBeepTime = now;
+      }
+    }
   } else {
     digitalWrite(BUZZER_PIN, LOW);
+    beepState = false;
   }
 }
