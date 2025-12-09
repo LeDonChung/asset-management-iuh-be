@@ -119,7 +119,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-asset}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-LeDonChung@398}
     ports:
       - "5432:5432"
     volumes:
@@ -137,15 +137,18 @@ services:
   redis:
     image: redis:7-alpine
     container_name: asset-management-redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
+    ports:
+      - "6588:6379"
     networks:
       - asset-management-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -194,7 +197,7 @@ services:
       # Redis
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_DB=${REDIS_DB:-0}
 
     volumes:
