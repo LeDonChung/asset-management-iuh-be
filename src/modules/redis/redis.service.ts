@@ -12,9 +12,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     try {
       this.client = new Redis({
-        host: this.configService.get('REDIS_HOST', 'localhost'),
-        port: this.configService.get('REDIS_PORT', 6379),
-        password: this.configService.get('REDIS_PASSWORD'),
+        host: this.configService.get('REDIS_HOST', 'redis'),
+        port: this.configService.get('REDIS_PORT', 6588),
+        password: this.configService.get('REDIS_PASSWORD', 'LeDonChung@398'),
         db: this.configService.get('REDIS_DB', 0),
         maxRetriesPerRequest: 3,
         lazyConnect: true,
