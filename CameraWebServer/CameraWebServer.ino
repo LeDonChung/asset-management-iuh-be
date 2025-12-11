@@ -13,7 +13,7 @@ void startCameraServer();
 #define WIFI_PASS "12345678"
 
 
-const char* socketServer = "209.97.171.45";
+const char* socketServer = "178.128.123.115";
 const int socketPort = 3001;
 // const char* socketServer = "172.20.10.12";
 // const int socketPort = 3001;

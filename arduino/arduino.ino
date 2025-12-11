@@ -19,14 +19,14 @@ char* password = "12345678";
 
 // char* server = "172.20.10.12";
 // uint16_t port = 3001;
-char* server = "209.97.171.45";
+char* server = "178.128.123.115";
 uint16_t port = 3001;
 SocketIoClient webSocket;
 
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "f6de9aae-29b4-448e-9a50-cab29d2667db";
+String roomId = "a51622c2-86e3-4cc7-95b5-2d7090f506b3";
 
 #define RXD2 16
 #define TXD2 17
