@@ -13,7 +13,7 @@ void startCameraServer();
 #define WIFI_PASS "12345678"
 
 
-const char* socketServer = "34.61.204.169";
+const char* socketServer = "178.128.123.115";
 const int socketPort = 3001;
 // const char* socketServer = "172.20.10.12";
 // const int socketPort = 3001;
@@ -89,9 +89,9 @@ bool initCamera() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = FRAMESIZE_QVGA;
-  config.jpeg_quality = 12;
-  config.fb_count = 1;
+  config.frame_size = FRAMESIZE_VGA;
+  config.jpeg_quality = 8;
+  config.fb_count = 2;
   config.fb_location = CAMERA_FB_IN_PSRAM;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
@@ -106,11 +106,29 @@ bool initCamera() {
 }
 
 void captureAndUploadImage() {
+  Serial.println("📸 Bắt đầu chụp ảnh...");
+  
+  // ✅ FLUSH 3 LẦN để chắc chắn xóa hết buffer cũ
+  for (int i = 0; i < 3; i++) {
+    camera_fb_t* fb = esp_camera_fb_get();
+    if (fb) {
+      Serial.printf("  Flush frame %d (size: %d bytes)\n", i + 1, fb->len);
+      esp_camera_fb_return(fb);
+    }
+    delay(100); // Delay dài hơn để camera capture frame mới
+  }
+  
+  Serial.println("  ✅ Buffer flushed, capturing new frame...");
+  delay(200); // Đợi thêm để chắc chắn có frame mới
+
+  // ✅ Lấy frame thật sự mới
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb) {
-    Serial.println("Lỗi chụp ảnh");
+    Serial.println("❌ Lỗi chụp ảnh");
     return;
   }
+
+  Serial.printf("  📷 Captured new frame: %d bytes\n", fb->len);
 
   // Gửi ảnh qua Socket thay vì HTTP upload trực tiếp
   sendImageViaSocket(fb);
@@ -273,16 +291,27 @@ void setup() {
     while (true) delay(100);
   }
 
-  // Start camera web server
-  startCameraServer();
+  // ✅ Flush 10 frame để loại bỏ ảnh cũ trong buffer sau khi khởi động camera
+  Serial.println("🔄 Flushing camera buffer (10 frames)...");
+  for (int i = 0; i < 10; i++) {
+    camera_fb_t* fb = esp_camera_fb_get();
+    if (fb) {
+      Serial.printf("  Flushed frame %d: %d bytes\n", i + 1, fb->len);
+      esp_camera_fb_return(fb);
+    }
+    delay(100); // Delay dài hơn để đảm bảo buffer refresh
+  }
+  Serial.println("✅ Camera flushed, ready for new capture!");
+
+  // ❌ TẮT Camera WebServer để tránh auto-capture khi boot
+  // startCameraServer(); // ĐÓNG LẠI - Server gây lỗi tự chụp ảnh
 
   // Khởi tạo WebSocket thay vì BLE
   setupWebSocket();
 
   Serial.println("Hệ thống sẵn sàng");
   Serial.println("==================================");
-  Serial.printf("📹 Camera Stream: http://%s\n", WiFi.localIP().toString().c_str());
-  Serial.printf("📸 Single Capture: http://%s/capture\n", WiFi.localIP().toString().c_str());
+  Serial.printf("📹 Camera ready (WebServer disabled)\n");
   Serial.printf("🔗 Socket Server: %s:%d\n", socketServer, socketPort);
   Serial.println("==================================");
 }
