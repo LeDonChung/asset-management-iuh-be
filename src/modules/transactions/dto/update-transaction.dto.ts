@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsUUID, IsEnum, IsString, IsArray, ValidateNested } from 'class-validator';
+import { IsOptional, IsUUID, IsEnum, IsString, IsArray, ValidateNested, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TransactionStatus } from 'src/common/shared/TransactionStatus';
 
@@ -11,6 +11,17 @@ export class UpdateTransactionItemDto {
   })
   @IsUUID()
   assetId: string;
+
+  @ApiProperty({
+    description: 'Số lượng tài sản bàn giao',
+    example: 1,
+    minimum: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  quantity?: number;
 
   @ApiProperty({
     description: 'ID phòng hiện tại của tài sản này',

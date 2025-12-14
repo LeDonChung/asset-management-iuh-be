@@ -13,7 +13,10 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
+  StreamableFile,
 } from "@nestjs/common";
+import { Response } from 'express';
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiTags,
@@ -102,6 +105,25 @@ export class AssetsController {
     @CurrentUser() currentUser: User
   ): Promise<AssetResponseDto> {
     return this.assetsService.create(createAssetDto, currentUser);
+  }
+
+  @Get("import-template")
+  @ApiOperation({
+    summary: "Tải file Excel mẫu để import tài sản",
+    description: "Download file Excel template với cấu trúc và hướng dẫn đầy đủ"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Template file downloaded successfully",
+  })
+  async downloadImportTemplate(@Res() res: Response) {
+    const buffer = await this.assetsService.generateImportTemplate();
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=Mau_Import_Tai_San.xlsx');
+    res.setHeader('Content-Length', buffer.length);
+    
+    res.send(buffer);
   }
 
   @Get()
@@ -255,6 +277,65 @@ export class AssetsController {
     }
 
     return this.assetsService.importFromExcel(file, currentUser);
+  }
+
+  @Post("import-unidentified")
+  @UseInterceptors(FileInterceptor("file"))
+  @ApiOperation({
+    summary: "Import tài sản chưa định danh từ file Excel",
+    description:
+      "Import tài sản từ file Excel với cấu trúc đơn giản hơn, hỗ trợ mã phòng (roomCode) thay vì roomId. " +
+      "Cột: Tên TS | Thông số | Loại | Danh mục | Đơn vị | Số lượng | Ngày nhập | Nguồn gốc | Gói thầu | Mã phòng | Vị trí trong phòng | RFID",
+  })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    description: "File Excel chứa dữ liệu tài sản",
+    type: "multipart/form-data",
+    schema: {
+      type: "object",
+      properties: {
+        file: {
+          type: "string",
+          format: "binary",
+          description: "File Excel (.xlsx, .xls) với 12 cột dữ liệu",
+        },
+      },
+      required: ["file"],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Assets imported successfully",
+    type: ImportResultDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Bad request - Invalid file format or data",
+  })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_IDENTIFY_ASSET)
+  @ApiBearerAuth()
+  async importUnidentifiedAssets(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() currentUser: User
+  ): Promise<ImportResultDto> {
+    if (!file) {
+      throw new BadRequestException("File is required");
+    }
+
+    // Kiểm tra định dạng file
+    const allowedMimeTypes = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+      "application/vnd.ms-excel", // .xls
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        "Only Excel files (.xlsx, .xls) are allowed"
+      );
+    }
+
+    return this.assetsService.importUnidentifiedAssets(file, currentUser);
   }
 
   @Post("rfid/classify")

@@ -3,6 +3,7 @@ import { MoveStatus } from 'src/common/shared/MoveStatus';
 export class MovementItemResponseDto {
   id: string;
   assetId: string;
+  quantity: number;
   fromRoomId: string;
   toRoomId: string;
   note?: string;
