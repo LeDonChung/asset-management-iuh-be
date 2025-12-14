@@ -8,6 +8,7 @@ import { LiquidationProposalItem } from 'src/entities/liquidation-proposal-item'
 import { LiquidationHistory } from 'src/entities/liquidation-history.entity';
 import { Asset } from 'src/entities/asset.entity';
 import { AssetBookItem } from 'src/entities/asset-book-item.entity';
+import { AssetBook } from 'src/entities/asset-book.entity';
 import { Unit } from 'src/entities/unit.entity';
 import { PermissionHelperService } from 'src/common/services/permission-helper.service';
 import { AccessControlModule } from 'src/common/services/access-control.module';
@@ -20,6 +21,7 @@ import { AccessControlModule } from 'src/common/services/access-control.module';
       LiquidationHistory,
       Asset,
       AssetBookItem,
+      AssetBook,
       Unit
     ]),
     MulterModule.register({

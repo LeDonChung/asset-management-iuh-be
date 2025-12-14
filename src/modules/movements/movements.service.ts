@@ -22,6 +22,7 @@ import { AssetBookItem } from 'src/entities/asset-book-item.entity';
 import { MoveStatus } from 'src/common/shared/MoveStatus';
 import { AssetBookItemStatus } from 'src/common/shared/AssetBookItemStatus';
 import { AssetBookStatus } from 'src/common/shared/AssetBookStatus';
+import { AssetType } from 'src/common/shared/AssetType';
 import { PaginatedResponseDto } from 'src/common/dto/pagination.dto';
 import { MovementResponseDto, SimplifiedMovementResponseDto } from './dto/movement-response.dto';
 import { PermissionConstants } from 'src/common/utils/permission.constant';
@@ -66,15 +67,10 @@ export class MovementsService {
       for (const item of createDto.items) {
         const asset = await this.assetRepository.findOne({ 
           where: { id: item.assetId },
-          relations: ['currentRoom']
+          relations: ['currentRoom', 'currentRoom.unit']
         });
         if (!asset) {
           throw new NotFoundException(`Tài sản với ID ${item.assetId} không tồn tại`);
-        }
-
-        // Check if asset is currently in the from room
-        if (asset.currentRoomId !== item.fromRoomId) {
-          throw new BadRequestException(`Tài sản ${asset.fixedCode} hiện không ở phòng nguồn được chỉ định`);
         }
 
         const fromRoom = await this.roomRepository.findOne({ where: { id: item.fromRoomId } });
@@ -89,6 +85,34 @@ export class MovementsService {
 
         if (item.fromRoomId === item.toRoomId) {
           throw new BadRequestException(`Phòng nguồn và phòng đích không thể giống nhau cho tài sản ${asset.fixedCode}`);
+        }
+
+        if (!fromRoom || !fromRoom.unitId) {
+          throw new BadRequestException(`Phòng nguồn ${item.fromRoomId} không có thông tin đơn vị`);
+        }
+
+        const currentYear = new Date().getFullYear();
+        const assetBook = await this.findOrCreateAssetBook(
+          queryRunner.manager,
+          fromRoom.unitId,
+          currentYear
+        );
+
+        const sourceItems = await queryRunner.manager
+          .createQueryBuilder(AssetBookItem, 'abi')
+          .where('abi.bookId = :bookId', { bookId: assetBook.id })
+          .andWhere('abi.assetId = :assetId', { assetId: item.assetId })
+          .andWhere('abi.roomId = :fromRoomId', { fromRoomId: item.fromRoomId })
+          .andWhere('abi.status = :status', { status: AssetBookItemStatus.IN_USE })
+          .getMany();
+
+        const totalAvailableQuantity = sourceItems.reduce((sum, item) => sum + item.quantity, 0);
+        const requestedQuantity = item.quantity || 1;
+
+        if (totalAvailableQuantity < requestedQuantity) {
+          throw new BadRequestException(
+            `Tài sản ${asset.fixedCode} không đủ số lượng ở phòng nguồn. Có sẵn: ${totalAvailableQuantity}, yêu cầu: ${requestedQuantity}`
+          );
         }
       }
 
@@ -140,7 +164,7 @@ export class MovementsService {
         })
       );
 
-      await queryRunner.manager.save(movementItems);
+      const savedMovementItems = await queryRunner.manager.save(movementItems);
 
       // Create history record
       const history = this.movementHistoryRepository.create({
@@ -152,6 +176,22 @@ export class MovementsService {
       });
 
       await queryRunner.manager.save(history);
+
+      // Nếu tự động phê duyệt (status = APPROVED), cập nhật AssetBookItem ngay
+      if (finalStatus === MoveStatus.APPROVED) {
+        // Load items với relations để có thông tin room
+        const itemsWithRelations = await queryRunner.manager.find(AssetMovementItem, {
+          where: { movementId: savedMovement.id },
+          relations: ['fromRoom', 'toRoom']
+        });
+
+        await this.updateAssetBookItemsOnApproval(
+          queryRunner.manager,
+          savedMovement.id,
+          itemsWithRelations,
+          requesterId
+        );
+      }
 
       await queryRunner.commitTransaction();
 
@@ -486,13 +526,12 @@ export class MovementsService {
 
         // Validate and create new items
         for (const item of updateDto.items) {
-          const asset = await this.assetRepository.findOne({ where: { id: item.assetId } });
+          const asset = await this.assetRepository.findOne({ 
+            where: { id: item.assetId },
+            relations: ['currentRoom', 'currentRoom.unit']
+          });
           if (!asset) {
             throw new NotFoundException(`Tài sản với ID ${item.assetId} không tồn tại`);
-          }
-
-          if (asset.currentRoomId !== item.fromRoomId) {
-            throw new BadRequestException(`Tài sản ${asset.fixedCode} hiện không ở phòng nguồn được chỉ định`);
           }
 
           const fromRoom = await this.roomRepository.findOne({ where: { id: item.fromRoomId } });
@@ -502,8 +541,36 @@ export class MovementsService {
             throw new NotFoundException('Phòng nguồn hoặc phòng đích không tồn tại');
           }
 
+          if (!fromRoom.unitId) {
+            throw new BadRequestException(`Phòng nguồn ${item.fromRoomId} không có thông tin đơn vị`);
+          }
+
           if (item.fromRoomId === item.toRoomId) {
             throw new BadRequestException(`Phòng nguồn và phòng đích không thể giống nhau cho tài sản ${asset.fixedCode}`);
+          }
+
+          const currentYear = new Date().getFullYear();
+          const assetBook = await this.findOrCreateAssetBook(
+            queryRunner.manager,
+            fromRoom.unitId,
+            currentYear
+          );
+
+          const sourceItems = await queryRunner.manager
+            .createQueryBuilder(AssetBookItem, 'abi')
+            .where('abi.bookId = :bookId', { bookId: assetBook.id })
+            .andWhere('abi.assetId = :assetId', { assetId: item.assetId })
+            .andWhere('abi.roomId = :fromRoomId', { fromRoomId: item.fromRoomId })
+            .andWhere('abi.status = :status', { status: AssetBookItemStatus.IN_USE })
+            .getMany();
+
+          const totalAvailableQuantity = sourceItems.reduce((sum, item) => sum + item.quantity, 0);
+          const requestedQuantity = item.quantity || 1;
+
+          if (totalAvailableQuantity < requestedQuantity) {
+            throw new BadRequestException(
+              `Tài sản ${asset.fixedCode} không đủ số lượng ở phòng nguồn. Có sẵn: ${totalAvailableQuantity}, yêu cầu: ${requestedQuantity}`
+            );
           }
         }
 
@@ -582,84 +649,12 @@ export class MovementsService {
       await queryRunner.manager.save(approvalHistory);
 
       if (movement.items && movement.items.length > 0) {
-        const currentYear = new Date().getFullYear();
-
-        for (const item of movement.items) {
-          const asset = await queryRunner.manager.findOne(Asset, {
-            where: { id: item.assetId },
-            relations: ['currentRoom', 'currentRoom.unit']
-          });
-
-          if (!asset || !asset.currentRoom || !asset.currentRoom.unit) {
-            throw new NotFoundException(`Không tìm thấy thông tin đầy đủ của tài sản ${item.assetId}`);
-          }
-
-          await queryRunner.manager.update(Asset, 
-            { id: item.assetId }, 
-            { currentRoomId: item.toRoomId }
-          );
-  
-          await queryRunner.manager.update(AssetMovementItem,
-            { id: item.id },
-            { 
-              movedAt: new Date(),
-              movedBy: approverId,
-            }
-          );
-
-          const assetBook = await this.findOrCreateAssetBook(
-            queryRunner.manager,
-            asset.currentRoom.unit.id,
-            currentYear
-          );
-
-          const moveQuantity = item.quantity || 1;
-          
-          const sourceItems = await queryRunner.manager
-            .createQueryBuilder(AssetBookItem, 'abi')
-            .where('abi.bookId = :bookId', { bookId: assetBook.id })
-            .andWhere('abi.assetId = :assetId', { assetId: item.assetId })
-            .andWhere('abi.roomId = :fromRoomId', { fromRoomId: item.fromRoomId })
-            .andWhere('abi.status = :status', { status: AssetBookItemStatus.IN_USE })
-            .orderBy('abi.assignedAt', 'ASC')
-            .getMany();
-
-          let remainingQuantity = moveQuantity;
-          
-          for (const sourceItem of sourceItems) {
-            if (remainingQuantity <= 0) break;
-            
-            if (sourceItem.quantity <= remainingQuantity) {
-              sourceItem.roomId = item.toRoomId;
-              sourceItem.note = item.note || `Di chuyển từ ${item.fromRoom?.name || 'phòng nguồn'} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${id}`;
-              remainingQuantity -= sourceItem.quantity;
-              await queryRunner.manager.save(sourceItem);
-            } else {
-              const movedQty = remainingQuantity;
-              sourceItem.quantity -= movedQty;
-              await queryRunner.manager.save(sourceItem);
-              
-              const newItem = queryRunner.manager.create(AssetBookItem, {
-                bookId: assetBook.id,
-                assetId: item.assetId,
-                roomId: item.toRoomId,
-                assignedAt: sourceItem.assignedAt,
-                quantity: movedQty,
-                status: AssetBookItemStatus.IN_USE,
-                note: item.note || `Di chuyển từ ${item.fromRoom?.name || 'phòng nguồn'} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${id}`,
-              });
-              await queryRunner.manager.save(newItem);
-              
-              remainingQuantity = 0;
-            }
-          }
-
-          if (remainingQuantity > 0) {
-            throw new BadRequestException(
-              `Không đủ số lượng để di chuyển cho tài sản ${item.assetId}. Thiếu: ${remainingQuantity}`
-            );
-          }
-        }
+        await this.updateAssetBookItemsOnApproval(
+          queryRunner.manager,
+          id,
+          movement.items,
+          approverId
+        );
       }
 
       await queryRunner.commitTransaction();
@@ -825,6 +820,141 @@ export class MovementsService {
     }
 
     return assetBook;
+  }
+
+  private async updateAssetBookItemsOnApproval(
+    manager: EntityManager,
+    movementId: string,
+    items: AssetMovementItem[],
+    approverId: string
+  ): Promise<void> {
+    const currentYear = new Date().getFullYear();
+
+    for (const item of items) {
+      const asset = await manager.findOne(Asset, {
+        where: { id: item.assetId },
+        relations: ['currentRoom', 'currentRoom.unit']
+      });
+
+      if (!asset) {
+        throw new NotFoundException(`Không tìm thấy tài sản ${item.assetId}`);
+      }
+
+      const fromRoom = await manager.findOne(Room, {
+        where: { id: item.fromRoomId },
+        relations: ['unit']
+      });
+
+      if (!fromRoom || !fromRoom.unitId) {
+        throw new NotFoundException(`Không tìm thấy thông tin phòng nguồn ${item.fromRoomId}`);
+      }
+
+      await manager.update(Asset, 
+        { id: item.assetId }, 
+        { currentRoomId: item.toRoomId }
+      );
+
+      await manager.update(AssetMovementItem,
+        { id: item.id },
+        { 
+          movedAt: new Date(),
+          movedBy: approverId,
+        }
+      );
+
+      const assetBook = await this.findOrCreateAssetBook(
+        manager,
+        fromRoom.unitId,
+        currentYear
+      );
+
+      const moveQuantity = item.quantity || 1;
+      
+      const sourceItems = await manager
+        .createQueryBuilder(AssetBookItem, 'abi')
+        .where('abi.bookId = :bookId', { bookId: assetBook.id })
+        .andWhere('abi.assetId = :assetId', { assetId: item.assetId })
+        .andWhere('abi.roomId = :fromRoomId', { fromRoomId: item.fromRoomId })
+        .andWhere('abi.status = :status', { status: AssetBookItemStatus.IN_USE })
+        .orderBy('abi.assignedAt', 'ASC')
+        .getMany();
+
+      let remainingQuantity = moveQuantity;
+      
+      if (asset.type === AssetType.FIXED_ASSET) {
+        for (const sourceItem of sourceItems) {
+          if (remainingQuantity <= 0) break;
+          
+          const quantityToMove = Math.min(sourceItem.quantity, remainingQuantity);
+          
+          sourceItem.roomId = item.toRoomId;
+          sourceItem.note = `${sourceItem.note || ''}\nDi chuyển ${quantityToMove} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${movementId}`.trim();
+          await manager.save(sourceItem);
+          
+          remainingQuantity -= quantityToMove;
+        }
+      } else {
+        for (const sourceItem of sourceItems) {
+          if (remainingQuantity <= 0) break;
+          
+          const quantityToMove = Math.min(sourceItem.quantity, remainingQuantity);
+          
+          const existingTargetItem = await manager.findOne(AssetBookItem, {
+            where: {
+              bookId: assetBook.id,
+              assetId: item.assetId,
+              roomId: item.toRoomId,
+              status: AssetBookItemStatus.IN_USE,
+            },
+          });
+
+          if (existingTargetItem && sourceItem.id !== existingTargetItem.id) {
+            existingTargetItem.quantity += quantityToMove;
+            existingTargetItem.note = `${existingTargetItem.note || ''}\nNhận thêm ${quantityToMove} từ ${item.fromRoom?.name || 'phòng nguồn'} theo yêu cầu di chuyển ${movementId}`.trim();
+            await manager.save(existingTargetItem);
+            
+            if (sourceItem.quantity <= quantityToMove) {
+              sourceItem.status = AssetBookItemStatus.TRANSFERRED;
+              sourceItem.note = `${sourceItem.note || ''}\nDi chuyển ${sourceItem.quantity} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${movementId}`.trim();
+            } else {
+              sourceItem.quantity -= quantityToMove;
+              sourceItem.note = `${sourceItem.note || ''}\nDi chuyển ${quantityToMove} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${movementId}`.trim();
+            }
+            await manager.save(sourceItem);
+          } else {
+            if (sourceItem.quantity <= quantityToMove) {
+              sourceItem.roomId = item.toRoomId;
+              sourceItem.note = `${sourceItem.note || ''}\nDi chuyển ${sourceItem.quantity} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${movementId}`.trim();
+              await manager.save(sourceItem);
+            } else {
+              const remainingQty = sourceItem.quantity - quantityToMove;
+              sourceItem.quantity = remainingQty;
+              sourceItem.note = `${sourceItem.note || ''}\nGiữ lại ${remainingQty} ở phòng nguồn sau khi di chuyển ${quantityToMove}`.trim();
+              await manager.save(sourceItem);
+              
+              const newItem = manager.create(AssetBookItem, {
+                bookId: assetBook.id,
+                assetId: item.assetId,
+                roomId: item.toRoomId,
+                assignedAt: sourceItem.assignedAt,
+                quantity: quantityToMove,
+                status: AssetBookItemStatus.IN_USE,
+                note: item.note || `Di chuyển ${quantityToMove} từ ${item.fromRoom?.name || 'phòng nguồn'} đến ${item.toRoom?.name || 'phòng đích'} theo yêu cầu di chuyển ${movementId}`,
+              });
+              await manager.save(newItem);
+            }
+          }
+          
+          remainingQuantity -= quantityToMove;
+        }
+      }
+
+      if (remainingQuantity > 0) {
+        throw new BadRequestException(
+          `Không đủ số lượng để di chuyển cho tài sản ${item.assetId}. Thiếu: ${remainingQuantity}`
+        );
+      }
+    }
   }
 
   async removeMovement(id: string): Promise<void> {
