@@ -42,9 +42,13 @@ import { SaveTempInventoryDto } from "./dto/save-temp-inventory.dto";
 import { TempInventoryResponseDto } from "./dto/temp-inventory-response.dto";
 import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
 import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-response.dto";
+import { UpdateInventoryResultDto } from "./dto/update-inventory-result.dto";
 import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
 import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
 import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
+import { InventoryResultResponseDto } from "./dto/inventory-result-response.dto";
+import { InventoryStatisticsFilterDto } from "./dto/inventory-statistics-filter.dto";
+import { InventoryStatisticsResponseDto } from "./dto/inventory-statistics-response.dto";
 import { CopyInventoryDto } from "./dto/copy-inventory.dto";
 import { CopyInventoryResponseDto } from "./dto/copy-inventory-response.dto";
 import { MultiRoomInventoryFilterDto } from "./dto/multi-room-inventory-filter.dto";
@@ -184,6 +188,23 @@ export class InventoriesController {
     @Query() filterDto: MultiRoomInventoryFilterDto
   ): Promise<MultiRoomInventoryResponseDto> {
     return this.inventoriesService.getMultiRoomInventoryResults(filterDto);
+  }
+
+  @Get("statistics")
+  @ApiOperation({ summary: "Lấy thống kê kết quả kiểm kê theo nhiều mức độ" })
+  @ApiResponse({
+    status: 200,
+    description: "Thống kê kết quả kiểm kê",
+    type: InventoryStatisticsResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth()
+  async getInventoryStatistics(
+    @Query() filterDto: InventoryStatisticsFilterDto
+  ): Promise<InventoryStatisticsResponseDto> {
+    return this.inventoriesService.getInventoryStatistics(filterDto);
   }
 
   @Get(":id")
@@ -486,6 +507,28 @@ export class InventoriesController {
     @Param("roomId") roomId: string
   ): Promise<RoomInventoryResultResponseDto> {
     return this.inventoriesService.getRoomInventoryResults(roomId);
+  }
+
+  @Patch("inventory-results/:id")
+  @ApiOperation({ summary: "Cập nhật số lượng kết quả kiểm kê" })
+  @ApiParam({ name: "id", description: "ID của kết quả kiểm kê", type: "string" })
+  @ApiResponse({
+    status: 200,
+    description: "Cập nhật số lượng kết quả kiểm kê thành công",
+    type: InventoryResultResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Dữ liệu đầu vào không hợp lệ" })
+  @ApiResponse({ status: 404, description: "Không tìm thấy kết quả kiểm kê" })
+  @ApiResponse({ status: 500, description: "Lỗi server" })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PermissionConstants.PERM_PERFORM_INVENTORY)
+  @ApiBearerAuth()
+  async updateInventoryResult(
+    @Param("id") id: string,
+    @Body() updateDto: UpdateInventoryResultDto,
+    @CurrentUser() currentUser: User
+  ): Promise<InventoryResultResponseDto> {
+    return this.inventoriesService.updateInventoryResult(id, updateDto, currentUser);
   }
 
   // === TEMPORARY ADJACENT INVENTORY RESULTS ENDPOINTS ===

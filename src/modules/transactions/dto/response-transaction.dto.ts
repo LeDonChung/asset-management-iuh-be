@@ -38,6 +38,13 @@ export class TransactionItemResponseDto {
   toRoomId?: string;
 
   @ApiProperty({
+    description: 'Số lượng tài sản bàn giao',
+    example: 1,
+  })
+  @Expose()
+  quantity: number;
+
+  @ApiProperty({
     description: 'Thông tin tài sản',
   })
   @Expose()

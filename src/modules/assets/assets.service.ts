@@ -483,6 +483,7 @@ export class AssetsService {
           
           rfidTag.assetId = id;
           await this.rfidTagRepository.save(rfidTag);
+          (asset as FixedAsset).rfidTag = rfidTag;
           
           shouldUpdateStatus = true;
         } else if (!hasCurrentRoom) {
@@ -791,6 +792,185 @@ export class AssetsService {
     }
   }
 
+  /**
+   * Import unidentified assets from Excel file
+   * Supports roomCode (e.g., 4A01.01) instead of roomId
+   */
+  async importUnidentifiedAssets(
+    file: Express.Multer.File,
+    currentUser: User
+  ): Promise<ImportResultDto> {
+    const result: ImportResultDto = {
+      totalProcessed: 0,
+      totalBatches: 0,
+      batchSize: 0,
+      successCount: 0,
+      errorCount: 0,
+      errors: [],
+      createdAssets: [],
+    };
+
+    try {
+      // Read Excel file
+      const workbook = XLSX.read(file.buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      // Convert to JSON (skip header row)
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const dataRows = jsonData.slice(1); // Skip header
+      
+      result.totalProcessed = dataRows.length;
+
+      if (dataRows.length === 0) {
+        throw new BadRequestException("File Excel không có dữ liệu tài sản");
+      }
+
+      // Process in batches
+      const batchSize = Math.min(10, Math.max(5, dataRows.length));
+      const batches = [];
+
+      for (let i = 0; i < dataRows.length; i += batchSize) {
+        batches.push(dataRows.slice(i, i + batchSize));
+      }
+
+      result.batchSize = batchSize;
+      result.totalBatches = batches.length;
+
+      // Process each batch
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+
+        for (let i = 0; i < batch.length; i++) {
+          const row = batch[i];
+          const rowNumber = batchIndex * batchSize + i + 2; // +2 for header and 0-index
+
+          try {
+            // Map Excel columns to asset data
+            // Expected columns: Mã KT | Mã TS | Vị trí | Tên TS | Loại | Danh mục | Thông số KT | Nước SX | ĐVT | Số lượng | Ngày nhập | Gói mua | RFID | Vị trí trong phòng
+            const assetData = {
+              ktCode: row[0]?.toString().trim() || undefined, // Mã kế toán (để trống)
+              fixedCode: row[1]?.toString().trim() || undefined, // Mã tài sản (để trống)
+              roomCode: row[2]?.toString().trim() || "", // Mã phòng (VD: 4A01.01)
+              name: row[3]?.toString().trim() || "", // Tên tài sản
+              type: this.mapAssetType(row[4]?.toString() || "Tài sản cố định"), // Loại tài sản
+              category: row[5]?.toString().trim() || "", // Danh mục
+              specs: row[6]?.toString().trim() || "", // Thông số KT
+              origin: row[7]?.toString().trim() || "", // Nước SX
+              unit: row[8]?.toString().trim() || "Cái", // ĐVT
+              quantity: this.parseQuantity(row[9]?.toString()), // Số lượng (cột J)
+              entrydate: this.formatDate(row[10]?.toString() || ""), // Ngày nhập
+              purchasePackage: parseInt(row[11]?.toString()) || 0, // Gói mua
+              rfidId: row[12]?.toString().trim() || "", // RFID
+              locationInRoom: row[13]?.toString().trim() || "", // Vị trí trong phòng
+            };
+
+            // Validate required fields
+            if (!assetData.name) {
+              throw new Error("Tên tài sản là bắt buộc");
+            }
+
+            // Find or create category
+            let categoryId: string;
+            if (assetData.category) {
+              let existingCategory = await this.categoryRepository.findOne({
+                where: { name: assetData.category },
+              });
+
+              if (!existingCategory) {
+                const newCategory = this.categoryRepository.create({
+                  name: assetData.category,
+                  code: this.generateCategoryCode(assetData.category),
+                });
+                existingCategory = await this.categoryRepository.save(newCategory);
+              }
+
+              categoryId = existingCategory.id;
+            } else {
+              // Use default category
+              let defaultCategory = await this.categoryRepository.findOne({
+                where: { code: "DEFAULT" },
+              });
+
+              if (!defaultCategory) {
+                const newCategory = this.categoryRepository.create({
+                  name: "Danh mục mặc định",
+                  code: "DEFAULT",
+                });
+                defaultCategory = await this.categoryRepository.save(newCategory);
+              }
+
+              categoryId = defaultCategory.id;
+            }
+
+            // Find room by roomCode if provided
+            let currentRoomId: string | undefined;
+            if (assetData.roomCode) {
+              const room = await this.roomRepository.findOne({
+                where: { roomCode: assetData.roomCode },
+              });
+              
+              if (!room) {
+                throw new Error(`Không tìm thấy phòng với mã: ${assetData.roomCode}`);
+              }
+              
+              currentRoomId = room.id;
+            }
+
+            // Create asset DTO
+            const createAssetDto: CreateAssetDto = {
+              name: assetData.name,
+              specs: assetData.specs,
+              type: assetData.type,
+              categoryId: categoryId,
+              unit: assetData.unit,
+              quantity: assetData.quantity,
+              entrydate: assetData.entrydate,
+              origin: assetData.origin,
+              purchasePackage: assetData.purchasePackage,
+              currentRoomId: currentRoomId,
+              locationInRoom: assetData.locationInRoom,
+              rfid: assetData.rfidId,
+            };
+
+            // Create asset
+            const createdAsset = await this.create(createAssetDto, currentUser);
+
+            result.successCount++;
+            result.createdAssets.push({
+              id: createdAsset.id,
+              name: createdAsset.name,
+              ktCode: createdAsset.ktCode,
+              fixedCode: createdAsset.fixedCode,
+              type: createdAsset.type,
+              category: assetData.category || "Danh mục mặc định",
+              rfidTag: assetData.rfidId || undefined,
+            });
+
+          } catch (error) {
+            result.errorCount++;
+            result.errors.push({
+              row: rowNumber,
+              message: error.message,
+              data: row,
+            });
+          }
+        }
+
+        // Small delay between batches to avoid overwhelming the database
+        if (batchIndex < batches.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
+      return result;
+    } catch (error) {
+      throw new BadRequestException(
+        "Failed to import assets: " + error.message
+      );
+    }
+  }
+
   private mapAssetType(typeString: string): AssetType {
     const type = typeString.toLowerCase().trim();
     if (type.includes("tài sản cố định") || type.includes("fixed asset")) {
@@ -803,6 +983,40 @@ export class AssetsService {
       return AssetType.TOOLS_EQUIPMENT;
     }
     return AssetType.FIXED_ASSET;
+  }
+
+  private parseQuantity(quantityString: string | number | undefined, defaultQuantity: number = 1): number {
+    // Nếu đã là number và hợp lệ
+    if (typeof quantityString === 'number') {
+      return isNaN(quantityString) || quantityString <= 0 ? defaultQuantity : quantityString;
+    }
+    
+    // Nếu là string hoặc undefined
+    if (!quantityString || !quantityString.toString().trim()) {
+      return defaultQuantity;
+    }
+    
+    // Loại bỏ khoảng trắng và parse
+    const trimmed = quantityString.toString().trim();
+    
+    // Thử parse integer trước
+    let parsed = parseInt(trimmed, 10);
+    
+    // Nếu không parse được integer, thử parse float rồi làm tròn
+    if (isNaN(parsed)) {
+      const floatParsed = parseFloat(trimmed);
+      if (!isNaN(floatParsed) && floatParsed > 0) {
+        parsed = Math.floor(floatParsed);
+      }
+    }
+    
+    // Nếu parse thành công và là số hợp lệ (> 0)
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+    
+    // Nếu parse không thành công hoặc <= 0, trả về giá trị mặc định
+    return defaultQuantity;
   }
 
   private formatDate(dateString: string): string {
@@ -840,6 +1054,153 @@ export class AssetsService {
       .substring(0, 20);
 
     return code || "CATEGORY_" + Date.now();
+  }
+
+  /**
+   * Generate Excel template for importing assets
+   */
+  async generateImportTemplate(): Promise<Buffer> {
+    const workbook = XLSX.utils.book_new();
+
+    // Create headers
+    const headers = [
+      'Mã kế toán',
+      'Mã tài sản', 
+      'Vị trí',
+      'Tên tài sản',
+      'Loại tài sản',
+      'Danh mục',
+      'Nước SX',
+      'ĐVT',
+      'Số lượng',
+      'Ngày nhập',
+      'Gói mua',
+      'RFID',
+      'Vị trí'
+    ];
+
+    // Create sample data
+    const sampleData = [
+      [
+        '', // Mã kế toán (để trống, hệ thống tự sinh)
+        '', // Mã tài sản (để trống, hệ thống tự sinh)
+        '4A01.01', // Vị trí (Mã phòng)
+        '* Máy vi tính Vostro 270MT', // Tên tài sản
+        'Tài sản cố định', // Loại tài sản
+        'Máy tính', // Danh mục
+        'Trung Quốc', // Nước SX
+        'Bộ', // ĐVT
+        '1', // Số lượng
+        '01/01/2024', // Ngày nhập
+        '1', // Gói mua
+        'E280691500004021E7477C8D', // RFID
+        '29', // Vị trí trong phòng
+      ],
+      [
+        '',
+        '',
+        '4A01.01',
+        'Máy tính Dell Optiplex 7070',
+        'Tài sản cố định',
+        'Máy tính',
+        'Trung Quốc',
+        'Bộ',
+        '1',
+        '01/01/2024',
+        '1',
+        'E280691500004021E7A7AC8D',
+        '30',
+      ],
+      [
+        '',
+        '',
+        '4A01.01',
+        'Màn hình Vostro 270MT',
+        'Tài sản cố định',
+        'Màn hình',
+        'Trung Quốc',
+        'Bộ',
+        '1',
+        '01/01/2024',
+        '1',
+        'E280691500004021E748B88D',
+        '29',
+      ],
+    ];
+
+    // Combine headers with sample data
+    const worksheetData = [headers, ...sampleData];
+
+    // Create worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+
+    // Set column widths
+    worksheet['!cols'] = [
+      { wch: 15 }, // Mã kế toán
+      { wch: 15 }, // Mã tài sản
+      { wch: 15 }, // Vị trí
+      { wch: 35 }, // Tên tài sản
+      { wch: 20 }, // Loại tài sản
+      { wch: 25 }, // Danh mục
+      { wch: 15 }, // Nước SX
+      { wch: 10 }, // ĐVT
+      { wch: 12 }, // Số lượng
+      { wch: 15 }, // Ngày nhập
+      { wch: 12 }, // Gói mua
+      { wch: 30 }, // RFID
+      { wch: 15 }, // Vị trí trong phòng
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách tài sản');
+
+    // Create instructions sheet
+    const instructionsData = [
+      ['HƯỚNG DẪN IMPORT TÀI SẢN'],
+      [''],
+      ['Các cột trong file Excel:'],
+      ['STT', 'Tên cột', 'Bắt buộc', 'Mô tả', 'Ví dụ'],
+      ['1', 'Mã kế toán', 'Không', 'Để trống, hệ thống tự sinh', ''],
+      ['2', 'Mã tài sản', 'Không', 'Để trống, hệ thống tự sinh', ''],
+      ['3', 'Vị trí', 'Không', 'Mã phòng trong hệ thống', '4A01.01'],
+      ['4', 'Tên tài sản', 'CÓ', 'Tên đầy đủ của tài sản', 'Máy vi tính Vostro 270MT'],
+      ['5', 'Loại tài sản', 'Không', 'Tài sản cố định hoặc Công cụ dụng cụ', 'Tài sản cố định'],
+      ['6', 'Danh mục', 'Không', 'Hệ thống tự tạo nếu chưa có', 'Máy tính'],
+      ['7', 'Nước SX', 'Không', 'Nước sản xuất', 'Trung Quốc'],
+      ['8', 'ĐVT', 'Không', 'Đơn vị tính', 'Bộ, Cái, Chiếc'],
+      ['9', 'Số lượng', 'Không', 'Mặc định 1 cho tài sản cố định', '1'],
+      ['10', 'Ngày nhập', 'Không', 'Định dạng dd/mm/yyyy', '01/01/2024'],
+      ['11', 'Gói mua', 'Không', 'Số gói thầu', '0'],
+      ['12', 'RFID', 'Không', 'Mã RFID (chỉ cho tài sản cố định)', 'E280691500004021E7477C8D'],
+      ['13', 'Vị trí', 'Không', 'Vị trí cụ thể trong phòng', '29'],
+      [''],
+      ['LƯU Ý QUAN TRỌNG:'],
+      ['- Cột "Tên tài sản" là BẮT BUỘC phải điền'],
+      ['- Mã kế toán và Mã tài sản để trống, hệ thống tự động sinh'],
+      ['- Nếu chưa có danh mục, hệ thống sẽ tự động tạo mới'],
+      ['- Mã phòng phải tồn tại trong hệ thống (ví dụ: 4A01.01)'],
+      ['- Loại tài sản: "Tài sản cố định" hoặc "Công cụ dụng cụ"'],
+      ['- RFID chỉ áp dụng cho Tài sản cố định, có thể để trống'],
+      ['- Ngày nhập theo định dạng dd/mm/yyyy (ví dụ: 14/12/2025)'],
+      [''],
+      ['XỬ LÝ LỖI:'],
+      ['- Nếu có lỗi, hệ thống sẽ hiển thị số dòng và thông báo lỗi cụ thể'],
+      ['- Các dòng thành công vẫn được import, chỉ bỏ qua dòng lỗi'],
+    ];
+
+    const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
+    instructionsSheet['!cols'] = [
+      { wch: 8 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 50 },
+      { wch: 30 }
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Hướng dẫn');
+
+    // Generate buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return buffer;
   }
 
   private async validateKtCodeFromExcel(inputKtCode: string | undefined): Promise<string | undefined> {
@@ -1051,10 +1412,17 @@ export class AssetsService {
       .getManyAndCount();
 
     const warehouseAssets: WarehouseAssetResponseDto[] = assets.map((asset) => {
-      const lastReceivedTransaction = asset.transactionItems
-        ?.filter(item => item.transaction?.status === TransactionStatus.RECEIVED)
+      const lastReceivedTransactionItem = asset.transactionItems
+        ?.filter(item => 
+          item.assetId === asset.id && 
+          item.transaction?.status === TransactionStatus.RECEIVED
+        )
         ?.sort((a, b) => new Date(b.transaction.updatedAt).getTime() - new Date(a.transaction.updatedAt).getTime())
-        ?.[0]?.transaction;
+        ?.[0];
+
+      const lastReceivedTransaction = lastReceivedTransactionItem?.transaction;
+
+      const quantity = lastReceivedTransactionItem?.quantity ?? asset.quantity ?? 1;
 
       return {
         id: asset.id,
@@ -1065,7 +1433,7 @@ export class AssetsService {
         entrydate: asset.entrydate,
         unit: asset.unit,
         locationInRoom: asset.locationInRoom,
-        quantity: asset.quantity,
+        quantity: quantity,
         origin: asset.origin,
         purchasePackage: asset.purchasePackage,
         type: asset.type,
@@ -1216,23 +1584,70 @@ export class AssetsService {
           continue;
         }
 
+        // Tài sản đã có trong AssetBook của đơn vị (từ khi tiếp nhận transaction)
+        // Chỉ cần cập nhật vị trí: cùng phòng thì cộng dồn, khác phòng thì tạo mới
+        const currentAssetBook = await this.findOrCreateAssetBook(asset.currentRoom.unit.id, currentYear);
+        const warehouseRoomId = asset.currentRoom.id;
+        
+        // Tìm AssetBookItem ở phòng kho hiện tại
+        const sourceAssetBookItem = await this.assetBookItemRepository.findOne({
+          where: {
+            bookId: currentAssetBook.id,
+            assetId: asset.id,
+            roomId: warehouseRoomId, // Quan trọng: chỉ tìm ở phòng kho hiện tại
+            status: AssetBookItemStatus.IN_USE,
+          },
+        });
+
+        if (!sourceAssetBookItem) {
+          result.errors.push(`Không tìm thấy bản ghi sổ tài sản ở kho cho tài sản ${asset.ktCode}`);
+          result.errorCount++;
+          continue;
+        }
+
+        const transferQuantity = sourceAssetBookItem.quantity;
+
+        const existingTargetItem = await this.assetBookItemRepository.findOne({
+          where: {
+            bookId: currentAssetBook.id,
+            assetId: asset.id,
+            roomId: newRoom.id, // Quan trọng: phải cùng roomId mới cộng dồn
+            status: AssetBookItemStatus.IN_USE,
+          },
+        });
+
+        if (existingTargetItem) {
+          existingTargetItem.quantity += transferQuantity;
+          existingTargetItem.note = `${existingTargetItem.note || ''}\nNhận thêm ${transferQuantity} từ ${asset.currentRoom.name} theo cập nhật vị trí hàng loạt`.trim();
+          await this.assetBookItemRepository.save(existingTargetItem);
+        } else {
+          const newAssetBookItem = this.assetBookItemRepository.create({
+            bookId: currentAssetBook.id,
+            assetId: asset.id,
+            roomId: newRoom.id,
+            assignedAt: new Date(),
+            quantity: transferQuantity,
+            status: AssetBookItemStatus.IN_USE,
+            note: updateItem.note || updateDto.generalNote || `Chuyển ${transferQuantity} từ ${asset.currentRoom.name} đến ${newRoom.name} theo cập nhật vị trí hàng loạt`,
+          });
+          await this.assetBookItemRepository.save(newAssetBookItem);
+        }
+
+        if (sourceAssetBookItem.quantity <= transferQuantity) {
+          sourceAssetBookItem.status = AssetBookItemStatus.TRANSFERRED;
+          sourceAssetBookItem.note = `${sourceAssetBookItem.note || ''}\nChuyển ${transferQuantity} đến ${newRoom.name} theo cập nhật vị trí hàng loạt`.trim();
+          await this.assetBookItemRepository.save(sourceAssetBookItem);
+        } else {
+          sourceAssetBookItem.quantity -= transferQuantity;
+          sourceAssetBookItem.note = `${sourceAssetBookItem.note || ''}\nChuyển ${transferQuantity} đến ${newRoom.name} theo cập nhật vị trí hàng loạt`.trim();
+          await this.assetBookItemRepository.save(sourceAssetBookItem);
+        }
+
+        // Cập nhật currentRoomId của asset
         await this.assetRepository.update(
           { id: asset.id },
           { currentRoomId: newRoom.id }
         );
-
-        const currentAssetBook = await this.findOrCreateAssetBook(asset.currentRoom.unit.id, currentYear);
-        await this.assetBookItemRepository
-          .createQueryBuilder()
-          .update(AssetBookItem)
-          .set({ 
-            roomId: newRoom.id,
-            note: updateItem.note || updateDto.generalNote || `Chuyển từ ${asset.currentRoom.name} đến ${newRoom.name}`,
-          })
-          .where('bookId = :bookId', { bookId: currentAssetBook.id })
-          .andWhere('assetId = :assetId', { assetId: asset.id })
-          .andWhere('status = :status', { status: AssetBookItemStatus.IN_USE })
-          .execute();
 
         result.successAssetIds.push(asset.id);
         result.successCount++;

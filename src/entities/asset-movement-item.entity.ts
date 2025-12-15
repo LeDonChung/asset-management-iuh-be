@@ -29,6 +29,9 @@ export class AssetMovementItem {
   @Column({ name: "to_room_id", nullable: false })
   toRoomId: string;
 
+  @Column({ type: "int", default: 1, comment: "Số lượng tài sản di chuyển" })
+  quantity: number;
+
   @Column({ type: "text", nullable: true })
   note?: string;
 

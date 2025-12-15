@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource, EntityManager } from "typeorm";
 import { CreateLiquidationProposalDto } from "./dto/create-liquidation.dto";
 import {
   UpdateLiquidationStatusDto,
@@ -30,6 +30,7 @@ import { Unit } from "src/entities/unit.entity";
 import { PermissionHelperService } from "src/common/services/permission-helper.service";
 import { Asset } from "src/entities/asset.entity";
 import { AssetBookItem } from "src/entities/asset-book-item.entity";
+import { AssetBook } from "src/entities/asset-book.entity";
 import { AssetStatus } from "src/common/shared/AssetStatus";
 import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
 import { AssetType } from "src/common/shared/AssetType";
@@ -50,9 +51,12 @@ export class LiquidationsService {
     private assetRepo: Repository<Asset>,
     @InjectRepository(AssetBookItem)
     private assetBookItemRepo: Repository<AssetBookItem>,
+    @InjectRepository(AssetBook)
+    private assetBookRepo: Repository<AssetBook>,
     @InjectRepository(Unit)
     private unitRepo: Repository<Unit>,
-    private permissionHelper: PermissionHelperService
+    private permissionHelper: PermissionHelperService,
+    private dataSource: DataSource
   ) {}
 
   async createProposal(
@@ -446,7 +450,7 @@ export class LiquidationsService {
   ) {
     const proposal = await this.proposalRepo.findOne({ 
       where: { id },
-      relations: ["items"]
+      relations: ["items", "unit"]
     });
 
     if (!proposal) {
@@ -459,44 +463,139 @@ export class LiquidationsService {
       );
     }
 
-    // Update proposal status to FINALIZED
-    proposal.status = LiquidationStatus.FINALIZED;
-    await this.proposalRepo.save(proposal);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    // Cập nhật trạng thái của các asset thành LIQUIDATED
-    for (const item of proposal.items) {
-      // Cập nhật trạng thái asset
-      await this.assetRepo.update(
-        { id: item.assetId },
-        { status: AssetStatus.LIQUIDATED }
-      );
+    try {
+      proposal.status = LiquidationStatus.FINALIZED;
+      await queryRunner.manager.save(proposal);
 
-      // Tìm và cập nhật AssetBookItem mới nhất của asset này
-      const latestAssetBookItem = await this.assetBookItemRepo.findOne({
-        where: { assetId: item.assetId },
-        order: { assignedAt: "DESC" }
+      const currentYear = new Date().getFullYear();
+
+      for (const item of proposal.items) {
+        const asset = await queryRunner.manager.findOne(Asset, {
+          where: { id: item.assetId }
+        });
+
+        if (!asset) {
+          throw new NotFoundException(`Không tìm thấy tài sản ${item.assetId}`);
+        }
+
+        const liquidationQuantity = item.countedQuantity;
+
+        const assetBook = await queryRunner.manager.findOne(AssetBook, {
+          where: {
+            unitId: proposal.unitId,
+            year: currentYear
+          }
+        });
+
+        if (!assetBook) {
+          throw new NotFoundException(
+            `Không tìm thấy sổ tài sản cho đơn vị ${proposal.unitId} năm ${currentYear}`
+          );
+        }
+
+        const assetBookItems = await queryRunner.manager
+          .createQueryBuilder(AssetBookItem, 'abi')
+          .where('abi.bookId = :bookId', { bookId: assetBook.id })
+          .andWhere('abi.assetId = :assetId', { assetId: item.assetId })
+          .andWhere('abi.status = :status', { status: AssetBookItemStatus.IN_USE })
+          .orderBy('abi.assignedAt', 'ASC')
+          .getMany();
+
+        let remainingLiquidationQty = liquidationQuantity;
+
+        if (asset.type === AssetType.TOOLS_EQUIPMENT) {
+          for (const bookItem of assetBookItems) {
+            if (remainingLiquidationQty <= 0) break;
+
+            const quantityToLiquidate = Math.min(bookItem.quantity, remainingLiquidationQty);
+            const remainingQty = bookItem.quantity - quantityToLiquidate;
+
+            if (remainingQty > 0) {
+              bookItem.quantity = remainingQty;
+              bookItem.note = `${bookItem.note || ''}\nThanh lý ${quantityToLiquidate} theo đề xuất ${id}. Còn lại: ${remainingQty}`.trim();
+              await queryRunner.manager.save(bookItem);
+
+              const originalQuantity = bookItem.quantity + quantityToLiquidate;
+              const liquidatedBookItem = queryRunner.manager.create(AssetBookItem, {
+                bookId: assetBook.id,
+                assetId: item.assetId,
+                roomId: bookItem.roomId,
+                assignedAt: bookItem.assignedAt,
+                quantity: quantityToLiquidate,
+                status: AssetBookItemStatus.LIQUIDATED,
+                note: `Thanh lý ${quantityToLiquidate} từ ${originalQuantity} theo đề xuất ${id}`,
+              });
+              await queryRunner.manager.save(liquidatedBookItem);
+            } else {
+              bookItem.quantity = 0;
+              bookItem.status = AssetBookItemStatus.LIQUIDATED;
+              bookItem.note = `${bookItem.note || ''}\nThanh lý ${quantityToLiquidate} theo đề xuất ${id}`.trim();
+              await queryRunner.manager.save(bookItem);
+            }
+
+            remainingLiquidationQty -= quantityToLiquidate;
+          }
+
+          const currentAssetQuantity = asset.quantity || 0;
+          const newAssetQuantity = Math.max(0, currentAssetQuantity - liquidationQuantity);
+          
+          await queryRunner.manager.update(
+            Asset,
+            { id: item.assetId },
+            { 
+              quantity: newAssetQuantity,
+              status: newAssetQuantity === 0 ? AssetStatus.LIQUIDATED : AssetStatus.IN_USE
+            }
+          );
+
+          if (remainingLiquidationQty > 0) {
+            throw new BadRequestException(
+              `Không đủ số lượng để thanh lý cho tài sản ${asset.fixedCode}. Thiếu: ${remainingLiquidationQty}`
+            );
+          }
+        } else {
+          if (liquidationQuantity > 0) {
+            const bookItemToLiquidate = assetBookItems[0];
+            
+            if (bookItemToLiquidate) {
+              bookItemToLiquidate.status = AssetBookItemStatus.LIQUIDATED;
+              bookItemToLiquidate.note = `${bookItemToLiquidate.note || ''}\nThanh lý theo đề xuất ${id}`.trim();
+              await queryRunner.manager.save(bookItemToLiquidate);
+            }
+
+            await queryRunner.manager.update(
+              Asset,
+              { id: item.assetId },
+              { 
+                status: AssetStatus.LIQUIDATED
+              }
+            );
+          }
+        }
+      }
+      const history = queryRunner.manager.create(LiquidationHistory, {
+        proposalId: id,
+        handlerId,
+        actionStatus: LiquidationStatus.FINALIZED,
+        evidenceUrl: finalizeDto.evidenceUrl,
+        note: finalizeDto.note ?? "Đề xuất thanh lý đã được hoàn thành",
       });
 
-      if (latestAssetBookItem) {
-        await this.assetBookItemRepo.update(
-          { id: latestAssetBookItem.id },
-          { status: AssetBookItemStatus.LIQUIDATED }
-        );
-      }
+      await queryRunner.manager.save(history);
+
+      await queryRunner.commitTransaction();
+
+      return this.getProposalById(id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    // Create history record
-    const history = this.historyRepo.create({
-      proposalId: id,
-      handlerId,
-      actionStatus: LiquidationStatus.FINALIZED,
-      evidenceUrl: finalizeDto.evidenceUrl,
-      note: finalizeDto.note ?? "Đề xuất thanh lý đã được hoàn thành",
-    });
-
-    await this.historyRepo.save(history);
-
-    return this.getProposalById(id);
   }
 
   private validateStatusTransition(

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsEnum, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsEnum, IsDateString, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MoveStatus } from 'src/common/shared/MoveStatus';
@@ -7,6 +7,16 @@ export class CreateMovementItemDto {
   @ApiProperty({ description: 'ID của tài sản' })
   @IsUUID()
   assetId: string;
+
+  @ApiProperty({
+    description: 'Số lượng tài sản di chuyển',
+    example: 1,
+    default: 1,
+    minimum: 1,
+  })
+  @IsNumber()
+  @Min(1)
+  quantity: number;
 
   @ApiProperty({ description: 'ID phòng nguồn' })
   @IsUUID()

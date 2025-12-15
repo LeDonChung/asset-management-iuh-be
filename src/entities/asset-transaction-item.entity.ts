@@ -28,6 +28,9 @@ export class AssetTransactionItem {
     @Column({ name: 'to_room_id', nullable: true, comment: 'Phòng đích cho tài sản này (có thể khác với transaction.toRoomId)' })
     toRoomId?: string;
 
+    @Column({ type: 'int', default: 1, comment: 'Số lượng tài sản bàn giao' })
+    quantity: number;
+
     @Column({ type: 'text', nullable: true, comment: 'Ghi chú cho từng tài sản' })
     note?: string;
 

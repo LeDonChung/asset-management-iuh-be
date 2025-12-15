@@ -51,8 +51,10 @@ export class TransactionsService {
     createDto: CreateTransactionDto,
     requesterId: string,
   ): Promise<TransactionResponseDto> {
-    const assetIds = createDto.items.map(item => item.assetId);
-    const assets = await this.assetRepo.findByIds(assetIds);
+    const assetIds = [...new Set(createDto.items.map(item => item.assetId))];
+    const assets = await this.assetRepo.find({
+      where: assetIds.map(id => ({ id })),
+    });
     
     if (assets.length !== assetIds.length) {
       throw new BadRequestException('Một số tài sản không tồn tại');
@@ -75,6 +77,31 @@ export class TransactionsService {
     const currentYear = new Date().getFullYear();
     const fromAssetBook = await this.findOrCreateAssetBook(createDto.fromUnitId, currentYear);
     
+    const assetQuantityMap = new Map<string, number>();
+    for (const item of createDto.items) {
+      const currentQty = assetQuantityMap.get(item.assetId) || 0;
+      assetQuantityMap.set(item.assetId, currentQty + (item.quantity || 1));
+    }
+
+    for (const [assetId, requestedQuantity] of assetQuantityMap.entries()) {
+      const totalAvailable = await this.assetBookItemRepo
+        .createQueryBuilder('item')
+        .where('item.bookId = :bookId', { bookId: fromAssetBook.id })
+        .andWhere('item.assetId = :assetId', { assetId })
+        .andWhere('item.status = :status', { status: AssetBookItemStatus.IN_USE })
+        .select('COALESCE(SUM(item.quantity), 0)', 'total')
+        .getRawOne();
+
+      const availableQuantity = parseInt(totalAvailable?.total || '0', 10);
+      
+      if (availableQuantity < requestedQuantity) {
+        const asset = assets.find(a => a.id === assetId);
+        throw new BadRequestException(
+          `Tài sản "${asset?.name || assetId}" không đủ số lượng. Yêu cầu: ${requestedQuantity}, Có sẵn: ${availableQuantity}`
+        );
+      }
+    }
+
     const assetBookItems = await this.assetBookItemRepo
       .createQueryBuilder('item')
       .where('item.bookId = :bookId', { bookId: fromAssetBook.id })
@@ -82,9 +109,9 @@ export class TransactionsService {
       .andWhere('item.status = :status', { status: AssetBookItemStatus.IN_USE })
       .getMany();
 
-    if (assetBookItems.length !== assetIds.length) {
+    if (assetBookItems.length === 0) {
       throw new BadRequestException(
-        'Một số tài sản không thuộc sổ tài sản của đơn vị nguồn hoặc không ở trạng thái IN_USE'
+        'Không tìm thấy tài sản nào trong sổ tài sản của đơn vị nguồn ở trạng thái IN_USE'
       );
     }
 
@@ -108,6 +135,7 @@ export class TransactionsService {
       this.transactionItemRepo.create({
         transactionId: savedTransaction.id,
         assetId: item.assetId,
+        quantity: item.quantity || 1,
         fromRoomId: item.fromRoomId,
         toRoomId: warehouseRoom.id,
         note: item.note,
@@ -450,6 +478,7 @@ export class TransactionsService {
         const item = this.transactionItemRepo.create({
           transaction: transaction, // Set relation trực tiếp
           assetId: itemDto.assetId,
+          quantity: itemDto.quantity || 1,
           fromRoomId: itemDto.fromRoomId,
           toRoomId: itemDto.toRoomId,
           note: itemDto.note,
@@ -736,25 +765,64 @@ export class TransactionsService {
     const toAssetBook = await this.findOrCreateAssetBook(transaction.toUnitId, currentYear);
 
     for (const item of transaction.items) {
-      await this.assetBookItemRepo
-        .createQueryBuilder()
-        .update(AssetBookItem)
-        .set({ status: AssetBookItemStatus.TRANSFERRED })
-        .where('bookId = :bookId', { bookId: fromAssetBook.id })
-        .andWhere('assetId = :assetId', { assetId: item.assetId })
-        .andWhere('status = :currentStatus', { currentStatus: AssetBookItemStatus.IN_USE })
-        .execute();
+      const transferQuantity = item.quantity || 1;
+      
+      const sourceItems = await this.assetBookItemRepo
+        .createQueryBuilder('abi')
+        .where('abi.bookId = :bookId', { bookId: fromAssetBook.id })
+        .andWhere('abi.assetId = :assetId', { assetId: item.assetId })
+        .andWhere('abi.status = :status', { status: AssetBookItemStatus.IN_USE })
+        .orderBy('abi.assignedAt', 'ASC')
+        .getMany();
 
-      const newAssetBookItem = this.assetBookItemRepo.create({
-        bookId: toAssetBook.id,
-        assetId: item.assetId,
-        roomId: warehouseRoomId,
-        assignedAt: new Date(),
-        quantity: 1,
-        status: AssetBookItemStatus.IN_USE,
-        note: `Tiếp nhận từ ${transaction.fromUnit?.name || 'đơn vị khác'} theo giao dịch ${transaction.id}`,
+      let remainingQuantity = transferQuantity;
+      
+      for (const sourceItem of sourceItems) {
+        if (remainingQuantity <= 0) break;
+        
+        if (sourceItem.quantity <= remainingQuantity) {
+          sourceItem.status = AssetBookItemStatus.TRANSFERRED;
+          remainingQuantity -= sourceItem.quantity;
+          await this.assetBookItemRepo.save(sourceItem);
+        } else {
+          const transferredQty = remainingQuantity;
+          sourceItem.quantity -= transferredQty;
+          await this.assetBookItemRepo.save(sourceItem);
+          remainingQuantity = 0;
+        }
+      }
+
+      if (remainingQuantity > 0) {
+        throw new BadRequestException(
+          `Không đủ số lượng để chuyển giao cho tài sản ${item.assetId}. Thiếu: ${remainingQuantity}`
+        );
+      }
+
+      const existingTargetItem = await this.assetBookItemRepo.findOne({
+        where: {
+          bookId: toAssetBook.id,
+          assetId: item.assetId,
+          roomId: warehouseRoomId, 
+          status: AssetBookItemStatus.IN_USE,
+        },
       });
-      await this.assetBookItemRepo.save(newAssetBookItem);
+
+      if (existingTargetItem) {
+        existingTargetItem.quantity += transferQuantity;
+        existingTargetItem.note = `${existingTargetItem.note || ''}\nTiếp nhận thêm ${transferQuantity} từ ${transaction.fromUnit?.name || 'đơn vị khác'} theo giao dịch ${transaction.id}`.trim();
+        await this.assetBookItemRepo.save(existingTargetItem);
+      } else {
+        const newAssetBookItem = this.assetBookItemRepo.create({
+          bookId: toAssetBook.id,
+          assetId: item.assetId,
+          roomId: warehouseRoomId,
+          assignedAt: new Date(),
+          quantity: transferQuantity,
+          status: AssetBookItemStatus.IN_USE,
+          note: `Tiếp nhận từ ${transaction.fromUnit?.name || 'đơn vị khác'} theo giao dịch ${transaction.id}`,
+        });
+        await this.assetBookItemRepo.save(newAssetBookItem);
+      }
 
       await this.assetRepo
         .createQueryBuilder()

@@ -149,63 +149,103 @@ export class SeedingService implements OnModuleInit {
         const value = await this.unitRepository.save(unitCreate);
         unitsCampusCreated.push(value);
       } else {
-        return;
+        unitsCampusCreated.push(unitFind);
       }
     }
 
-    const unitsUserDept = [
-      {
-        name: "Khoa Công nghệ thông tin",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Cơ khí",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Động Lực",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Công nghệ May thời trang",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Công nghệ Điện",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Công nghệ Điện tử",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Công nghệ Nhiệt - lạnh",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Khoa Công nghệ Hóa học",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Viện CNSH&TP",
-        type: UnitType.USER_DEPT,
-      },
-      {
-        name: "Viện KHCN&QLMT",
-        type: UnitType.USER_DEPT,
-      },
-    ];
+    // Define departments for each campus
+    const campusDepartments = {
+      "Cơ sở Gò Vấp": [
+        {
+          name: "Khoa Công nghệ thông tin",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Cơ khí",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Động Lực",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Công nghệ May thời trang",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Công nghệ Điện",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Công nghệ Điện tử",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Công nghệ Nhiệt - lạnh",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Công nghệ Hóa học",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Viện CNSH&TP",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Viện KHCN&QLMT",
+          type: UnitType.USER_DEPT,
+        },
+      ],
+      "Cơ sở Thanh Hóa": [
+        {
+          name: "Khoa Kinh tế",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Quản trị Kinh doanh",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Tài chính - Ngân hàng",
+          type: UnitType.USER_DEPT,
+        },
+      ],
+      "Cơ sở Phạm Văn Chiêu": [
+        {
+          name: "Khoa Ngoại ngữ",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Khoa học Xã hội",
+          type: UnitType.USER_DEPT,
+        },
+        {
+          name: "Khoa Giáo dục Thể chất",
+          type: UnitType.USER_DEPT,
+        },
+      ],
+    };
 
     const unitsUserDeptCreated = [];
-    for (const unit of unitsCampusCreated) {
-      for (const unitUserDept of unitsUserDept) {
+    let buildingCounter = 0; // Track building letters A-Z
+
+    // Create departments for each campus
+    for (const campus of unitsCampusCreated) {
+      const departments = campusDepartments[campus.name] || [];
+      
+      for (const unitUserDept of departments) {
         let unitFind = await this.unitRepository.findOne({
-          where: { name: unitUserDept.name, parentUnit: { id: unit.id } },
+          where: { name: unitUserDept.name, parentUnit: { id: campus.id } },
         });
+        
         if (!unitFind) {
-          const unitCreate = this.unitRepository.create(unitUserDept);
+          const unitCreate = this.unitRepository.create({
+            name: unitUserDept.name,
+            type: unitUserDept.type,
+          });
           unitCreate.unitCode = await this.generateUnitCode();
-          unitCreate.parentUnit = unit;
+          unitCreate.parentUnit = campus;
           const value = await this.unitRepository.save(unitCreate);
           unitsUserDeptCreated.push(value);
         } else {
@@ -214,69 +254,101 @@ export class SeedingService implements OnModuleInit {
       }
     }
 
-    // Define building, floor, and room structure
-    const buildings = ["A", "B"]; // Each department gets 2 buildings
-    const floors = ["1", "2", "3", "4", "5"]; // 5 floors per building
-    const roomNumbers = ["01", "02", "03", "04", "05"]; // 5 rooms per floor
+    // Define floor and room structure
+    // Each building has 4 floors, each floor has 2-3 rooms
+    const floors = ["1", "2", "3", "4"]; // 4 floors per building
 
-    // Create rooms for each department in each campus
-    for (const campus of unitsCampusCreated) {
-      for (const dept of unitsUserDeptCreated.filter(
-        (d) => d.parentUnit.id === campus.id
-      )) {
-        for (const building of buildings) {
-          for (const floor of floors) {
-            const roomsCreated = []; // Track rooms on this floor for adjacent room assignment
-            for (let i = 0; i < roomNumbers.length; i++) {
-              const roomNumber = roomNumbers[i];
-              const floorPart = floor.padStart(2, "0");
+    // Create rooms for each department
+    for (const dept of unitsUserDeptCreated) {
+      // Each department gets 2 buildings
+      const buildings = [];
+      for (let i = 0; i < 2; i++) {
+        const buildingLetter = String.fromCharCode(65 + (buildingCounter % 26)); // A-Z
+        buildings.push(buildingLetter);
+        buildingCounter++;
+      }
+
+      for (const building of buildings) {
+        for (let floorIndex = 0; floorIndex < floors.length; floorIndex++) {
+          const floor = floors[floorIndex];
+          const floorPart = floor.padStart(2, "0");
+          
+          // Each floor has 2-3 rooms: floor 1,3 have 2 rooms; floor 2,4 have 3 rooms
+          const roomsPerFloor = floorIndex % 2 === 0 ? 2 : 3;
+          const roomsCreated = []; // Track rooms on this floor for adjacent room assignment
+          
+          // Create rooms for this floor
+          for (let roomIndex = 0; roomIndex < roomsPerFloor; roomIndex++) {
+            const roomNumber = (roomIndex + 1).toString().padStart(2, "0"); // 01, 02, 03
+            
+            // Generate unique room code first to check if room already exists
+            const roomCode = await this.generateRoomCode(
+              building,
+              floor,
+              roomNumber,
+              dept.id
+            );
+
+            // Check if room with this roomCode already exists
+            let existingRoom = await this.roomRepository.findOne({
+              where: { roomCode: roomCode },
+            });
+
+            let savedRoom: Room;
+            if (existingRoom) {
+              // Room already exists, use it
+              savedRoom = existingRoom;
+              this.logger.log(`Room with roomCode ${roomCode} already exists, skipping creation`);
+            } else {
+              // Room doesn't exist, create new one
               const roomCreate = this.roomRepository.create({
-                name: `${building}${floorPart}.${roomNumber}`,
+                name: `${building}${floorPart}.${roomNumber}`, // e.g., A01.01, A01.02
                 building,
                 floor,
-                roomNumber,
+                roomNumber: roomNumber,
                 status: RoomStatus.ACTIVE,
                 unit: dept,
                 adjacentRooms: [],
+                roomCode: roomCode,
               });
 
-              // Generate unique room code
-              roomCreate.roomCode = await this.generateRoomCode(
-                building,
-                floor,
-                roomNumber,
-                dept.id
-              );
-
               // Save the room first to ensure it exists in the database
-              const savedRoom = await this.roomRepository.save(roomCreate);
-              roomsCreated.push(savedRoom);
+              savedRoom = await this.roomRepository.save(roomCreate);
+            }
+            
+            roomsCreated.push(savedRoom);
+          }
+
+          // Assign adjacent rooms (after all rooms on the floor are saved)
+          // Rooms are adjacent if they are consecutive (01 adjacent to 02, 02 adjacent to 03, etc.)
+          for (let i = 0; i < roomsCreated.length; i++) {
+            const room = roomsCreated[i];
+            room.adjacentRooms = [];
+
+            // Add previous room as adjacent (if it exists)
+            if (i > 0) {
+              room.adjacentRooms.push(roomsCreated[i - 1]);
+            }
+            // Add next room as adjacent (if it exists)
+            if (i < roomsCreated.length - 1) {
+              room.adjacentRooms.push(roomsCreated[i + 1]);
             }
 
-            // Assign adjacent rooms (after all rooms on the floor are saved)
-            for (let i = 0; i < roomsCreated.length; i++) {
-              const room = roomsCreated[i];
-              room.adjacentRooms = [];
+            // Save the room with updated adjacent rooms
+            await this.roomRepository.save(room);
 
-              // Add previous room as adjacent (if it exists)
-              if (i > 0) {
-                room.adjacentRooms.push(roomsCreated[i - 1]);
-              }
-              // Add next room as adjacent (if it exists)
-              if (i < roomsCreated.length - 1) {
-                room.adjacentRooms.push(roomsCreated[i + 1]);
-              }
-
-              // Save the room with updated adjacent rooms
-              await this.roomRepository.save(room);
-
-              // Update adjacent rooms to include this room
-              if (room.adjacentRooms.length > 0) {
-                for (const adjRoom of room.adjacentRooms) {
-                  adjRoom.adjacentRooms = [
-                    ...(adjRoom.adjacentRooms ?? []),
-                    room,
-                  ];
+            // Update adjacent rooms to include this room (bidirectional)
+            if (room.adjacentRooms.length > 0) {
+              for (const adjRoom of room.adjacentRooms) {
+                if (!adjRoom.adjacentRooms) {
+                  adjRoom.adjacentRooms = [];
+                }
+                // Check if this room is already in adjacent rooms
+                const alreadyAdjacent = adjRoom.adjacentRooms.some(
+                  (r) => r.id === room.id
+                );
+                if (!alreadyAdjacent) {
+                  adjRoom.adjacentRooms.push(room);
                   await this.roomRepository.save(adjRoom);
                 }
               }

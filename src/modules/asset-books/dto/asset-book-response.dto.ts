@@ -52,6 +52,8 @@ export class AssetBookResponseDto {
 }
 
 export class AssetItemResponseDto  extends AssetResponseDto{
+    @ApiProperty({ description: 'AssetBookItem ID (ID duy nhất của mỗi bản ghi trong sổ tài sản)' })
+    bookItemId: string;
     @ApiProperty({ description: 'Note' })
     note: string;
     @ApiProperty({ description: 'Status in Asset Book', enum: AssetBookItemStatus })

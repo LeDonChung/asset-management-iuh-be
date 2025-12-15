@@ -15,6 +15,8 @@ import { InventoryResult } from 'src/entities/inventory-result';
 import { Asset } from 'src/entities/asset.entity';
 import { Room } from 'src/entities/room.entity';
 import { InventorySub } from 'src/entities/inventory-sub.entity';
+import { AssetBookItem } from 'src/entities/asset-book-item.entity';
+import { AssetBook } from 'src/entities/asset-book.entity';
 import { RedisModule } from '../redis/redis.module';
 
 @Module({
@@ -33,6 +35,8 @@ import { RedisModule } from '../redis/redis.module';
       Asset,
       Room,
       InventorySub,
+      AssetBookItem,
+      AssetBook,
     ]),
     RedisModule,
   ],

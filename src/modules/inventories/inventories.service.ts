@@ -35,10 +35,24 @@ import { Asset } from "src/entities/asset.entity";
 import { Room } from "src/entities/room.entity";
 import { RedisService } from "../redis/redis.service";
 import { InventorySub } from "src/entities/inventory-sub.entity";
+import { AssetBookItem } from "src/entities/asset-book-item.entity";
+import { AssetBook } from "src/entities/asset-book.entity";
+import { AssetBookStatus } from "src/common/shared/AssetBookStatus";
+import { AssetBookItemStatus } from "src/common/shared/AssetBookItemStatus";
+import { InventoryResultStatus } from "src/common/shared/InventoryResultStatus";
 import { SaveTempInventoryDto, AssetInventoryDetail } from "./dto/save-temp-inventory.dto";
 import { TempInventoryResponseDto } from "./dto/temp-inventory-response.dto";
 import { SubmitInventoryResultDto } from "./dto/submit-inventory-result.dto";
 import { SubmitInventoryResultResponseDto } from "./dto/submit-inventory-result-response.dto";
+import { UpdateInventoryResultDto } from "./dto/update-inventory-result.dto";
+import { InventoryStatisticsFilterDto, StatisticsLevel } from "./dto/inventory-statistics-filter.dto";
+import { 
+  InventoryStatisticsResponseDto, 
+  StatusStatisticsDto, 
+  AssetTypeStatisticsDto, 
+  ScanMethodStatisticsDto,
+  LevelStatisticsItemDto 
+} from "./dto/inventory-statistics-response.dto";
 import { SaveTempAdjacentInventoryDto } from "./dto/save-temp-adjacent-inventory.dto";
 import { TempAdjacentInventoryResponseDto } from "./dto/temp-adjacent-inventory-response.dto";
 import { RoomInventoryResultResponseDto } from "./dto/room-inventory-result-response.dto";
@@ -82,6 +96,10 @@ export class InventoriesService {
     private roomRepository: Repository<Room>,
     @InjectRepository(InventorySub)
     private inventorySubRepository: Repository<InventorySub>,
+    @InjectRepository(AssetBookItem)
+    private assetBookItemRepository: Repository<AssetBookItem>,
+    @InjectRepository(AssetBook)
+    private assetBookRepository: Repository<AssetBook>,
     private redisService: RedisService
   ) {}
 
@@ -1364,15 +1382,22 @@ export class InventoriesService {
     try {
       const { assignmentId, results, note } = submitDto;
 
-    // Kiểm tra assignment có tồn tại không
+    // Kiểm tra assignment có tồn tại không và lấy thông tin inventory session
     const assignment = await this.inventoryGroupAssignmentRepository.findOne({
       where: { id: assignmentId },
-      relations: ['group', 'unit'],
+      relations: ['group', 'group.subInventory', 'group.subInventory.inventorySessionUnit', 'group.subInventory.inventorySessionUnit.inventorySession', 'unit'],
     });
 
     if (!assignment) {
       throw new NotFoundException(`Phân công kiểm kê với ID ${assignmentId} không tồn tại`);
     }
+
+    // Lấy year từ inventory session
+    const inventorySession = assignment.group?.subInventory?.inventorySessionUnit?.inventorySession;
+    if (!inventorySession) {
+      throw new NotFoundException('Không tìm thấy thông tin kỳ kiểm kê');
+    }
+    const year = inventorySession.year;
 
     // Validation: Kiểm tra tất cả assets có tồn tại không
     const assetIds = results.map(result => result.assetId);
@@ -1396,31 +1421,78 @@ export class InventoriesService {
     }
 
     const roomIds = rooms.rooms.map(room => room.id);
-    const assetRoomIds = assets.map(asset => asset.currentRoomId);
-    const invalidRoomIds = assetRoomIds.filter(roomId => !roomIds.includes(roomId));
+    const resultRoomIds = results.map(result => result.roomId);
+    const invalidRoomIds = resultRoomIds.filter(roomId => !roomIds.includes(roomId));
     
     if (invalidRoomIds.length > 0) {
-      throw new BadRequestException(`Một hoặc nhiều tài sản không thuộc về phòng được phân công: ${invalidRoomIds.join(', ')}`);
+      const invalidAssetIds = results
+        .filter(result => invalidRoomIds.includes(result.roomId))
+        .map(result => result.assetId);
+      throw new BadRequestException(`Một hoặc nhiều tài sản không thuộc về phòng được phân công: ${[...new Set(invalidAssetIds)].join(', ')}`);
     }
 
-    // Tạo map asset để lấy systemQuantity
+    const assetBook = await this.assetBookRepository.findOne({
+      where: {
+        unitId: assignment.unitId,
+        year: year,
+        status: AssetBookStatus.OPEN,
+      },
+    });
+
+    if (!assetBook) {
+      throw new NotFoundException(`Không tìm thấy sổ tài sản cho đơn vị ${assignment.unitId} năm ${year}`);
+    }
+
+    const uniqueAssetRoomPairs = [...new Set(results.map(r => `${r.assetId}:${r.roomId}`))];
+    const assetBookItems = await this.assetBookItemRepository.find({
+      where: {
+        bookId: assetBook.id,
+        assetId: In(results.map(r => r.assetId)),
+        roomId: In(results.map(r => r.roomId)),
+        status: AssetBookItemStatus.IN_USE,
+      },
+    });
+
+    const assetBookItemMap = new Map<string, number>();
+    assetBookItems.forEach(item => {
+      const key = `${item.assetId}:${item.roomId}`;
+      const existingQuantity = assetBookItemMap.get(key) || 0;
+      assetBookItemMap.set(key, existingQuantity + item.quantity);
+    });
+
     const assetMap = new Map(assets.map(asset => [asset.id, asset]));
 
-    // Tạo inventory results
     const savedResults: InventoryResult[] = [];
 
     for (const result of results) {
       const asset = assetMap.get(result.assetId);
       if (!asset) continue;
 
+      const bookItemKey = `${result.assetId}:${result.roomId}`;
+      const systemQuantity = assetBookItemMap.get(bookItemKey) || 0;
+
+      const finalSystemQuantity = systemQuantity > 0 ? systemQuantity : asset.quantity;
+
+      let finalStatus: InventoryResultStatus = result.status as InventoryResultStatus;
+      const specialStatuses = [InventoryResultStatus.BROKEN, InventoryResultStatus.NEEDS_REPAIR, InventoryResultStatus.LIQUIDATION_PROPOSED];
+      if (!specialStatuses.includes(result.status as InventoryResultStatus)) {
+        if (result.countedQuantity === finalSystemQuantity) {
+          finalStatus = InventoryResultStatus.MATCHED;
+        } else if (result.countedQuantity > finalSystemQuantity) {
+          finalStatus = InventoryResultStatus.EXCESS;
+        } else if (result.countedQuantity < finalSystemQuantity) {
+          finalStatus = InventoryResultStatus.MISSING;
+        }
+      }
+
       // Tạo inventory result
       const inventoryResult = this.inventoryResultRepository.create({
         assetId: result.assetId,
         assignmentId: assignmentId,
-        systemQuantity: asset.quantity, // Lấy từ asset entity
+        systemQuantity: finalSystemQuantity,
         countedQuantity: result.countedQuantity,
         scanMethod: result.scanMethod,
-        status: result.status,
+        status: finalStatus,
         note: result.note || '',
         createdBy: currentUser.id,
         roomId: result.roomId,
@@ -1630,6 +1702,54 @@ export class InventoriesService {
     };
 
     return plainToInstance(RoomInventoryResultResponseDto, response, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  /**
+   * Cập nhật số lượng kết quả kiểm kê
+   */
+  async updateInventoryResult(
+    id: string,
+    updateDto: UpdateInventoryResultDto,
+    currentUser: User
+  ): Promise<InventoryResultResponseDto> {
+    // Tìm kết quả kiểm kê
+    const result = await this.inventoryResultRepository.findOne({
+      where: { id },
+      relations: ['asset', 'asset.rfidTag', 'assignment', 'fileUrls', 'room']
+    });
+
+    if (!result) {
+      throw new NotFoundException(`Không tìm thấy kết quả kiểm kê với ID: ${id}`);
+    }
+
+    // Cập nhật số lượng
+    result.countedQuantity = updateDto.countedQuantity;
+
+    // Tính lại trạng thái dựa trên số lượng
+    const specialStatuses = [
+      InventoryResultStatus.BROKEN,
+      InventoryResultStatus.NEEDS_REPAIR,
+      InventoryResultStatus.LIQUIDATION_PROPOSED
+    ];
+
+    // Chỉ tự động tính lại trạng thái nếu không phải là trạng thái đặc biệt
+    if (!specialStatuses.includes(result.status)) {
+      if (result.countedQuantity === result.systemQuantity) {
+        result.status = InventoryResultStatus.MATCHED;
+      } else if (result.countedQuantity > result.systemQuantity) {
+        result.status = InventoryResultStatus.EXCESS;
+      } else if (result.countedQuantity < result.systemQuantity) {
+        result.status = InventoryResultStatus.MISSING;
+      }
+    }
+
+    // Lưu kết quả
+    const updatedResult = await this.inventoryResultRepository.save(result);
+
+    // Chuyển đổi sang DTO
+    return plainToInstance(InventoryResultResponseDto, updatedResult, {
       excludeExtraneousValues: true,
     });
   }
@@ -2454,4 +2574,212 @@ export class InventoriesService {
     }
   }
 
+  /**
+   * Lấy thống kê kết quả kiểm kê theo nhiều mức độ
+   */
+  async getInventoryStatistics(
+    filterDto: InventoryStatisticsFilterDto
+  ): Promise<InventoryStatisticsResponseDto> {
+    const { level = StatisticsLevel.ALL, sessionUnitId, groupId, assignmentId, roomId, assetType } = filterDto;
+
+    // Tạo query builder cơ bản
+    let query = this.inventoryResultRepository
+      .createQueryBuilder('result')
+      .leftJoinAndSelect('result.asset', 'asset')
+      .leftJoinAndSelect('result.room', 'room')
+      .leftJoinAndSelect('result.assignment', 'assignment')
+      .leftJoinAndSelect('assignment.group', 'group')
+      .leftJoinAndSelect('group.subInventory', 'subInventory')
+      .leftJoinAndSelect('subInventory.inventorySessionUnit', 'sessionUnit')
+      .leftJoinAndSelect('sessionUnit.inventorySession', 'session')
+      .where('result.deletedAt IS NULL')
+      .andWhere('asset.deletedAt IS NULL')
+      .andWhere('room.deletedAt IS NULL');
+
+    // Áp dụng filter theo roomId
+    if (roomId) {
+      query = query.andWhere('result.roomId = :roomId', { roomId });
+    }
+
+    // Áp dụng filter theo assignmentId
+    if (assignmentId) {
+      query = query.andWhere('result.assignmentId = :assignmentId', { assignmentId });
+    }
+
+    // Áp dụng filter theo groupId
+    if (groupId) {
+      query = query.andWhere('group.id = :groupId', { groupId });
+    }
+
+    // Áp dụng filter theo sessionUnitId
+    if (sessionUnitId) {
+      query = query.andWhere('sessionUnit.id = :sessionUnitId', { sessionUnitId });
+    }
+
+    // Áp dụng filter theo loại tài sản
+    if (assetType && assetType !== 'ALL') {
+      query = query.andWhere('asset.type = :assetType', { assetType });
+    }
+
+    // Lấy tất cả kết quả
+    const results = await query.getMany();
+
+    // Tính thống kê tổng quan
+    const overallStatusStats = this.calculateStatusStatistics(results);
+    const overallAssetTypeStats = this.calculateAssetTypeStatistics(results);
+    const overallScanMethodStats = this.calculateScanMethodStatistics(results);
+
+    // Tính thống kê theo level
+    let levelStatistics: LevelStatisticsItemDto[] = [];
+
+    switch (level) {
+      case StatisticsLevel.ROOM:
+        // Thống kê theo phòng
+        const roomMap = new Map<string, any[]>();
+        results.forEach(result => {
+          const key = result.roomId;
+          if (!roomMap.has(key)) {
+            roomMap.set(key, []);
+          }
+          roomMap.get(key)!.push(result);
+        });
+
+        for (const [roomIdKey, roomResults] of roomMap.entries()) {
+          const room = roomResults[0].room;
+          levelStatistics.push({
+            id: roomIdKey,
+            name: room?.name || room?.roomCode || 'Không xác định',
+            totalAssets: roomResults.length,
+            statusStatistics: this.calculateStatusStatistics(roomResults),
+            assetTypeStatistics: this.calculateAssetTypeStatistics(roomResults),
+            scanMethodStatistics: this.calculateScanMethodStatistics(roomResults),
+          });
+        }
+        break;
+
+      case StatisticsLevel.ASSIGNMENT:
+        // Thống kê theo phân công
+        const assignmentMap = new Map<string, any[]>();
+        results.forEach(result => {
+          const key = result.assignmentId;
+          if (!assignmentMap.has(key)) {
+            assignmentMap.set(key, []);
+          }
+          assignmentMap.get(key)!.push(result);
+        });
+
+        for (const [assignmentIdKey, assignmentResults] of assignmentMap.entries()) {
+          const assignment = assignmentResults[0].assignment;
+          levelStatistics.push({
+            id: assignmentIdKey,
+            name: assignment?.unit?.name || 'Không xác định',
+            totalAssets: assignmentResults.length,
+            statusStatistics: this.calculateStatusStatistics(assignmentResults),
+            assetTypeStatistics: this.calculateAssetTypeStatistics(assignmentResults),
+            scanMethodStatistics: this.calculateScanMethodStatistics(assignmentResults),
+          });
+        }
+        break;
+
+      case StatisticsLevel.GROUP:
+        // Thống kê theo nhóm
+        const groupMap = new Map<string, any[]>();
+        results.forEach(result => {
+          const groupIdKey = result.assignment?.group?.id;
+          if (groupIdKey) {
+            if (!groupMap.has(groupIdKey)) {
+              groupMap.set(groupIdKey, []);
+            }
+            groupMap.get(groupIdKey)!.push(result);
+          }
+        });
+
+        for (const [groupIdKey, groupResults] of groupMap.entries()) {
+          const group = groupResults[0].assignment?.group;
+          levelStatistics.push({
+            id: groupIdKey,
+            name: group?.name || 'Không xác định',
+            totalAssets: groupResults.length,
+            statusStatistics: this.calculateStatusStatistics(groupResults),
+            assetTypeStatistics: this.calculateAssetTypeStatistics(groupResults),
+            scanMethodStatistics: this.calculateScanMethodStatistics(groupResults),
+          });
+        }
+        break;
+
+      case StatisticsLevel.SESSION_UNIT:
+        // Thống kê theo cơ sở
+        const sessionUnitMap = new Map<string, any[]>();
+        results.forEach(result => {
+          const sessionUnitIdKey = result.assignment?.group?.subInventory?.inventorySessionUnit?.id;
+          if (sessionUnitIdKey) {
+            if (!sessionUnitMap.has(sessionUnitIdKey)) {
+              sessionUnitMap.set(sessionUnitIdKey, []);
+            }
+            sessionUnitMap.get(sessionUnitIdKey)!.push(result);
+          }
+        });
+
+        for (const [sessionUnitIdKey, sessionUnitResults] of sessionUnitMap.entries()) {
+          const sessionUnit = sessionUnitResults[0].assignment?.group?.subInventory?.inventorySessionUnit;
+          levelStatistics.push({
+            id: sessionUnitIdKey,
+            name: sessionUnit?.unit?.name || 'Không xác định',
+            totalAssets: sessionUnitResults.length,
+            statusStatistics: this.calculateStatusStatistics(sessionUnitResults),
+            assetTypeStatistics: this.calculateAssetTypeStatistics(sessionUnitResults),
+            scanMethodStatistics: this.calculateScanMethodStatistics(sessionUnitResults),
+          });
+        }
+        break;
+
+      case StatisticsLevel.ALL:
+      default:
+        // Không cần thống kê chi tiết theo level
+        break;
+    }
+
+    return {
+      level,
+      totalAssets: results.length,
+      overallStatusStatistics: overallStatusStats,
+      overallAssetTypeStatistics: overallAssetTypeStats,
+      overallScanMethodStatistics: overallScanMethodStats,
+      levelStatistics,
+    };
+  }
+
+  /**
+   * Tính thống kê theo trạng thái
+   */
+  private calculateStatusStatistics(results: any[]): StatusStatisticsDto {
+    return {
+      matched: results.filter(r => r.status === InventoryResultStatus.MATCHED).length,
+      missing: results.filter(r => r.status === InventoryResultStatus.MISSING).length,
+      excess: results.filter(r => r.status === InventoryResultStatus.EXCESS).length,
+      broken: results.filter(r => r.status === InventoryResultStatus.BROKEN).length,
+      needsRepair: results.filter(r => r.status === InventoryResultStatus.NEEDS_REPAIR).length,
+      liquidationProposed: results.filter(r => r.status === InventoryResultStatus.LIQUIDATION_PROPOSED).length,
+    };
+  }
+
+  /**
+   * Tính thống kê theo loại tài sản
+   */
+  private calculateAssetTypeStatistics(results: any[]): AssetTypeStatisticsDto {
+    return {
+      fixedAssets: results.filter(r => r.asset?.type === 'FIXED_ASSET').length,
+      toolsEquipment: results.filter(r => r.asset?.type === 'TOOLS_EQUIPMENT').length,
+    };
+  }
+
+  /**
+   * Tính thống kê theo phương pháp quét
+   */
+  private calculateScanMethodStatistics(results: any[]): ScanMethodStatisticsDto {
+    return {
+      rfid: results.filter(r => r.scanMethod === 'RFID').length,
+      manual: results.filter(r => r.scanMethod === 'MANUAL').length,
+    };
+  }
 }

@@ -492,7 +492,9 @@ export class AssetBooksService {
         );
       }
 
-      queryBuilder.distinct(true);
+      queryBuilder.andWhere("room.building != :inventoryBuilding OR room.building IS NULL", {
+        inventoryBuilding: "INVENTORY",
+      });
 
       if (filterDto.sorting && filterDto.sorting.length > 0) {
         filterDto.sorting
@@ -517,6 +519,9 @@ export class AssetBooksService {
         queryBuilder.addOrderBy("asset.status", "ASC");
       }
 
+      // Thêm order by item.id để đảm bảo kết quả nhất quán và hiển thị tất cả AssetBookItem
+      queryBuilder.addOrderBy("item.id", "ASC");
+
       const page = filterDto.pagination?.currentPage || 1;
       const limit = filterDto.pagination?.itemsPerPage || 5;
       const skip = (page - 1) * limit;
@@ -526,7 +531,8 @@ export class AssetBooksService {
       const [items, total] = await queryBuilder.getManyAndCount();
 
       const data: AssetItemResponseDto[] = items.map((item) => ({
-        id: item.asset.id,
+        id: item.asset.id, // Giữ nguyên asset.id
+        bookItemId: item.id, // Thêm bookItemId để làm unique key cho mỗi AssetBookItem
         ktCode: item.asset.ktCode,
         fixedCode: item.asset.fixedCode,
         name: item.asset.name,
@@ -534,7 +540,7 @@ export class AssetBooksService {
         entrydate: item.asset.entrydate,
         unit: item.asset.unit,
         locationInRoom: item.asset.locationInRoom,
-        quantity: item.asset.quantity,
+        quantity: item.quantity,
         origin: item.asset.origin,
         purchasePackage: item.asset.purchasePackage,
         type: item.asset.type,
