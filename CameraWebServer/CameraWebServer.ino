@@ -44,7 +44,7 @@ const unsigned long SOCKET_RECONNECT_INTERVAL = 5000;
 String deviceId = "ESP32_CAM_01";
 String deviceReceive = "ESP32_RFID_01";
 String deviceType = "camera";
-String roomId = "93e27d51-a082-4095-b77d-2d6df390b1d7";
+String roomId = "7fe52a86-c8f7-4275-b6eb-bb896acdd771";
 
 String currentAlertIds[15];
 int alertIdsCount = 0;

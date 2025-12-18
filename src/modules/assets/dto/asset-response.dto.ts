@@ -6,6 +6,7 @@ import { CategoryResponseDto } from 'src/modules/categories/dto/category-respons
 import { RoomResponseDto } from 'src/modules/rooms/dto/room-response.dto';
 import { RfidTagResponseDto } from './rfid-tag-response.dto';
 import { TransactionItemAssetResponseDto } from './transaction-item-response.dto';
+import { RoomAllocationDto } from './room-allocation.dto';
 
 export class AssetResponseDto {
   @ApiProperty({ description: 'Asset ID' })
@@ -92,4 +93,12 @@ export class AssetResponseDto {
   @Type(() => TransactionItemAssetResponseDto)
   @Expose()
   transactionItems ?: TransactionItemAssetResponseDto[];
+
+  @ApiPropertyOptional({ 
+    description: 'Danh sách phân bổ theo phòng (chỉ áp dụng cho công cụ dụng cụ)',
+    type: [RoomAllocationDto]
+  })
+  @Type(() => RoomAllocationDto)
+  @Expose()
+  roomAllocations?: RoomAllocationDto[];
 }

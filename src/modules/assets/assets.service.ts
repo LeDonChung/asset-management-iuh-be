@@ -358,6 +358,36 @@ export class AssetsService {
       }
     }
 
+    // Load room allocations for Tools & Equipment
+    if (asset.type === AssetType.TOOLS_EQUIPMENT) {
+      const currentYear = new Date().getFullYear();
+      
+      // Get asset book items for current year only
+      const assetBookItems = await this.assetBookItemRepository
+        .createQueryBuilder('item')
+        .leftJoinAndSelect('item.room', 'room')
+        .leftJoin('item.book', 'book')
+        .where('item.assetId = :assetId', { assetId: id })
+        .andWhere('book.year = :year', { year: currentYear })
+        .andWhere('item.status IN (:...statuses)', { 
+          statuses: ['IN_USE', 'DAMAGED', 'PROPOSED_LIQUIDATION'] 
+        })
+        .orderBy('item.assignedAt', 'DESC')
+        .getMany();
+
+      const roomAllocations = assetBookItems.map(item => ({
+        roomId: item.roomId,
+        roomName: item.room?.name || 'N/A',
+        roomCode: item.room?.roomCode || 'N/A',
+        quantity: item.quantity,
+        status: item.status,
+        assignedAt: item.assignedAt,
+        note: item.note,
+      }));
+
+      (asset as any).roomAllocations = roomAllocations;
+    }
+
     return plainToInstance(AssetResponseDto, asset, {
       excludeExtraneousValues: true,
     });

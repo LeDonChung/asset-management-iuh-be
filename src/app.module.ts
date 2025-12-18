@@ -25,6 +25,7 @@ import { LiquidationsModule } from './modules/liquidations/liquidations.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { MovementsModule } from './modules/movements/movements.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     TransactionsModule,
     MovementsModule,
     DashboardModule,
+    ChatbotModule,
   ],
   controllers: [],
   providers: [
