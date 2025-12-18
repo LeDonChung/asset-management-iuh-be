@@ -26,16 +26,15 @@ SocketIoClient webSocket;
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_NAME "RFID"
-String roomId = "a51622c2-86e3-4cc7-95b5-2d7090f506b3";
+String roomId = "7fe52a86-c8f7-4275-b6eb-bb896acdd771";
 
 #define RXD2 16
 #define TXD2 17
 #define BUZZER_PIN 18
+#define BUTTON_PIN 14
 unsigned long lastBeepTime = 0;
 bool beepState = false;
 const unsigned long BEEP_INTERVAL = 300;
-unsigned long buzzerStartTime = 0;
-const unsigned long BUZZER_DURATION = 60000; // 1 phút = 60000 ms
 // RENAME SERIAL02 TO RFID
 #define RFID Serial2
 uint16_t currentMTU = 517;  // mặc định
@@ -581,7 +580,6 @@ void receiveCommandCheckRfidWarning(const char* payload, size_t length) {
     if (alertIds.size() > 0) {
       if (!isBuzzer) {
         isBuzzer = true;
-        buzzerStartTime = millis();
 
         // ✅ Gửi yêu cầu chụp ảnh qua Socket.IO với danh sách alertId
         if (WiFi.status() == WL_CONNECTED) {
@@ -674,6 +672,10 @@ void setupBuzzer() {
   digitalWrite(BUZZER_PIN, LOW);
 }
 
+void setupButton() {
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+}
+
 void setup() {
   Serial.begin(BAUD_ESP32);
   Serial.println("Thiết lập kết nối ESP32 thành công!!");
@@ -685,6 +687,7 @@ void setup() {
   Serial.println("Thiết lập kết nối RFID thành công!!");
 
   setupBuzzer();
+  setupButton();
 
   isMotionScan = false;
   isScan = false;
@@ -944,6 +947,19 @@ void loop() {
   if (isAlert) {
     webSocket.loop();
   }
+  
+  static bool lastButtonState = HIGH;
+  bool currentButtonState = digitalRead(BUTTON_PIN);
+  
+  if (lastButtonState == HIGH && currentButtonState == LOW) {
+    if (isBuzzer) {
+      isBuzzer = false;
+      digitalWrite(BUZZER_PIN, LOW);
+      Serial.println("🔕 Buzzer tắt bằng nút nhấn thủ công");
+    }
+  }
+  lastButtonState = currentButtonState;
+  
   // Xử lý scan RFID 20s khi nhận motion=1 (alert motion)
   if (isAlert && isMotionScan) {
     // Đảm bảo không conflict với scan inventory
@@ -974,15 +990,10 @@ void loop() {
   if (isBuzzer) {
     unsigned long now = millis();
 
-    if (now - buzzerStartTime >= BUZZER_DURATION) {
-      isBuzzer = false;
-      digitalWrite(BUZZER_PIN, LOW);
-    } else {
-      if (now - lastBeepTime >= BEEP_INTERVAL) {
-        beepState = !beepState;
-        digitalWrite(BUZZER_PIN, beepState ? HIGH : LOW);
-        lastBeepTime = now;
-      }
+    if (now - lastBeepTime >= BEEP_INTERVAL) {
+      beepState = !beepState;
+      digitalWrite(BUZZER_PIN, beepState ? HIGH : LOW);
+      lastBeepTime = now;
     }
   } else {
     digitalWrite(BUZZER_PIN, LOW);
