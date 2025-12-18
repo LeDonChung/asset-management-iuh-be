@@ -1,10 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { Asset } from '../../entities/asset.entity';
 import { Unit } from '../../entities/unit.entity';
 import { Room } from '../../entities/room.entity';
 import { Category } from '../../entities/category.entity';
+import { AssetBook } from '../../entities/asset-book.entity';
+import { AssetBookItem } from '../../entities/asset-book-item.entity';
+import { AssetBookStatus } from '../../common/shared/AssetBookStatus';
+import { AssetBookItemStatus } from '../../common/shared/AssetBookItemStatus';
 import { OpenAIService } from './openai.service';
 import { ChatMessageDto, ChatResponseDto } from './dto';
 
@@ -21,7 +26,12 @@ export class ChatbotService {
     private roomRepository: Repository<Room>,
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
+    @InjectRepository(AssetBook)
+    private assetBookRepository: Repository<AssetBook>,
+    @InjectRepository(AssetBookItem)
+    private assetBookItemRepository: Repository<AssetBookItem>,
     private openAIService: OpenAIService,
+    private configService: ConfigService,
   ) {}
 
   async chat(chatMessageDto: ChatMessageDto, userId: string): Promise<ChatResponseDto> {
@@ -30,27 +40,26 @@ export class ChatbotService {
     this.logger.log(`Processing chat message from user ${userId}: ${message}`);
 
     try {
-      // Get context data based on the question
       const contextData = await this.getContextData(message, unitId);
 
-      // Build system prompt with context
       const systemPrompt = this.buildSystemPrompt(contextData);
 
-      // Build messages for OpenAI
+      const truncatedMessage = message.length > 500 ? message.substring(0, 500) + '...' : message;
+      const truncatedHistory = conversationHistory.map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content.length > 500 ? msg.content.substring(0, 500) + '...' : msg.content,
+      }));
+
       const messages = [
         { role: 'system' as const, content: systemPrompt },
-        ...conversationHistory.map((msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        })),
-        { role: 'user' as const, content: message },
+        ...truncatedHistory,
+        { role: 'user' as const, content: truncatedMessage },
       ];
 
-      // Call OpenAI with retry logic
       const { response, retryCount, keyUsed } = await this.openAIService.chat(
         messages,
         0.7,
-        1500
+        1000
       );
 
       return {
@@ -66,22 +75,17 @@ export class ChatbotService {
     }
   }
 
-  /**
-   * Get relevant context data based on user query
-   */
   private async getContextData(message: string, unitId?: string): Promise<any> {
     const lowerMessage = message.toLowerCase();
     const contextData: any = {};
 
     try {
-      // Check if query is about asset statistics
       if (
         lowerMessage.includes('bao nhiêu') ||
         lowerMessage.includes('thống kê') ||
         lowerMessage.includes('số lượng') ||
         lowerMessage.includes('tổng')
       ) {
-        // Get asset count by unit
         if (unitId || lowerMessage.includes('đơn vị')) {
           contextData.assetsByUnit = await this.getAssetsByUnit(unitId);
         } else {
@@ -90,25 +94,21 @@ export class ChatbotService {
           });
         }
 
-        // Get asset count by category
         contextData.assetsByCategory = await this.getAssetsByCategory(unitId);
 
-        // Get asset count by status
         contextData.assetsByStatus = await this.getAssetsByStatus(unitId);
       }
 
-      // Check if query is about asset location
       if (
         lowerMessage.includes('ở đâu') ||
+        lowerMessage.includes('nằm') ||
         lowerMessage.includes('vị trí') ||
         lowerMessage.includes('phòng') ||
         lowerMessage.includes('tìm')
       ) {
-        // Try to find asset by code or name
         contextData.assetLocations = await this.findAssetLocations(message, unitId);
       }
 
-      // Check if query is about units
       if (lowerMessage.includes('đơn vị')) {
         contextData.units = await this.unitRepository.find({
           where: { deletedAt: null },
@@ -116,7 +116,6 @@ export class ChatbotService {
         });
       }
 
-      // Check if query is about rooms
       if (lowerMessage.includes('phòng')) {
         const roomQuery = this.roomRepository
           .createQueryBuilder('room')
@@ -145,7 +144,6 @@ export class ChatbotService {
         }
       }
 
-      // Check if query is about categories
       if (
         lowerMessage.includes('loại') ||
         lowerMessage.includes('danh mục') ||
@@ -165,9 +163,6 @@ export class ChatbotService {
     }
   }
 
-  /**
-   * Get assets grouped by unit
-   */
   private async getAssetsByUnit(unitId?: string): Promise<any[]> {
     const query = this.assetRepository
       .createQueryBuilder('asset')
@@ -187,9 +182,6 @@ export class ChatbotService {
     return await query.getRawMany();
   }
 
-  /**
-   * Get assets grouped by category
-   */
   private async getAssetsByCategory(unitId?: string): Promise<any[]> {
     const query = this.assetRepository
       .createQueryBuilder('asset')
@@ -210,9 +202,6 @@ export class ChatbotService {
     return await query.getRawMany();
   }
 
-  /**
-   * Get assets grouped by status
-   */
   private async getAssetsByStatus(unitId?: string): Promise<any[]> {
     const query = this.assetRepository
       .createQueryBuilder('asset')
@@ -256,7 +245,6 @@ export class ChatbotService {
 
     const assets = await assetsQuery.getMany();
 
-    // Group assets by category
     const assetsByCategory = assets.reduce((acc, asset) => {
       const categoryName = asset.category?.name || 'Chưa phân loại';
       if (!acc[categoryName]) {
@@ -294,16 +282,15 @@ export class ChatbotService {
     };
   }
 
-  /**
-   * Find asset locations based on query
-   */
   private async findAssetLocations(query: string, unitId?: string): Promise<any[]> {
-    // Extract potential asset codes or names from query
     const searchTerms = this.extractSearchTerms(query);
 
     if (searchTerms.length === 0) {
       return [];
     }
+
+    const results: any[] = [];
+    const foundAssetIds = new Set<string>();
 
     const qb = this.assetRepository
       .createQueryBuilder('asset')
@@ -312,7 +299,6 @@ export class ChatbotService {
       .leftJoinAndSelect('asset.category', 'category')
       .where('asset.deletedAt IS NULL');
 
-    // Build search conditions
     const conditions = searchTerms
       .map((_, index) => {
         return `(asset.name ILIKE :term${index} OR asset.ktCode ILIKE :term${index} OR asset.fixedCode ILIKE :term${index})`;
@@ -331,146 +317,191 @@ export class ChatbotService {
       qb.andWhere('room.unitId = :unitId', { unitId });
     }
 
-    qb.take(10); // Limit results
+    qb.take(5);
 
-    return await qb.getMany();
+    const regularAssets = await qb.getMany();
+    regularAssets.forEach(asset => {
+      results.push(asset);
+      foundAssetIds.add(asset.id);
+    });
+
+    const currentYear = new Date().getFullYear();
+    const bookQuery = this.assetBookRepository
+      .createQueryBuilder('book')
+      .where('book.year = :year', { year: currentYear })
+      .andWhere('book.status = :status', { status: AssetBookStatus.OPEN });
+
+    if (unitId) {
+      bookQuery.andWhere('book.unitId = :unitId', { unitId });
+    }
+
+    const currentBooks = await bookQuery.getMany();
+
+    if (currentBooks.length > 0) {
+      const bookIds = currentBooks.map(book => book.id);
+
+      const bookItemQuery = this.assetBookItemRepository
+        .createQueryBuilder('item')
+        .leftJoinAndSelect('item.asset', 'asset')
+        .leftJoinAndSelect('item.room', 'room')
+        .leftJoinAndSelect('room.unit', 'unit')
+        .leftJoinAndSelect('asset.category', 'category')
+        .where('item.bookId IN (:...bookIds)', { bookIds })
+        .andWhere('item.status = :status', { status: AssetBookItemStatus.IN_USE })
+        .andWhere('asset.deletedAt IS NULL');
+
+      const bookConditions = searchTerms
+        .map((_, index) => {
+          return `(asset.name ILIKE :term${index} OR asset.ktCode ILIKE :term${index} OR asset.fixedCode ILIKE :term${index})`;
+        })
+        .join(' OR ');
+
+      if (bookConditions) {
+        bookItemQuery.andWhere(`(${bookConditions})`, 
+          Object.fromEntries(
+            searchTerms.map((term, index) => [`term${index}`, `%${term}%`])
+          )
+        );
+      }
+
+      bookItemQuery.take(5);
+
+      const bookItems = await bookItemQuery.getMany();
+
+      bookItems.forEach(item => {
+        if (item.asset && !foundAssetIds.has(item.asset.id)) {
+          const assetWithBookRoom = {
+            ...item.asset,
+            currentRoom: item.room,
+          };
+          results.push(assetWithBookRoom);
+          foundAssetIds.add(item.asset.id);
+        }
+      });
+    }
+
+    return results.slice(0, 5);
   }
 
-  /**
-   * Extract search terms from query
-   */
   private extractSearchTerms(query: string): string[] {
-    // Remove common Vietnamese question words
     const cleanQuery = query
       .toLowerCase()
-      .replace(/(ở đâu|vị trí|tìm|kiếm|có|là|được|của|trong)/g, '')
+      .replace(/(ở đâu|nằm ở đâu|vị trí|tìm|kiếm|có|là|được|của|trong|tài sản|thiết bị)/g, '')
       .trim();
 
-    // Split by spaces and filter out short terms
-    return cleanQuery
+    const terms = cleanQuery
       .split(/\s+/)
       .filter((term) => term.length >= 2)
-      .slice(0, 5); // Max 5 search terms
+      .slice(0, 5);
+
+    if (terms.length === 0) {
+      const codePattern = /[A-Z0-9]{3,}/gi;
+      const codes = query.match(codePattern);
+      if (codes && codes.length > 0) {
+        return codes.slice(0, 5);
+      }
+    }
+
+    return terms;
   }
 
-  /**
-   * Build system prompt with context data
-   */
   private buildSystemPrompt(contextData: any): string {
-    let prompt = `Bạn là một trợ lý AI thông minh cho hệ thống quản lý tài sản. 
-Nhiệm vụ của bạn là trả lời các câu hỏi về tài sản, vị trí, thống kê dựa trên dữ liệu được cung cấp.
-
-Quy tắc:
-1. Trả lời ngắn gọn, rõ ràng, chính xác bằng tiếng Việt
-2. Sử dụng dữ liệu được cung cấp để trả lời
-3. Nếu không có đủ thông tin, hãy nói rõ và gợi ý cách tìm kiếm khác
-4. **QUAN TRỌNG: Trả lời theo định dạng Markdown để hiển thị đẹp:**
-   - Sử dụng **bold** cho tiêu đề và số liệu quan trọng
-   - Sử dụng bullet points (-, *) cho danh sách
-   - Sử dụng heading (##, ###) cho các phần
-   - Sử dụng code block (\`\`\`) cho mã tài sản
-   - Sử dụng table khi cần so sánh nhiều dữ liệu
-   - Sử dụng > cho ghi chú quan trọng
-5. Luôn lịch sự và hữu ích
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || '';
+    
+    let prompt = `Trợ lý AI quản lý tài sản. Trả lời ngắn gọn, chính xác bằng tiếng Việt, dùng Markdown.
+Quy tắc: **bold** cho số liệu, bullet (-) cho danh sách, \`code\` cho mã, table khi cần.
+Khi trả lời về vị trí tài sản, luôn thêm link markdown [Xem chi tiết](URL) từ dữ liệu để người dùng click.
 
 `;
 
-    // Add context data to prompt
     if (Object.keys(contextData).length > 0) {
-      prompt += '\nDữ liệu hiện có:\n';
+      prompt += 'Dữ liệu:\n';
 
       if (contextData.totalAssets !== undefined) {
-        prompt += `- Tổng số tài sản: ${contextData.totalAssets}\n`;
+        prompt += `Tổng: ${contextData.totalAssets}\n`;
       }
 
+      const MAX_ITEMS = 10;
+
       if (contextData.assetsByUnit && contextData.assetsByUnit.length > 0) {
-        prompt += '\n- Tài sản theo đơn vị:\n';
-        contextData.assetsByUnit.forEach((item: any) => {
-          prompt += `  + **${item.unitName || 'Chưa phân bổ'}**: ${item.assetCount} tài sản\n`;
+        prompt += 'Đơn vị: ';
+        contextData.assetsByUnit.slice(0, MAX_ITEMS).forEach((item: any, idx: number) => {
+          prompt += `${item.unitName || 'N/A'}:${item.assetCount}${idx < Math.min(contextData.assetsByUnit.length, MAX_ITEMS) - 1 ? ', ' : ''}`;
         });
+        prompt += '\n';
       }
 
       if (contextData.assetsByCategory && contextData.assetsByCategory.length > 0) {
-        prompt += '\n- Tài sản theo danh mục:\n';
-        contextData.assetsByCategory.forEach((item: any) => {
-          prompt += `  + **${item.categoryName}**: ${item.assetCount} tài sản\n`;
+        prompt += 'Danh mục: ';
+        contextData.assetsByCategory.slice(0, MAX_ITEMS).forEach((item: any, idx: number) => {
+          prompt += `${item.categoryName}:${item.assetCount}${idx < Math.min(contextData.assetsByCategory.length, MAX_ITEMS) - 1 ? ', ' : ''}`;
         });
+        prompt += '\n';
       }
 
       if (contextData.assetsByStatus && contextData.assetsByStatus.length > 0) {
-        prompt += '\n- Tài sản theo trạng thái:\n';
-        contextData.assetsByStatus.forEach((item: any) => {
-          prompt += `  + **${item.status}**: ${item.assetCount} tài sản\n`;
+        prompt += 'Trạng thái: ';
+        contextData.assetsByStatus.slice(0, MAX_ITEMS).forEach((item: any, idx: number) => {
+          prompt += `${item.status}:${item.assetCount}${idx < Math.min(contextData.assetsByStatus.length, MAX_ITEMS) - 1 ? ', ' : ''}`;
         });
+        prompt += '\n';
       }
 
       if (contextData.assetLocations && contextData.assetLocations.length > 0) {
-        prompt += '\n- Vị trí tài sản:\n';
-        contextData.assetLocations.forEach((asset: any) => {
-          prompt += `  + **${asset.name}** (\`${asset.ktCode}\`):\n`;
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || '';
+        prompt += 'Vị trí:\n';
+        contextData.assetLocations.slice(0, 5).forEach((asset: any) => {
+          const assetLink = frontendUrl ? `${frontendUrl}/asset/${asset.id}` : '';
           if (asset.currentRoom) {
-            prompt += `    - Phòng: **${asset.currentRoom.name}** (\`${asset.currentRoom.roomCode}\`)\n`;
-            prompt += `    - Tòa nhà: ${asset.currentRoom.building}, Tầng: ${asset.currentRoom.floor}\n`;
-            if (asset.currentRoom.unit) {
-              prompt += `    - Đơn vị: ${asset.currentRoom.unit.name}\n`;
-            }
+            prompt += `- ${asset.name} (\`${asset.ktCode}\`): ${asset.currentRoom.name} (\`${asset.currentRoom.roomCode}\`), ${asset.currentRoom.building} T${asset.currentRoom.floor}${assetLink ? ` [Chi tiết](${assetLink})` : ''}\n`;
           } else {
-            prompt += `    - Chưa phân bổ vị trí\n`;
+            prompt += `- ${asset.name} (\`${asset.ktCode}\`): Chưa phân bổ${assetLink ? ` [Chi tiết](${assetLink})` : ''}\n`;
           }
         });
       }
 
       if (contextData.units && contextData.units.length > 0) {
-        prompt += '\n- Danh sách đơn vị:\n';
-        contextData.units.forEach((unit: any) => {
-          prompt += `  + ${unit.name} (Mã: ${unit.unitCode}) - ${unit.type}\n`;
+        prompt += 'Đơn vị: ';
+        contextData.units.slice(0, MAX_ITEMS).forEach((unit: any, idx: number) => {
+          prompt += `${unit.name}(${unit.unitCode})${idx < Math.min(contextData.units.length, MAX_ITEMS) - 1 ? ', ' : ''}`;
         });
+        prompt += '\n';
       }
 
       if (contextData.rooms && contextData.rooms.length > 0) {
-        prompt += '\n- Danh sách phòng:\n';
-        contextData.rooms.forEach((room: any) => {
-          prompt += `  + ${room.name} (${room.roomCode}) - ${room.building}, Tầng ${room.floor}`;
-          if (room.unit) {
-            prompt += ` - Đơn vị: ${room.unit.name}`;
-          }
-          prompt += '\n';
+        prompt += 'Phòng: ';
+        contextData.rooms.slice(0, MAX_ITEMS).forEach((room: any, idx: number) => {
+          prompt += `${room.name}(${room.roomCode})${idx < Math.min(contextData.rooms.length, MAX_ITEMS) - 1 ? ', ' : ''}`;
         });
+        prompt += '\n';
       }
 
       if (contextData.categories && contextData.categories.length > 0) {
-        prompt += '\n- Danh mục tài sản:\n';
-        contextData.categories.forEach((category: any) => {
-          prompt += `  + ${category.name} (Mã: ${category.code})`;
-          if (category.description) {
-            prompt += ` - ${category.description}`;
-          }
-          prompt += '\n';
+        prompt += 'Danh mục: ';
+        contextData.categories.slice(0, MAX_ITEMS).forEach((category: any, idx: number) => {
+          prompt += `${category.name}(${category.code})${idx < Math.min(contextData.categories.length, MAX_ITEMS) - 1 ? ', ' : ''}`;
         });
+        prompt += '\n';
       }
 
       if (contextData.assetsInRoom) {
         const roomData = contextData.assetsInRoom;
         if (roomData.room) {
-          prompt += `\n- Thông tin phòng \`${roomData.room.roomCode}\`:\n`;
-          prompt += `  + Tên phòng: **${roomData.room.name}**\n`;
-          prompt += `  + Tòa nhà: ${roomData.room.building}, Tầng: ${roomData.room.floor}\n`;
-          if (roomData.room.unit) {
-            prompt += `  + Đơn vị: ${roomData.room.unit}\n`;
-          }
-          prompt += `  + Tổng số tài sản: **${roomData.totalAssets}**\n`;
-
+          prompt += `Phòng \`${roomData.room.roomCode}\`: ${roomData.room.name}, ${roomData.room.building} T${roomData.room.floor}, ${roomData.totalAssets} tài sản\n`;
           if (roomData.totalAssets > 0) {
-            prompt += '\n- Tài sản theo danh mục:\n';
-            Object.entries(roomData.assetsByCategory).forEach(([category, assets]: [string, any]) => {
-              prompt += `  + **${category}**: ${assets.length} tài sản\n`;
-              assets.forEach((asset: any) => {
-                prompt += `    - ${asset.name} (\`${asset.ktCode}\`) - ${asset.status}\n`;
-              });
+            const categories = Object.entries(roomData.assetsByCategory).slice(0, 5);
+            categories.forEach(([category, assets]: [string, any]) => {
+              prompt += `  ${category}: ${assets.length}`;
+              if (assets.length <= 3) {
+                assets.forEach((asset: any) => {
+                  prompt += ` (${asset.name} \`${asset.ktCode}\`)`;
+                });
+              }
+              prompt += '\n';
             });
           }
         } else {
-          prompt += '\n- Không tìm thấy phòng với mã được cung cấp.\n';
+          prompt += 'Không tìm thấy phòng.\n';
         }
       }
     }

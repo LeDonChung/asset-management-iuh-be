@@ -8,11 +8,13 @@ import { Asset } from '../../entities/asset.entity';
 import { Unit } from '../../entities/unit.entity';
 import { Room } from '../../entities/room.entity';
 import { Category } from '../../entities/category.entity';
+import { AssetBook } from '../../entities/asset-book.entity';
+import { AssetBookItem } from '../../entities/asset-book-item.entity';
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([Asset, Unit, Room, Category]),
+    TypeOrmModule.forFeature([Asset, Unit, Room, Category, AssetBook, AssetBookItem]),
   ],
   controllers: [ChatbotController],
   providers: [ChatbotService, OpenAIService],
