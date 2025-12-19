@@ -200,6 +200,9 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_DB=${REDIS_DB:-0}
 
+      # OpenAI
+      - OPENAI_API_KEY_1=${OPENAI_API_KEY_1}
+
     volumes:
       - uploads_data:/app/uploads
     networks:
