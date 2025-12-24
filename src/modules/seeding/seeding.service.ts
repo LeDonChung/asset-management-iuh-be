@@ -37,11 +37,15 @@ export class SeedingService implements OnModuleInit {
     private readonly roomRepository: Repository<Room>,
     @InjectRepository(AccessScope)
     private readonly accessScopeRepository: Repository<AccessScope>
-  ) {}
+  ) { }
 
   async onModuleInit() {
-    // Only run seeding in development or when explicitly enabled
-    await this.seedDatabase();
+
+    this.logger.log("SEED_DATA=false → Seeding permissions, access scopes, and roles only");
+    await this.seedCore();
+
+    // Default: run full seeding
+    // await this.seedDatabase();
   }
 
   async seedDatabase() {
@@ -59,6 +63,18 @@ export class SeedingService implements OnModuleInit {
       this.logger.log("Database seeding completed successfully");
     } catch (error) {
       this.logger.error("Error during database seeding:", error);
+    }
+  }
+
+  private async seedCore() {
+    try {
+      this.logger.log("Starting core seeding (RBAC)...");
+      await this.seedPermissions();
+      await this.seedAccessScopes();
+      await this.seedRoles();
+      this.logger.log("Core seeding completed successfully");
+    } catch (error) {
+      this.logger.error("Error during core seeding:", error);
     }
   }
 
@@ -233,12 +249,12 @@ export class SeedingService implements OnModuleInit {
     // Create departments for each campus
     for (const campus of unitsCampusCreated) {
       const departments = campusDepartments[campus.name] || [];
-      
+
       for (const unitUserDept of departments) {
         let unitFind = await this.unitRepository.findOne({
           where: { name: unitUserDept.name, parentUnit: { id: campus.id } },
         });
-        
+
         if (!unitFind) {
           const unitCreate = this.unitRepository.create({
             name: unitUserDept.name,
@@ -272,15 +288,15 @@ export class SeedingService implements OnModuleInit {
         for (let floorIndex = 0; floorIndex < floors.length; floorIndex++) {
           const floor = floors[floorIndex];
           const floorPart = floor.padStart(2, "0");
-          
+
           // Each floor has 2-3 rooms: floor 1,3 have 2 rooms; floor 2,4 have 3 rooms
           const roomsPerFloor = floorIndex % 2 === 0 ? 2 : 3;
           const roomsCreated = []; // Track rooms on this floor for adjacent room assignment
-          
+
           // Create rooms for this floor
           for (let roomIndex = 0; roomIndex < roomsPerFloor; roomIndex++) {
             const roomNumber = (roomIndex + 1).toString().padStart(2, "0"); // 01, 02, 03
-            
+
             // Generate unique room code first to check if room already exists
             const roomCode = await this.generateRoomCode(
               building,
@@ -315,7 +331,7 @@ export class SeedingService implements OnModuleInit {
               // Save the room first to ensure it exists in the database
               savedRoom = await this.roomRepository.save(roomCreate);
             }
-            
+
             roomsCreated.push(savedRoom);
           }
 
@@ -365,10 +381,10 @@ export class SeedingService implements OnModuleInit {
   private async seedInventoryRooms(departments: any[]) {
     for (const dept of departments) {
       const inventoryRoomCode = `${dept.unitCode}INVENTORY`;
-      
+
       // Check if inventory room already exists for this department
       const existingInventoryRoom = await this.roomRepository.findOne({
-        where: { 
+        where: {
           roomCode: inventoryRoomCode,
           unit: { id: dept.id }
         }
@@ -402,10 +418,10 @@ export class SeedingService implements OnModuleInit {
 
     for (const dept of userDepts) {
       const inventoryRoomCode = `${dept.unitCode}INVENTORY`;
-      
+
       // Kiểm tra xem phòng kho đã tồn tại chưa
       const existingInventoryRoom = await this.roomRepository.findOne({
-        where: { 
+        where: {
           roomCode: inventoryRoomCode,
           unit: { id: dept.id }
         }
@@ -415,7 +431,7 @@ export class SeedingService implements OnModuleInit {
         const inventoryRoom = this.roomRepository.create({
           name: "Kho",
           building: "INVENTORY",
-          floor: "00", 
+          floor: "00",
           roomNumber: dept.unitCode.toString().padStart(2, "0"), // Use unitCode as roomNumber to ensure uniqueness
           status: RoomStatus.ACTIVE,
           unit: dept,
@@ -747,7 +763,7 @@ export class SeedingService implements OnModuleInit {
       let scope = await this.accessScopeRepository.findOne({
         where: { type: scopeData.type, unitId: null }
       });
-      
+
       if (!scope) {
         scope = await this.accessScopeRepository.save(
           this.accessScopeRepository.create(scopeData)
